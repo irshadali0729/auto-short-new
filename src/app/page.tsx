@@ -1,0 +1,560 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { 
+  Sparkles, 
+  Image as ImageIcon, 
+  Video, 
+  Play, 
+  Download, 
+  AlertCircle, 
+  Search, 
+  X, 
+  RefreshCw,
+  Film,
+  CheckCircle2,
+  Clock
+} from 'lucide-react';
+
+interface Scene {
+  keyword: string;
+  duration: number;
+  image: string;
+  isFallback: boolean;
+}
+
+export default function Home() {
+  const [transcript, setTranscript] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [scenes, setScenes] = useState<Scene[]>([]);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [infoMessage, setInfoMessage] = useState('');
+  
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationStep, setGenerationStep] = useState('');
+  const [videoUrl, setVideoUrl] = useState('');
+  
+  // Image replacement state
+  const [allLibraryImages, setAllLibraryImages] = useState<string[]>([]);
+  const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Load all images from the library on load for manual overriding
+  useEffect(() => {
+    fetchLibraryImages();
+  }, []);
+
+  const fetchLibraryImages = async () => {
+    try {
+      const res = await fetch('/api/list-images');
+      const data = await res.json();
+      if (data.images) {
+        setAllLibraryImages(data.images);
+      }
+    } catch (err) {
+      console.error('Failed to load library images:', err);
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (!transcript.trim()) {
+      setErrorMessage('Please paste a transcript first.');
+      return;
+    }
+
+    setErrorMessage('');
+    setInfoMessage('');
+    setIsAnalyzing(true);
+    setScenes([]);
+    setVideoUrl('');
+
+    try {
+      // 1. Analyze transcript to get keywords/durations
+      const analyzeRes = await fetch('/api/analyze-transcript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript }),
+      });
+
+      const analyzeData = await analyzeRes.json();
+      if (!analyzeRes.ok) {
+        throw new Error(analyzeData.error || 'Transcript analysis failed.');
+      }
+
+      const extractedScenes = analyzeData.scenes;
+
+      // 2. Match images based on keywords
+      const matchRes = await fetch('/api/match-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenes: extractedScenes }),
+      });
+
+      const matchData = await matchRes.json();
+      if (!matchRes.ok) {
+        throw new Error(matchData.error || 'Image matching failed.');
+      }
+
+      setScenes(matchData.matches);
+
+      // Check if any matched images are fallback matches
+      const fallbackCount = matchData.matches.filter((s: Scene) => s.isFallback).length;
+      if (fallbackCount > 0) {
+        setInfoMessage(`${fallbackCount} scenes did not find direct keyword matches and were assigned fallback images. You can manually replace them.`);
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'An error occurred during analysis.';
+      setErrorMessage(errMsg);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleReplaceClick = (index: number) => {
+    setReplacingIndex(index);
+    setSearchQuery('');
+    setIsModalOpen(true);
+  };
+
+  const handleSelectImage = (filename: string) => {
+    if (replacingIndex !== null) {
+      const updatedScenes = [...scenes];
+      updatedScenes[replacingIndex] = {
+        ...updatedScenes[replacingIndex],
+        image: filename,
+        isFallback: false // Reset fallback status since it is manually selected
+      };
+      setScenes(updatedScenes);
+      setIsModalOpen(false);
+      setReplacingIndex(null);
+    }
+  };
+
+  const handleGenerateVideo = async () => {
+    if (scenes.length === 0) return;
+
+    setErrorMessage('');
+    setIsGenerating(true);
+    setVideoUrl('');
+    
+    // Simulate generation steps for high premium feedback feel
+    const steps = [
+      'Reading image dimensions and scaling assets...',
+      'Applying premium dual-layer background blur filter graphs...',
+      'Compiling scene clips via local FFmpeg...',
+      'Stitching clips with concat demuxer...',
+      'Finalizing vertical YouTube Short output file...'
+    ];
+
+    let currentStep = 0;
+    setGenerationStep(steps[0]);
+
+    const stepInterval = setInterval(() => {
+      if (currentStep < steps.length - 1) {
+        currentStep++;
+        setGenerationStep(steps[currentStep]);
+      }
+    }, 4500);
+
+    try {
+      const res = await fetch('/api/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenes }),
+      });
+
+      const data = await res.json();
+      clearInterval(stepInterval);
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Video compilation failed.');
+      }
+
+      setVideoUrl(data.videoPath);
+    } catch (err: unknown) {
+      clearInterval(stepInterval);
+      const errMsg = err instanceof Error ? err.message : 'Video generation failed.';
+      setErrorMessage(errMsg);
+    } finally {
+      setIsGenerating(false);
+      setGenerationStep('');
+    }
+  };
+
+  const filteredImages = allLibraryImages.filter(img => 
+    img.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <main className="relative min-h-screen px-4 py-8 md:py-16 max-w-6xl mx-auto z-10">
+      {/* Background Radial Glow decoration */}
+      <div className="radial-glow top-10 left-10" />
+      <div className="radial-glow bottom-10 right-10" />
+
+      {/* Header */}
+      <header className="flex flex-col items-center mb-12 text-center">
+        <div className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full border border-purple-500/20 bg-purple-500/5 text-purple-400 text-sm font-medium mb-4 backdrop-blur-md">
+          <Film className="w-4 h-4" />
+          <span>Hadith Shorts Maker — Local Sandbox Edition</span>
+        </div>
+        <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white mb-3 bg-gradient-to-r from-white via-zinc-200 to-purple-400 bg-clip-text text-transparent">
+          Hadith Shorts Maker
+        </h1>
+        <p className="text-zinc-400 max-w-xl text-base md:text-lg">
+          Generate gorgeous, vertical YouTube Shorts instantly using localized AI keyword scene matching and FFmpeg rendering.
+        </p>
+      </header>
+
+      {/* Main Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        
+        {/* Left Column: Input and Setup */}
+        <div className="lg:col-span-7 flex flex-col gap-6">
+          
+          {/* Transcript input Panel */}
+          <section className="rounded-2xl glass-panel p-6 shadow-2xl">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-4">
+              <Sparkles className="w-5 h-5 text-purple-400" />
+              1. Enter Hadith Transcript
+            </h2>
+            <textarea
+              className="w-full h-44 rounded-xl glass-input p-4 text-zinc-100 placeholder-zinc-500 resize-none font-sans text-base transition-all"
+              placeholder="Paste your Hindi, Urdu, or English transcript here..."
+              value={transcript}
+              onChange={(e) => setTranscript(e.target.value)}
+              disabled={isAnalyzing || isGenerating}
+            />
+            
+            <div className="mt-4 flex items-center justify-between gap-4">
+              <span className="text-xs text-zinc-500">
+                Supports Multi-lingual Inputs
+              </span>
+              <button
+                onClick={handleAnalyze}
+                disabled={isAnalyzing || isGenerating || !transcript.trim()}
+                className={`px-6 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all duration-300 ${
+                  isAnalyzing 
+                    ? 'bg-purple-600/30 text-purple-300 cursor-not-allowed border border-purple-500/30'
+                    : !transcript.trim()
+                      ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed border border-zinc-700/50'
+                      : 'bg-purple-600 text-white hover:bg-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:shadow-[0_0_30px_rgba(168,85,247,0.6)] hover:-translate-y-0.5 border border-purple-400/20'
+                }`}
+              >
+                {isAnalyzing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Analyzing Script...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Analyze Transcript
+                  </>
+                )}
+              </button>
+            </div>
+          </section>
+
+          {/* Feedback Messages */}
+          {errorMessage && (
+            <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-red-300 flex items-start gap-3 shadow-lg">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-sm">Execution Interrupted</p>
+                <p className="text-xs opacity-90 mt-1">{errorMessage}</p>
+              </div>
+            </div>
+          )}
+
+          {infoMessage && (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-amber-300 flex items-start gap-3 shadow-lg">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-sm">Keyword Matching Warning</p>
+                <p className="text-xs opacity-90 mt-1">{infoMessage}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Extracted/Matched Scenes Panel */}
+          {scenes.length > 0 && (
+            <section className="rounded-2xl glass-panel p-6 shadow-2xl">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <ImageIcon className="w-5 h-5 text-purple-400" />
+                    2. Matched Visual Storyboard
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Review matching scenes and customize the storyboard.
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleGenerateVideo}
+                  disabled={isGenerating || isAnalyzing}
+                  className={`px-5 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-300 ${
+                    isGenerating 
+                      ? 'bg-zinc-800 text-zinc-600 border border-zinc-700/50 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-500 hover:to-indigo-500 shadow-[0_0_20px_rgba(168,85,247,0.3)] hover:-translate-y-0.5'
+                  }`}
+                >
+                  {isGenerating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Video className="w-4 h-4" />
+                      Generate Shorts Video
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Storyboard Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {scenes.map((scene, idx) => (
+                  <div key={idx} className="rounded-xl glass-card overflow-hidden flex flex-col relative group">
+                    
+                    {/* Scene Image Preview */}
+                    <div className="relative h-44 bg-zinc-950 flex items-center justify-center overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/images/${encodeURIComponent(scene.image)}`}
+                        alt={scene.keyword}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(e) => {
+                          // Fallback if image fails to render
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+
+                      {/* Scene Badge Indicator */}
+                      <div className="absolute top-2 left-2 flex flex-col gap-1.5">
+                        <span className="px-2.5 py-1 rounded-md text-xs font-black bg-black/75 text-white border border-white/10 backdrop-blur-sm shadow-md">
+                          Scene {idx + 1}
+                        </span>
+                        
+                        {scene.isFallback && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/90 text-zinc-950 shadow-md">
+                            Fallback Match
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Duration Tag */}
+                      <div className="absolute bottom-2 right-2 px-2 py-1 rounded bg-black/60 backdrop-blur-sm text-white text-[11px] font-medium flex items-center gap-1 border border-white/5">
+                        <Clock className="w-3 h-3 text-purple-400" />
+                        {scene.duration}s
+                      </div>
+                    </div>
+
+                    {/* Metadata & Actions */}
+                    <div className="p-4 flex flex-col justify-between flex-grow bg-zinc-900/40">
+                      <div className="mb-3">
+                        <span className="text-[10px] tracking-wider uppercase font-semibold text-zinc-500 block">Keyword Match</span>
+                        <span className="text-sm font-bold text-white truncate block capitalize">
+                          {scene.keyword || 'Random Scene'}
+                        </span>
+                        <span className="text-xs text-zinc-400 truncate block mt-0.5 opacity-75">
+                          {scene.image}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => handleReplaceClick(idx)}
+                        className="w-full py-2 rounded-lg border border-zinc-700/60 bg-zinc-800/40 text-xs font-bold text-zinc-300 hover:bg-zinc-800 hover:text-white hover:border-zinc-500 transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Replace Image
+                      </button>
+                    </div>
+
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+        </div>
+
+        {/* Right Column: Generation Progress & Preview */}
+        <div className="lg:col-span-5 flex flex-col gap-6">
+
+          {/* Compilation Load State */}
+          {isGenerating && (
+            <section className="rounded-2xl glass-panel p-6 flex flex-col items-center justify-center text-center shadow-2xl">
+              <div className="relative w-20 h-20 mb-6 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full border-4 border-purple-500/10 border-t-purple-500 animate-spin" />
+                <Film className="w-8 h-8 text-purple-400 animate-pulse" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">Compiling Vertical Short</h3>
+              <p className="text-zinc-400 text-sm max-w-xs">{generationStep}</p>
+              
+              <div className="w-full bg-zinc-800 rounded-full h-1.5 mt-6 overflow-hidden">
+                <div className="bg-purple-500 h-1.5 rounded-full animate-[shimmer_2s_infinite] w-full" style={{
+                  backgroundImage: 'linear-gradient(90deg, #a855f7 25%, #c084fc 50%, #a855f7 75%)',
+                  backgroundSize: '200% 100%'
+                }} />
+              </div>
+            </section>
+          )}
+
+          {/* Empty Video Preview State */}
+          {!videoUrl && !isGenerating && (
+            <section className="rounded-2xl glass-panel p-8 text-center flex flex-col items-center justify-center h-[500px] border border-dashed border-zinc-800 shadow-2xl">
+              <div className="w-16 h-16 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 shadow-inner">
+                <Play className="w-6 h-6 text-zinc-600" />
+              </div>
+              <h3 className="text-lg font-bold text-zinc-300 mb-1">Shorts Video Player</h3>
+              <p className="text-xs text-zinc-500 max-w-[240px]">
+                Create visual matches and compile the story board to preview your 9:16 vertical short.
+              </p>
+            </section>
+          )}
+
+          {/* Video Preview and Action Panel */}
+          {videoUrl && !isGenerating && (
+            <section className="rounded-2xl glass-panel p-6 shadow-2xl flex flex-col items-center">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2 self-start mb-6">
+                <Play className="w-5 h-5 text-purple-400" />
+                3. Preview & Download
+              </h2>
+
+              {/* 9:16 Vertical Video Screen */}
+              <div className="relative w-full max-w-[280px] aspect-[9/16] rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-950 shadow-[0_20px_50px_-20px_rgba(168,85,247,0.3)]">
+                <video
+                  src={videoUrl}
+                  controls
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              {/* Download actions */}
+              <div className="w-full mt-6 flex flex-col gap-3">
+                <div className="rounded-xl bg-zinc-900/50 border border-zinc-800 p-3 flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                  <div className="overflow-hidden">
+                    <p className="text-xs font-bold text-zinc-200">Video successfully generated!</p>
+                    <p className="text-[10px] text-zinc-500 truncate mt-0.5">/generated/output.mp4</p>
+                  </div>
+                </div>
+
+                <a
+                  href={videoUrl}
+                  download="hadith_shorts.mp4"
+                  className="w-full py-3.5 rounded-xl font-bold text-sm bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center gap-2 transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.4)]"
+                >
+                  <Download className="w-4 h-4" />
+                  Download MP4
+                </a>
+              </div>
+            </section>
+          )}
+
+        </div>
+
+      </div>
+
+      {/* Searchable Replace Image Selection Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          
+          {/* Backdrop Blur overlay */}
+          <div 
+            className="absolute inset-0 bg-black/85 backdrop-blur-sm"
+            onClick={() => setIsModalOpen(false)}
+          />
+          
+          {/* Modal Content container */}
+          <div className="relative w-full max-w-3xl max-h-[85vh] rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-zinc-800/80 flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">Select Replacement Image</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Choose a physical asset from the local image-library folder.
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search Input Bar */}
+            <div className="p-4 bg-zinc-900/30 border-b border-zinc-800/60 flex items-center gap-3">
+              <Search className="w-4 h-4 text-zinc-500 shrink-0" />
+              <input
+                type="text"
+                className="w-full bg-transparent border-0 text-sm text-zinc-200 placeholder-zinc-500 outline-none focus:ring-0"
+                placeholder="Search images by name or keyword..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="text-zinc-500 hover:text-zinc-300">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Scrollable Gallery grid */}
+            <div className="p-6 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 flex-grow">
+              {filteredImages.length > 0 ? (
+                filteredImages.map((image, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleSelectImage(image)}
+                    className="flex flex-col text-left rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800/80 hover:border-purple-500/50 hover:shadow-[0_0_15px_rgba(168,85,247,0.15)] group transition-all"
+                  >
+                    <div className="relative h-24 bg-zinc-950 flex items-center justify-center overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/images/${encodeURIComponent(image)}`}
+                        alt={image}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                    </div>
+                    <div className="p-3">
+                      <span className="text-[10px] font-medium text-zinc-400 truncate block group-hover:text-purple-400 transition-colors">
+                        {image}
+                      </span>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="col-span-full py-12 text-center flex flex-col items-center justify-center">
+                  <ImageIcon className="w-8 h-8 text-zinc-700 mb-2" />
+                  <p className="text-sm font-bold text-zinc-500">No matching assets found</p>
+                  <p className="text-xs text-zinc-600 mt-0.5">Try searching with a different term.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-zinc-800/80 bg-zinc-900/40 text-right flex items-center justify-between text-xs text-zinc-500">
+              <span>Showing {filteredImages.length} of {allLibraryImages.length} images</span>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 rounded-lg bg-zinc-900 border border-zinc-800 font-bold hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
+              >
+                Close
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+      )}
+    </main>
+  );
+}
