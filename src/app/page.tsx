@@ -23,10 +23,14 @@ interface Scene {
   isFallback: boolean;
 }
 
+
 export default function Home() {
   const [transcript, setTranscript] = useState('');
+  const [youtubeLink, setYoutubeLink] = useState('');
+  const [isFetchingTranscript, setIsFetchingTranscript] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [scenes, setScenes] = useState<Scene[]>([]);
+  const [targetVideoLength, setTargetVideoLength] = useState<number | ''>(30);
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
   
@@ -57,6 +61,53 @@ export default function Home() {
     }
   };
 
+  const handleFetchTranscript = async () => {
+    if (!youtubeLink.trim()) {
+      setErrorMessage('Please enter a YouTube link first.');
+      return;
+    }
+
+    setErrorMessage('');
+    setInfoMessage('');
+    setIsFetchingTranscript(true);
+
+    try {
+      const url = `https://transcriptapi.com/api/v2/youtube/transcript?video_url=${encodeURIComponent(youtubeLink.trim())}&format=json`;
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer sk__W7--qYLJBMQ4Rf5O6FAA4_Gr9Tcrpjve0ZWrvQngc8'
+        }
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || data.message || 'Failed to fetch transcript from the API.');
+      }
+
+      if (data.transcript && Array.isArray(data.transcript)) {
+        const text = data.transcript
+          .map((s: { text?: string; phrase?: string } | string) => typeof s === 'string' ? s : (s.text || s.phrase || ''))
+          .join(' ');
+        setTranscript(text);
+        if (data.length_seconds) {
+          setTargetVideoLength(Number(data.length_seconds));
+          setInfoMessage(`Successfully imported transcript from YouTube video. Target length set to ${data.lengthText || data.length_seconds + 's'}.`);
+        } else {
+          setInfoMessage('Successfully imported transcript from YouTube video.');
+        }
+      } else {
+        throw new Error('Transcript not found or invalid format in response.');
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'An error occurred while fetching the transcript.';
+      setErrorMessage(errMsg);
+    } finally {
+      setIsFetchingTranscript(false);
+    }
+  };
+
   const handleAnalyze = async () => {
     if (!transcript.trim()) {
       setErrorMessage('Please paste a transcript first.');
@@ -74,7 +125,7 @@ export default function Home() {
       const analyzeRes = await fetch('/api/analyze-transcript', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript }),
+        body: JSON.stringify({ transcript, targetLength: targetVideoLength || undefined }),
       });
 
       const analyzeData = await analyzeRes.json();
@@ -108,6 +159,37 @@ export default function Home() {
       setErrorMessage(errMsg);
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleTargetLengthChange = (val: string) => {
+    if (val === '') {
+      setTargetVideoLength('');
+      return;
+    }
+    const num = parseFloat(val);
+    if (isNaN(num) || num <= 0) {
+      setTargetVideoLength('');
+      return;
+    }
+    setTargetVideoLength(num);
+
+    // If scenes already exist, proportionally scale them so their sum matches the new target length
+    if (scenes.length > 0) {
+      const currentSum = scenes.reduce((acc, s) => acc + s.duration, 0);
+      if (currentSum > 0) {
+        const updatedScenes = scenes.map(s => ({
+          ...s,
+          duration: Number((s.duration * (num / currentSum)).toFixed(2))
+        }));
+        // Correct rounding error on the last scene
+        const newSum = updatedScenes.reduce((acc, s) => acc + s.duration, 0);
+        const difference = num - newSum;
+        if (Math.abs(difference) > 0.001 && updatedScenes.length > 0) {
+          updatedScenes[updatedScenes.length - 1].duration = Number((updatedScenes[updatedScenes.length - 1].duration + difference).toFixed(2));
+        }
+        setScenes(updatedScenes);
+      }
     }
   };
 
@@ -218,6 +300,90 @@ export default function Home() {
               <Sparkles className="w-5 h-5 text-purple-400" />
               1. Enter Hadith Transcript
             </h2>
+
+            {/* YouTube Import Option */}
+            <div className="mb-5">
+              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                Import Transcript from YouTube
+              </label>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-grow">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <svg className="w-5 h-5 text-red-500 fill-current" viewBox="0 0 24 24">
+                      <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.518 3.545 12 3.545 12 3.545s-7.518 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.87.508 9.388.508 9.388.508s7.518 0 9.388-.508a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="url"
+                    placeholder="Enter YouTube Video URL..."
+                    value={youtubeLink}
+                    onChange={(e) => setYoutubeLink(e.target.value)}
+                    disabled={isFetchingTranscript || isAnalyzing || isGenerating}
+                    className="w-full pl-11 pr-4 py-3 rounded-xl glass-input text-zinc-100 placeholder-zinc-500 text-sm outline-none transition-all focus:border-purple-500/50"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleFetchTranscript}
+                  disabled={isFetchingTranscript || isAnalyzing || isGenerating || !youtubeLink.trim()}
+                  className={`px-5 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-300 shrink-0 ${
+                    isFetchingTranscript
+                      ? 'bg-purple-600/30 text-purple-300 cursor-not-allowed border border-purple-500/30'
+                      : !youtubeLink.trim()
+                        ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed border border-zinc-700/50'
+                        : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-500 hover:to-indigo-500 shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:-translate-y-0.5 border border-purple-400/20'
+                  }`}
+                >
+                  {isFetchingTranscript ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Fetching...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Get Transcript
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Target Video Length Input */}
+            <div className="mb-5">
+              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                Target Video Length (seconds)
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Clock className="w-4 h-4 text-purple-400" />
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  max="300"
+                  step="0.1"
+                  placeholder="Target duration in seconds (e.g. 37)..."
+                  value={targetVideoLength}
+                  onChange={(e) => handleTargetLengthChange(e.target.value)}
+                  disabled={isAnalyzing || isGenerating}
+                  className="w-full pl-11 pr-4 py-3 rounded-xl glass-input text-zinc-100 placeholder-zinc-500 text-sm outline-none transition-all focus:border-purple-500/50"
+                />
+              </div>
+              <p className="text-[10px] text-zinc-500 mt-1">
+                Specifies the exact length of the final generated video. Existing scene durations scale dynamically.
+              </p>
+            </div>
+
+            {/* Visual Divider */}
+            <div className="relative flex py-2 items-center mb-4">
+              <div className="flex-grow border-t border-zinc-800/80"></div>
+              <span className="flex-shrink mx-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                Or Enter Manually
+              </span>
+              <div className="flex-grow border-t border-zinc-800/80"></div>
+            </div>
+
             <textarea
               className="w-full h-44 rounded-xl glass-input p-4 text-zinc-100 placeholder-zinc-500 resize-none font-sans text-base transition-all"
               placeholder="Paste your Hindi, Urdu, or English transcript here..."

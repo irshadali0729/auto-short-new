@@ -7,7 +7,7 @@ const groq = new Groq({
 
 export async function POST(request: Request) {
   try {
-    const { transcript } = await request.json();
+    const { transcript, targetLength } = await request.json();
 
     if (!transcript || typeof transcript !== 'string' || transcript.trim() === '') {
       return NextResponse.json({ error: 'Transcript is required' }, { status: 400 });
@@ -35,7 +35,7 @@ Rules:
 * Avoid abstract concepts.
 * Focus on objects, places, people, and actions.
 * Generate 5-10 scenes.
-* Total duration of all scenes combined should ideally be between 15 to 45 seconds (5 seconds per scene is standard, but you can adjust duration dynamically).
+${targetLength ? `* The total duration of all scenes combined must be exactly ${targetLength} seconds. Adjust the duration of individual scenes (which must be numbers) so they sum up to exactly ${targetLength}.` : '* Total duration of all scenes combined should ideally be between 15 to 45 seconds (5 seconds per scene is standard, but you can adjust duration dynamically).'}
 
 Example output:
 {
@@ -73,7 +73,45 @@ ${transcript}`;
       throw new Error('Groq did not return a valid list of "scenes".');
     }
 
-    return NextResponse.json({ scenes: parsedData.scenes });
+    interface GroqScene {
+      keyword: string;
+      duration: number;
+    }
+
+    let finalScenes = parsedData.scenes as GroqScene[];
+    const targetLengthNum = Number(targetLength);
+    if (targetLengthNum && !isNaN(targetLengthNum) && targetLengthNum > 0) {
+      const currentSum = finalScenes.reduce((acc: number, s: GroqScene) => acc + (Number(s.duration) || 0), 0);
+      if (currentSum > 0) {
+        // Proportionally scale scene durations
+        finalScenes = finalScenes.map((s: GroqScene) => ({
+          ...s,
+          duration: Number(((Number(s.duration) || 0) * (targetLengthNum / currentSum)).toFixed(2))
+        }));
+        
+        // Correct any minor rounding issues in the last scene
+        const newSum = finalScenes.reduce((acc: number, s: GroqScene) => acc + s.duration, 0);
+        const difference = targetLengthNum - newSum;
+        if (Math.abs(difference) > 0.001 && finalScenes.length > 0) {
+          finalScenes[finalScenes.length - 1].duration = Number((finalScenes[finalScenes.length - 1].duration + difference).toFixed(2));
+        }
+      } else {
+        // Fallback: divide equally
+        const equalDuration = Number((targetLengthNum / finalScenes.length).toFixed(2));
+        finalScenes = finalScenes.map((s: GroqScene) => ({
+          ...s,
+          duration: equalDuration
+        }));
+        
+        const newSum = finalScenes.reduce((acc: number, s: GroqScene) => acc + s.duration, 0);
+        const difference = targetLengthNum - newSum;
+        if (Math.abs(difference) > 0.001 && finalScenes.length > 0) {
+          finalScenes[finalScenes.length - 1].duration = Number((finalScenes[finalScenes.length - 1].duration + difference).toFixed(2));
+        }
+      }
+    }
+
+    return NextResponse.json({ scenes: finalScenes });
   } catch (error: unknown) {
     console.error('Error analyzing transcript:', error);
     const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';

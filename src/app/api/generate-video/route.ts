@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
-// @ts-expect-error
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
 const ffmpegPath = ffmpegInstaller.path;
