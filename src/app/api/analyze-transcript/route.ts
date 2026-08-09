@@ -34,6 +34,7 @@ Rules:
 * Maximum 2 words per keyword.
 * Avoid abstract concepts.
 * Focus on objects, places, people, and actions.
+* Since these are Islamic shorts, prepend "Muslim" or "Islamic" to general human, couple, or activity keywords to ensure visual relevance (e.g. use "Muslim woman" instead of "woman", "Islamic prayer" instead of "prayer", "Muslim husband" instead of "husband", "Muslim couple" instead of "love", "Muslim peace" instead of "peace").
 * Generate 5-10 scenes.
 ${targetLength ? `* The total duration of all scenes combined must be exactly ${targetLength} seconds. Adjust the duration of individual scenes (which must be numbers) so they sum up to exactly ${targetLength}.` : '* Total duration of all scenes combined should ideally be between 15 to 45 seconds (5 seconds per scene is standard, but you can adjust duration dynamically).'}
 

@@ -11,12 +11,11 @@ export async function POST(request: Request) {
     }
 
     const libraryPath = path.join(process.cwd(), 'image-library');
+    const pexelsApiKey = process.env.PEXELS_API_KEY || '';
 
+    // Ensure image-library folder exists
     if (!fs.existsSync(libraryPath)) {
-      return NextResponse.json(
-        { error: 'The "image-library" directory does not exist. Please create an "image-library" folder in your project root and add your media assets.' },
-        { status: 400 }
-      );
+      fs.mkdirSync(libraryPath, { recursive: true });
     }
 
     const allFiles = fs.readdirSync(libraryPath);
@@ -26,9 +25,9 @@ export async function POST(request: Request) {
       return supportedExtensions.includes(ext);
     });
 
-    if (availableImages.length === 0) {
+    if (availableImages.length === 0 && !pexelsApiKey) {
       return NextResponse.json(
-        { error: 'No compatible images found in the "image-library" folder. Please add image files (.jpg, .jpeg, .png, .webp, .gif).' },
+        { error: 'No compatible images found in the "image-library" folder. Please add image files (.jpg, .jpeg, .png, .webp, .gif) or configure a Pexels API Key.' },
         { status: 400 }
       );
     }
@@ -41,6 +40,7 @@ export async function POST(request: Request) {
     }> = [];
 
     const usedImages = new Set<string>();
+    const usedPexelsIds = new Set<number>();
 
     for (const scene of scenes) {
       const { keyword, duration } = scene;
@@ -58,7 +58,22 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // 1. Direct case-insensitive substring match among unused images
+      // 1. Try Pexels API integration if key exists
+      if (pexelsApiKey) {
+        const pexelsFilename = await getPexelsPhoto(kw, pexelsApiKey, usedPexelsIds);
+        if (pexelsFilename) {
+          matchedScenes.push({
+            keyword,
+            duration,
+            image: pexelsFilename,
+            isFallback: false,
+          });
+          usedImages.add(pexelsFilename);
+          continue;
+        }
+      }
+
+      // 2. Local Fallback - Direct case-insensitive substring match among unused images
       let matches = availableImages.filter(img =>
         img.toLowerCase().includes(kw.toLowerCase()) && !usedImages.has(img)
       );
@@ -70,7 +85,7 @@ export async function POST(request: Request) {
         );
       }
 
-      // 2. Word-by-word matching among unused images
+      // 3. Local Fallback - Word-by-word matching among unused images
       if (matches.length === 0) {
         const words = kw.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
         for (const word of words) {
@@ -81,7 +96,7 @@ export async function POST(request: Request) {
         }
       }
 
-      // If matches exist, pick a random one
+      // If local matches exist, pick a random one
       if (matches.length > 0) {
         const chosen = matches[Math.floor(Math.random() * matches.length)];
         matchedScenes.push({
@@ -92,7 +107,7 @@ export async function POST(request: Request) {
         });
         usedImages.add(chosen);
       } else {
-        // 3. Fallback: Select a completely random unused image, or any image if all have been used
+        // 4. Ultimate Fallback: Select a completely random unused image, or any image if all have been used
         const fallback = getUnusedRandomImage(availableImages, usedImages);
         matchedScenes.push({
           keyword,
@@ -116,7 +131,85 @@ export async function POST(request: Request) {
 }
 
 function getUnusedRandomImage(allImages: string[], usedImages: Set<string>): string {
+  if (allImages.length === 0) {
+    return 'fallback.jpg'; // Ultimate safety default
+  }
   const unused = allImages.filter(img => !usedImages.has(img));
   const pool = unused.length > 0 ? unused : allImages;
   return pool[Math.floor(Math.random() * pool.length)];
+}
+
+async function downloadImage(url: string, destPath: string): Promise<void> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to download image: ${res.statusText}`);
+  }
+  const arrayBuffer = await res.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  fs.writeFileSync(destPath, buffer);
+}
+
+async function getPexelsPhoto(query: string, apiKey: string, usedPexelsIds: Set<number>): Promise<string | null> {
+  try {
+    // Ensure Islamic/Muslim context for general query keywords
+    let searchQuery = query.trim().toLowerCase();
+    const islamicKeywords = ['muslim', 'islam', 'quran', 'mosque', 'hadith', 'allah', 'hijab', 'salah', 'kaaba', 'mecca', 'madina', 'dua'];
+    const hasIslamicContext = islamicKeywords.some(k => searchQuery.includes(k));
+    
+    if (!hasIslamicContext) {
+      searchQuery = `${query.trim()} Muslim`;
+    } else {
+      searchQuery = query.trim();
+    }
+
+    const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(searchQuery)}&orientation=portrait&per_page=5`;
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': apiKey
+      }
+    });
+
+    if (!res.ok) {
+      console.error(`Pexels API responded with status ${res.status}`);
+      return null;
+    }
+
+    const data = await res.json();
+    if (!data.photos || !Array.isArray(data.photos) || data.photos.length === 0) {
+      return null;
+    }
+
+    // Find first photo not used in this run
+    let chosenPhoto = data.photos[0];
+    for (const photo of data.photos) {
+      if (!usedPexelsIds.has(photo.id)) {
+        chosenPhoto = photo;
+        break;
+      }
+    }
+
+    usedPexelsIds.add(chosenPhoto.id);
+
+    const photoId = chosenPhoto.id;
+    const imageUrl = chosenPhoto.src.portrait || chosenPhoto.src.large || chosenPhoto.src.original;
+    if (!imageUrl) return null;
+
+    const libraryPath = path.join(process.cwd(), 'image-library');
+    const filename = `pexels_${photoId}.jpg`;
+    const destPath = path.join(libraryPath, filename);
+
+    // Download and cache if it doesn't exist
+    if (!fs.existsSync(destPath)) {
+      console.log(`Downloading Pexels photo ${photoId} from ${imageUrl}`);
+      if (!fs.existsSync(libraryPath)) {
+        fs.mkdirSync(libraryPath, { recursive: true });
+      }
+      await downloadImage(imageUrl, destPath);
+    }
+
+    return filename;
+  } catch (err) {
+    console.error('Error fetching/downloading from Pexels API:', err);
+    return null;
+  }
 }
