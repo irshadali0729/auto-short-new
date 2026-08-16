@@ -23,6 +23,12 @@ interface Scene {
   isFallback: boolean;
 }
 
+function extractYoutubeVideoId(url: string): string | null {
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+}
+
 
 export default function Home() {
   const [transcript, setTranscript] = useState('');
@@ -31,6 +37,8 @@ export default function Home() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [targetVideoLength, setTargetVideoLength] = useState<number | ''>(30);
+  const [transcriptSegments, setTranscriptSegments] = useState<unknown[]>([]);
+  const [youtubeVideoId, setYoutubeVideoId] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
   
@@ -91,6 +99,15 @@ export default function Home() {
           .map((s: { text?: string; phrase?: string } | string) => typeof s === 'string' ? s : (s.text || s.phrase || ''))
           .join(' ');
         setTranscript(text);
+        setTranscriptSegments(data.transcript);
+
+        const videoId = extractYoutubeVideoId(youtubeLink.trim());
+        if (videoId) {
+          setYoutubeVideoId(videoId);
+        } else {
+          setYoutubeVideoId('');
+        }
+
         if (data.length_seconds) {
           setTargetVideoLength(Number(data.length_seconds));
           setInfoMessage(`Successfully imported transcript from YouTube video. Target length set to ${data.lengthText || data.length_seconds + 's'}.`);
@@ -243,7 +260,11 @@ export default function Home() {
       const res = await fetch('/api/generate-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenes }),
+        body: JSON.stringify({ 
+          scenes,
+          segments: transcriptSegments.length > 0 ? transcriptSegments : undefined,
+          youtubeVideoId: youtubeVideoId || undefined
+        }),
       });
 
       const data = await res.json();
