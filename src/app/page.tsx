@@ -48,7 +48,6 @@ export default function Home() {
   const [videoUrl, setVideoUrl] = useState('');
   const [zoomSpeed, setZoomSpeed] = useState<number>(1.0);
   const [transitionDuration, setTransitionDuration] = useState<number>(0.3);
-  const [progress, setProgress] = useState<number>(0);
   
   // Image replacement state
   const [allLibraryImages, setAllLibraryImages] = useState<string[]>([]);
@@ -240,70 +239,29 @@ export default function Home() {
     setErrorMessage('');
     setIsGenerating(true);
     setVideoUrl('');
-    setProgress(0);
-    setGenerationStep('Initializing video compilation...');
-
-    const runId = 'run_' + Date.now();
+    setGenerationStep('Compiling vertical video via FFmpeg (this may take 15-30s)...');
 
     try {
-      const initRes = await fetch('/api/generate-video', {
+      const res = await fetch('/api/generate-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           scenes,
-          segments: transcriptSegments.length > 0 ? transcriptSegments : undefined,
-          youtubeVideoId: youtubeVideoId || undefined,
-          runId,
           zoomSpeed,
           transitionDuration
         }),
       });
 
-      const initData = await initRes.json();
-      if (!initRes.ok) {
-        throw new Error(initData.error || 'Failed to initialize video generation.');
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Video compilation failed.');
       }
 
-      // Start polling progress
-      const pollInterval = setInterval(async () => {
-        try {
-          const progRes = await fetch(`/api/generate-video/progress?runId=${runId}`);
-          if (!progRes.ok) {
-            console.error('Failed to query progress API.');
-            return;
-          }
-          const progData = await progRes.json();
-          
-          if (progData.progress !== undefined) {
-            setProgress(progData.progress);
-          }
-          if (progData.status) {
-            setGenerationStep(progData.status);
-          }
-
-          if (progData.error) {
-            clearInterval(pollInterval);
-            setErrorMessage(progData.error);
-            setIsGenerating(false);
-            setGenerationStep('');
-          } else if (progData.progress === 100) {
-            clearInterval(pollInterval);
-            setIsGenerating(false);
-            setGenerationStep('');
-            if (progData.videoPath) {
-              setVideoUrl(progData.videoPath);
-            } else {
-              setErrorMessage('Video generation completed, but no preview path was returned.');
-            }
-          }
-        } catch (pollErr) {
-          console.error('Error polling video progress:', pollErr);
-        }
-      }, 1000);
-
+      setVideoUrl(data.videoPath);
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : 'Video generation failed to initiate.';
+      const errMsg = err instanceof Error ? err.message : 'Video generation failed.';
       setErrorMessage(errMsg);
+    } finally {
       setIsGenerating(false);
       setGenerationStep('');
     }
@@ -671,22 +629,8 @@ export default function Home() {
                 <div className="absolute inset-0 rounded-full border-4 border-purple-500/10 border-t-purple-500 animate-spin" />
                 <Film className="w-8 h-8 text-purple-400 animate-pulse" />
               </div>
-              <h3 className="text-lg font-bold text-white mb-1">Compiling Vertical Short</h3>
-              <span className="text-purple-400 text-xs font-black mb-3 bg-purple-500/10 px-2.5 py-0.5 rounded border border-purple-500/20">
-                {progress}% Completed
-              </span>
-              <p className="text-zinc-400 text-xs max-w-xs h-8 flex items-center justify-center">{generationStep}</p>
-              
-              <div className="w-full bg-zinc-800 rounded-full h-2 mt-4 overflow-hidden">
-                <div 
-                  className="bg-purple-500 h-2 rounded-full transition-all duration-500 ease-out" 
-                  style={{
-                    width: `${progress}%`,
-                    backgroundImage: 'linear-gradient(90deg, #a855f7 25%, #c084fc 50%, #a855f7 75%)',
-                    backgroundSize: '200% 100%'
-                  }} 
-                />
-              </div>
+              <h3 className="text-lg font-bold text-white mb-2">Compiling Vertical Short</h3>
+              <p className="text-zinc-400 text-xs max-w-xs">{generationStep}</p>
             </section>
           )}
 
