@@ -7,18 +7,68 @@ import { cleanupAssets } from '@/app/utils/cleanup';
 
 const ffmpegPath = ffmpegInstaller.path;
 
+// Setup global progress map
+if (!(global as any).videoProgress) {
+  (global as any).videoProgress = new Map();
+}
+const progressMap = (global as any).videoProgress;
+
 export async function POST(request: Request) {
-  let tempDir = '';
   try {
-    const { scenes, zoomSpeed, transitionDuration } = await request.json();
+    const { scenes, runId, zoomSpeed, transitionDuration } = await request.json();
 
     if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
       return NextResponse.json({ error: 'Scenes list is required to generate the video.' }, { status: 400 });
     }
 
+    if (!runId) {
+      return NextResponse.json({ error: 'runId is required for status tracking.' }, { status: 400 });
+    }
+
     const zoomSpeedMultiplier = typeof zoomSpeed === 'number' ? zoomSpeed : 1.0;
     const transitionDurationSec = typeof transitionDuration === 'number' ? transitionDuration : 0.3;
 
+    // Set initial progress status
+    progressMap.set(runId, {
+      complete: false,
+      error: null,
+      videoPath: null
+    });
+
+    // Start background video compilation
+    compileVideoInBackground(
+      runId,
+      scenes,
+      zoomSpeedMultiplier,
+      transitionDurationSec
+    ).catch(err => {
+      console.error('Background compilation crash:', err);
+      progressMap.set(runId, {
+        complete: true,
+        error: err.message || 'Background compilation failed.',
+        videoPath: null
+      });
+    });
+
+    return NextResponse.json({ runId });
+
+  } catch (error: any) {
+    console.error('Error starting video generation:', error);
+    return NextResponse.json(
+      { error: error.message || 'Internal Server Error' },
+      { status: 500 }
+    );
+  }
+}
+
+async function compileVideoInBackground(
+  runId: string,
+  scenes: any[],
+  zoomSpeedMultiplier: number,
+  transitionDuration: number
+) {
+  let tempDir = '';
+  try {
     const projectRoot = process.cwd();
     const imageLibraryDir = path.join(projectRoot, 'image-library');
     const generatedDir = path.join(projectRoot, 'generated');
@@ -59,7 +109,7 @@ export async function POST(request: Request) {
         ? `min(1.0+on*${speedStep},1.15)`
         : `max(1.15-on*${speedStep},1.0)`;
 
-      const sceneFade = Math.min(transitionDurationSec, duration / 2);
+      const sceneFade = Math.min(transitionDuration, duration / 2);
       
       let filterGraph = 
         `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];` +
@@ -114,6 +164,13 @@ export async function POST(request: Request) {
       console.warn('Temporary directory cleanup failed:', cleanupErr);
     }
 
+    // Set background status to complete
+    progressMap.set(runId, {
+      complete: true,
+      error: null,
+      videoPath: `/api/video?t=${Date.now()}`
+    });
+
     const isProduction = process.env.NODE_ENV === 'production' || process.env.CLEANUP_ASSETS === 'true';
     if (isProduction) {
       setTimeout(() => {
@@ -121,17 +178,19 @@ export async function POST(request: Request) {
       }, 10 * 60 * 1000); // 10 minutes timeout
     }
 
-    return NextResponse.json({ videoPath: `/api/video?t=${Date.now()}` });
-
   } catch (error: any) {
-    console.error('Error generating video via FFmpeg:', error);
+    console.error('Error generating video via FFmpeg in background:', error);
     if (tempDir && fs.existsSync(tempDir)) {
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });
       } catch {}
     }
     const errorMessage = error instanceof Error ? error.message : 'FFmpeg compilation failed.';
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    progressMap.set(runId, {
+      complete: true,
+      error: errorMessage,
+      videoPath: null
+    });
   }
 }
 

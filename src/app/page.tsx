@@ -48,6 +48,7 @@ export default function Home() {
   const [videoUrl, setVideoUrl] = useState('');
   const [zoomSpeed, setZoomSpeed] = useState<number>(1.0);
   const [transitionDuration, setTransitionDuration] = useState<number>(0.3);
+  const [pollCount, setPollCount] = useState<number>(0);
   
   // Image replacement state
   const [allLibraryImages, setAllLibraryImages] = useState<string[]>([]);
@@ -239,29 +240,75 @@ export default function Home() {
     setErrorMessage('');
     setIsGenerating(true);
     setVideoUrl('');
-    setGenerationStep('Compiling vertical video via FFmpeg (this may take 15-30s)...');
+    setPollCount(0);
+    setGenerationStep('Initializing background video compilation worker...');
+
+    const runId = 'run_' + Date.now();
 
     try {
-      const res = await fetch('/api/generate-video', {
+      const initRes = await fetch('/api/generate-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           scenes,
+          runId,
           zoomSpeed,
           transitionDuration
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Video compilation failed.');
+      const initData = await initRes.json();
+      if (!initRes.ok) {
+        throw new Error(initData.error || 'Failed to initialize video generation.');
       }
 
-      setVideoUrl(data.videoPath);
+      setGenerationStep('Processing video clips in background...');
+
+      let localPollCount = 0;
+      // Polling interval set to 30 seconds (30000ms)
+      const pollInterval = setInterval(async () => {
+        try {
+          localPollCount++;
+          setPollCount(localPollCount);
+
+          const progRes = await fetch(`/api/generate-video/progress?runId=${runId}`);
+          if (!progRes.ok) {
+            console.error('Failed to query progress status.');
+            return;
+          }
+          const progData = await progRes.json();
+
+          if (progData.complete) {
+            clearInterval(pollInterval);
+            setIsGenerating(false);
+            setGenerationStep('');
+            if (progData.error) {
+              setErrorMessage(progData.error);
+            } else if (progData.videoPath) {
+              setVideoUrl(progData.videoPath);
+            } else {
+              setErrorMessage('Video generation completed, but output path was not returned.');
+            }
+          } else {
+            // Update UI subtext for each poll count
+            if (localPollCount === 1) {
+              setGenerationStep('Check 1 (30s): Still rendering scene clips...');
+            } else if (localPollCount === 2) {
+              setGenerationStep('Check 2 (60s): Merging video tracks...');
+            } else if (localPollCount === 3) {
+              setGenerationStep('Check 3 (90s): Finalizing compile files...');
+            } else {
+              setGenerationStep(`Check ${localPollCount} (${localPollCount * 30}s): Final steps...`);
+            }
+          }
+        } catch (pollErr) {
+          console.error('Error polling background job status:', pollErr);
+        }
+      }, 30000);
+
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : 'Video generation failed.';
+      const errMsg = err instanceof Error ? err.message : 'Video generation failed to start.';
       setErrorMessage(errMsg);
-    } finally {
       setIsGenerating(false);
       setGenerationStep('');
     }
@@ -625,11 +672,39 @@ export default function Home() {
           {/* Compilation Load State */}
           {isGenerating && (
             <section className="rounded-2xl glass-panel p-6 flex flex-col items-center justify-center text-center shadow-2xl">
-              <div className="relative w-20 h-20 mb-6 flex items-center justify-center">
+              <div className="relative w-20 h-20 mb-4 flex items-center justify-center">
                 <div className="absolute inset-0 rounded-full border-4 border-purple-500/10 border-t-purple-500 animate-spin" />
                 <Film className="w-8 h-8 text-purple-400 animate-pulse" />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">Compiling Vertical Short</h3>
+              
+              <h3 className="text-lg font-bold text-white mb-1">Compiling Vertical Short</h3>
+              
+              {/* Battery-like progress meter */}
+              <div className="flex items-center justify-center gap-1.5 my-3">
+                <div className="relative w-24 h-8 border-2 border-purple-500/80 rounded-lg p-1 flex gap-1 bg-zinc-950/60 backdrop-blur-sm shadow-[0_0_15px_rgba(168,85,247,0.15)]">
+                  {/* Bar 1 */}
+                  <div className={`flex-1 h-full rounded-sm transition-all duration-500 ${
+                    pollCount >= 1 
+                      ? 'bg-gradient-to-t from-purple-600 to-indigo-500 opacity-100 shadow-[0_0_8px_rgba(168,85,247,0.5)]' 
+                      : 'bg-zinc-800 opacity-20'
+                  }`} />
+                  {/* Bar 2 */}
+                  <div className={`flex-1 h-full rounded-sm transition-all duration-500 ${
+                    pollCount >= 2 
+                      ? 'bg-gradient-to-t from-purple-600 to-indigo-500 opacity-100 shadow-[0_0_8px_rgba(168,85,247,0.5)]' 
+                      : 'bg-zinc-800 opacity-20'
+                  }`} />
+                  {/* Bar 3 */}
+                  <div className={`flex-1 h-full rounded-sm transition-all duration-500 ${
+                    pollCount >= 3 
+                      ? 'bg-gradient-to-t from-purple-600 to-indigo-500 opacity-100 shadow-[0_0_8px_rgba(168,85,247,0.5)]' 
+                      : 'bg-zinc-800 opacity-20'
+                  }`} />
+                </div>
+                {/* Battery tip */}
+                <div className="w-1.5 h-3 bg-purple-500/80 rounded-r-sm shadow-[2px_0_5px_rgba(168,85,247,0.2)]" />
+              </div>
+
               <p className="text-zinc-400 text-xs max-w-xs">{generationStep}</p>
             </section>
           )}
