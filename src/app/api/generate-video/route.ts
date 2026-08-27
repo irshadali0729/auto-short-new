@@ -105,13 +105,13 @@ async function compileVideoInBackground(
 
       const isZoomIn = i % 2 === 0;
       const speedStep = 0.0006 * zoomSpeedMultiplier;
-      const zoomExpression = isZoomIn 
+      const zoomExpression = isZoomIn
         ? `min(1.0+on*${speedStep},1.15)`
         : `max(1.15-on*${speedStep},1.0)`;
 
       const sceneFade = Math.min(transitionDuration, duration / 2);
-      
-      let filterGraph = 
+
+      let filterGraph =
         `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];` +
         `[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg_scaled];` +
         `[bg][fg_scaled]overlay=(W-w)/2:(H-h)/2[merged];` +
@@ -183,7 +183,7 @@ async function compileVideoInBackground(
     if (tempDir && fs.existsSync(tempDir)) {
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });
-      } catch {}
+      } catch { }
     }
     const errorMessage = error instanceof Error ? error.message : 'FFmpeg compilation failed.';
     progressMap.set(runId, {
