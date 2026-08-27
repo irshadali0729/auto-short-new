@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { cleanupAssets } from '@/app/utils/cleanup';
 
 export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const isDownload = searchParams.get('download') === 'true';
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.CLEANUP_ASSETS === 'true';
+
     const filePath = path.join(process.cwd(), 'generated', 'output.mp4');
 
     if (!fs.existsSync(filePath)) {
@@ -31,6 +36,14 @@ export async function GET(request: Request) {
       const chunksize = end - start + 1;
       const fileStream = fs.createReadStream(filePath, { start, end });
 
+      if (isDownload && isProduction) {
+        fileStream.on('close', () => {
+          setTimeout(() => {
+            cleanupAssets();
+          }, 3000);
+        });
+      }
+
       // Build a standard web stream compatible with NextResponse
       const webStream = new ReadableStream({
         start(controller) {
@@ -54,6 +67,15 @@ export async function GET(request: Request) {
       });
     } else {
       const fileStream = fs.createReadStream(filePath);
+
+      if (isDownload && isProduction) {
+        fileStream.on('close', () => {
+          setTimeout(() => {
+            cleanupAssets();
+          }, 3000);
+        });
+      }
+
       const webStream = new ReadableStream({
         start(controller) {
           fileStream.on('data', (chunk) => controller.enqueue(chunk));

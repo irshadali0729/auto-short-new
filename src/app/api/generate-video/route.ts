@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import ytdl from '@distube/ytdl-core';
 import { Groq } from 'groq-sdk';
+import { cleanupAssets } from '@/app/utils/cleanup';
 
 const ffmpegPath = ffmpegInstaller.path;
 const groq = new Groq({
@@ -240,6 +241,13 @@ async function compileVideoInBackground(
     }
 
     updateProgress(100, 'Video generation complete!', null, `/api/video?t=${Date.now()}`);
+
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.CLEANUP_ASSETS === 'true';
+    if (isProduction) {
+      setTimeout(() => {
+        cleanupAssets();
+      }, 10 * 60 * 1000); // 10 minutes timeout
+    }
 
   } catch (error: any) {
     console.error('Error generating video via FFmpeg in background:', error);

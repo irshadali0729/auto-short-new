@@ -730,8 +730,8 @@ export default function Home() {
                   </div>
                 </div>
 
-                <a
-                  href={videoUrl}
+                 <a
+                  href={videoUrl ? `${videoUrl}&download=true` : ''}
                   download="hadith_shorts.mp4"
                   className="w-full py-3.5 rounded-xl font-bold text-sm bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center gap-2 transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.4)]"
                 >
