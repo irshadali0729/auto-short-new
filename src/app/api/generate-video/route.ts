@@ -7,11 +7,29 @@ import { cleanupAssets } from '@/app/utils/cleanup';
 
 const ffmpegPath = ffmpegInstaller.path;
 
-// Setup global progress map
-if (!(global as any).videoProgress) {
-  (global as any).videoProgress = new Map();
+interface Scene {
+  keyword: string;
+  duration: number;
+  image: string;
+  isFallback: boolean;
 }
-const progressMap = (global as any).videoProgress;
+
+interface ProgressData {
+  complete: boolean;
+  error: string | null;
+  videoPath: string | null;
+}
+
+interface CustomGlobal {
+  videoProgress?: Map<string, ProgressData>;
+}
+
+// Setup global progress map
+const customGlobal = global as unknown as CustomGlobal;
+if (!customGlobal.videoProgress) {
+  customGlobal.videoProgress = new Map();
+}
+const progressMap = customGlobal.videoProgress;
 
 export async function POST(request: Request) {
   try {
@@ -52,10 +70,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ runId });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error starting video generation:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
     return NextResponse.json(
-      { error: error.message || 'Internal Server Error' },
+      { error: errorMessage },
       { status: 500 }
     );
   }
@@ -63,7 +82,7 @@ export async function POST(request: Request) {
 
 async function compileVideoInBackground(
   runId: string,
-  scenes: any[],
+  scenes: Scene[],
   zoomSpeedMultiplier: number,
   transitionDuration: number
 ) {
@@ -178,7 +197,7 @@ async function compileVideoInBackground(
       }, 10 * 60 * 1000); // 10 minutes timeout
     }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error generating video via FFmpeg in background:', error);
     if (tempDir && fs.existsSync(tempDir)) {
       try {

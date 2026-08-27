@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 
+interface CustomGlobal {
+  videoProgress?: Map<string, { complete: boolean; error: string | null; videoPath: string | null }>;
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -9,10 +13,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'runId is required' }, { status: 400 });
     }
 
-    if (!(global as any).videoProgress) {
-      (global as any).videoProgress = new Map();
+    const customGlobal = global as unknown as CustomGlobal;
+    if (!customGlobal.videoProgress) {
+      customGlobal.videoProgress = new Map();
     }
-    const progressMap = (global as any).videoProgress;
+    const progressMap = customGlobal.videoProgress;
     const progressData = progressMap.get(runId);
 
     if (!progressData) {
@@ -20,8 +25,10 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(progressData);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching progress:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
+

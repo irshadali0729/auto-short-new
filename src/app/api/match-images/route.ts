@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     const usedUnsplashIds = new Set<string>();
 
     for (const scene of scenes) {
-      const { keyword, duration, prompt } = scene;
+      const { keyword, duration } = scene;
       const kw = keyword ? keyword.trim() : "";
 
       if (!kw) {
