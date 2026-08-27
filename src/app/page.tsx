@@ -78,12 +78,12 @@ export default function Home() {
     setIsFetchingTranscript(true);
 
     try {
-      const url = `https://transcriptapi.com/api/v2/youtube/transcript?video_url=${encodeURIComponent(youtubeLink.trim())}&format=json`;
-      const res = await fetch(url, {
-        method: 'GET',
+      const res = await fetch('/api/fetch-transcript', {
+        method: 'POST',
         headers: {
-          'Authorization': 'Bearer sk__W7--qYLJBMQ4Rf5O6FAA4_Gr9Tcrpjve0ZWrvQngc8'
-        }
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ youtubeUrl: youtubeLink.trim() })
       });
 
       const data = await res.json();

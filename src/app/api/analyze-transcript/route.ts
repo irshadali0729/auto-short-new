@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { Groq } from "groq-sdk";
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY || "",
-});
-
 export async function POST(request: Request) {
   try {
     const { transcript, targetLength } = await request.json();
@@ -20,15 +16,22 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY.trim() === "") {
+    const apiKey = process.env.GROQ_API_KEY;
+    console.log("GROQ_API_KEY check - Is set:", !!apiKey, "Length:", apiKey?.length || 0);
+
+    if (!apiKey || apiKey.trim() === "") {
       return NextResponse.json(
         {
           error:
-            "Groq API Key is missing. Please configure GROQ_API_KEY in your .env.local file.",
+            "Groq API Key is missing. Please configure GROQ_API_KEY in your Railway service variables or .env.local file.",
         },
         { status: 500 },
       );
     }
+
+    const groq = new Groq({
+      apiKey: apiKey,
+    });
 
     const prompt = `You are creating Islamic YouTube Shorts.
 Analyze the transcript.
