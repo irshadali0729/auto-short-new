@@ -11,30 +11,88 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || '',
 });
 
+// Setup global progress map
+if (!(global as any).videoProgress) {
+  (global as any).videoProgress = new Map();
+}
+const progressMap = (global as any).videoProgress;
+
 export async function POST(request: Request) {
-  let tempDir = '';
   try {
-    const { scenes, youtubeVideoId } = await request.json();
+    const { scenes, youtubeVideoId, runId, zoomSpeed, transitionDuration } = await request.json();
 
     if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
       return NextResponse.json({ error: 'Scenes list is required to generate the video.' }, { status: 400 });
     }
 
+    if (!runId) {
+      return NextResponse.json({ error: 'runId is required for progress tracking.' }, { status: 400 });
+    }
+
+    const zoomSpeedMultiplier = typeof zoomSpeed === 'number' ? zoomSpeed : 1.0;
+    const transitionDurationSec = typeof transitionDuration === 'number' ? transitionDuration : 0.3;
+
+    // Initialize progress state
+    progressMap.set(runId, {
+      progress: 0,
+      status: 'Initializing video generation process...',
+      error: null,
+      videoPath: null
+    });
+
+    // Start background video compilation
+    compileVideoInBackground(
+      runId,
+      scenes,
+      youtubeVideoId,
+      zoomSpeedMultiplier,
+      transitionDurationSec
+    ).catch(err => {
+      console.error('Background compilation crash:', err);
+      progressMap.set(runId, {
+        progress: 100,
+        status: 'Failed to compile video',
+        error: err.message || 'Background compilation failed.',
+        videoPath: null
+      });
+    });
+
+    return NextResponse.json({ runId });
+
+  } catch (error: any) {
+    console.error('Error starting video generation:', error);
+    return NextResponse.json(
+      { error: error.message || 'Internal Server Error' },
+      { status: 500 }
+    );
+  }
+}
+
+async function compileVideoInBackground(
+  runId: string,
+  scenes: any[],
+  youtubeVideoId: string | undefined,
+  zoomSpeedMultiplier: number,
+  transitionDuration: number
+) {
+  const updateProgress = (progress: number, status: string, error: string | null = null, videoPath: string | null = null) => {
+    progressMap.set(runId, { progress, status, error, videoPath });
+  };
+
+  let tempDir = '';
+  try {
     const projectRoot = process.cwd();
     const imageLibraryDir = path.join(projectRoot, 'image-library');
     const generatedDir = path.join(projectRoot, 'generated');
 
-    // Ensure generated directory exists
     if (!fs.existsSync(generatedDir)) {
       fs.mkdirSync(generatedDir, { recursive: true });
     }
 
-    // Create unique temp directory for this compile run to avoid conflicts
-    const runId = Date.now();
-    tempDir = path.join(generatedDir, `temp_run_${runId}`);
+    const tempRunId = Date.now();
+    tempDir = path.join(generatedDir, `temp_run_${tempRunId}`);
     fs.mkdirSync(tempDir, { recursive: true });
 
-    // Use original durations (no overlap subtraction needed for concat demuxer)
     const adjustedScenes = scenes.map(s => {
       return {
         ...s,
@@ -42,19 +100,19 @@ export async function POST(request: Request) {
       };
     });
 
-    // 1. Download YouTube audio if video ID is present
     const audioPath = path.join(tempDir, 'audio.mp3');
     let hasAudio = false;
     let hasSubtitles = false;
     const srtPath = path.join(tempDir, 'subtitles.srt');
 
     if (youtubeVideoId && typeof youtubeVideoId === 'string' && youtubeVideoId.trim() !== '') {
+      updateProgress(5, 'Downloading voiceover audio from YouTube...');
       try {
         await downloadYoutubeAudio(youtubeVideoId, audioPath);
         hasAudio = fs.existsSync(audioPath);
 
         if (hasAudio) {
-          // 2. Transcribe downloaded audio file via Groq Whisper API
+          updateProgress(12, 'Transcribing voiceover audio with Groq Whisper...');
           try {
             const srtContent = await transcribeAudio(audioPath);
             if (srtContent && typeof srtContent === 'string' && srtContent.trim() !== '') {
@@ -71,9 +129,9 @@ export async function POST(request: Request) {
       }
     }
 
+    updateProgress(20, 'Compiling storyboard scenes...');
     const clipPaths: string[] = [];
 
-    // Compile each image scene into an MP4 clip with a zoompan and fade transition
     for (let i = 0; i < adjustedScenes.length; i++) {
       const scene = adjustedScenes[i];
       const imageFilename = scene.image;
@@ -87,23 +145,23 @@ export async function POST(request: Request) {
       const clipOutputPath = path.join(tempDir, `clip_${i}.mp4`);
       clipPaths.push(clipOutputPath);
 
-      // Determine alternating zoom direction: zoom in (even) vs zoom out (odd)
       const isZoomIn = i % 2 === 0;
+      const speedStep = 0.0006 * zoomSpeedMultiplier;
       const zoomExpression = isZoomIn 
-        ? "min(1.0+on*0.0006,1.15)"
-        : "max(1.15-on*0.0006,1.0)";
+        ? `min(1.0+on*${speedStep},1.15)`
+        : `max(1.15-on*${speedStep},1.0)`;
 
-      // Setup a clean fade duration (e.g. 0.3s dip to black)
-      const fadeDuration = 0.3;
-      const startFadeOut = Math.max(0, duration - fadeDuration);
-
-      // FFmpeg filter graph: 1080x1920 layout, blur background, overlay centered foreground, zoompan, fade-in, fade-out
-      const filterGraph = 
+      const sceneFade = Math.min(transitionDuration, duration / 2);
+      
+      let filterGraph = 
         `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];` +
         `[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg_scaled];` +
         `[bg][fg_scaled]overlay=(W-w)/2:(H-h)/2[merged];` +
-        `[merged]zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':d=1:s=1080x1920:fps=30[zoomed];` +
-        `[zoomed]fade=t=in:st=0:d=${fadeDuration},fade=t=out:st=${startFadeOut.toFixed(2)}:d=${fadeDuration}`;
+        `[merged]zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':d=1:s=1080x1920:fps=30`;
+
+      if (sceneFade > 0) {
+        filterGraph += `[zoomed];[zoomed]fade=t=in:st=0:d=${sceneFade},fade=t=out:st=${(duration - sceneFade).toFixed(2)}:d=${sceneFade}`;
+      }
 
       const ffmpegArgs = [
         '-y',
@@ -117,13 +175,16 @@ export async function POST(request: Request) {
         clipOutputPath
       ];
 
+      updateProgress(
+        Math.round(20 + (i / adjustedScenes.length) * 60),
+        `Compiling scene ${i + 1} of ${adjustedScenes.length} (${scene.keyword || 'clip'})...`
+      );
+
       await runFFmpegProcess(ffmpegArgs);
     }
 
-    // Temporary concatenated file path
+    updateProgress(82, 'Merging individual scene clips...');
     const mergedVideoPath = path.join(tempDir, 'merged_video.mp4');
-
-    // Concat all compiled clips using the fast concat demuxer
     const concatTxtPath = path.join(tempDir, 'concat.txt');
     const concatContent = clipPaths
       .map(p => `file '${p.replace(/\\/g, '/')}'`)
@@ -142,11 +203,10 @@ export async function POST(request: Request) {
 
     await runFFmpegProcess(concatArgs);
 
-    // Target final video output filename
     const outputVideoPath = path.join(generatedDir, 'output.mp4');
 
-    // Run final burn-in/mux pass if audio or subtitles exist, otherwise just copy
     if (hasAudio || hasSubtitles) {
+      updateProgress(90, 'Adding audio track and subtitles...');
       const finalArgs: string[] = ['-y', '-i', mergedVideoPath];
 
       if (hasAudio) {
@@ -169,33 +229,27 @@ export async function POST(request: Request) {
       finalArgs.push(outputVideoPath);
       await runFFmpegProcess(finalArgs);
     } else {
+      updateProgress(95, 'Saving final video output file...');
       fs.copyFileSync(mergedVideoPath, outputVideoPath);
     }
 
-    // Clean up temporary compilation artifacts
     try {
       fs.rmSync(tempDir, { recursive: true, force: true });
     } catch (cleanupErr) {
       console.warn('Temporary directory cleanup failed:', cleanupErr);
     }
 
-    return NextResponse.json({ videoPath: `/api/video?t=${Date.now()}` });
+    updateProgress(100, 'Video generation complete!', null, `/api/video?t=${Date.now()}`);
 
-  } catch (error: unknown) {
-    console.error('Error generating video via FFmpeg:', error);
-    // Cleanup on failure
+  } catch (error: any) {
+    console.error('Error generating video via FFmpeg in background:', error);
     if (tempDir && fs.existsSync(tempDir)) {
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });
-      } catch {
-        // Safe empty catch
-      }
+      } catch {}
     }
     const errorMessage = error instanceof Error ? error.message : 'FFmpeg compilation failed.';
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    updateProgress(100, 'Failed to compile video', errorMessage);
   }
 }
 

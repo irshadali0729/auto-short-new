@@ -13,7 +13,8 @@ import {
   RefreshCw,
   Film,
   CheckCircle2,
-  Clock
+  Clock,
+  Sliders
 } from 'lucide-react';
 
 interface Scene {
@@ -45,6 +46,9 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
+  const [zoomSpeed, setZoomSpeed] = useState<number>(1.0);
+  const [transitionDuration, setTransitionDuration] = useState<number>(0.3);
+  const [progress, setProgress] = useState<number>(0);
   
   // Image replacement state
   const [allLibraryImages, setAllLibraryImages] = useState<string[]>([]);
@@ -236,50 +240,70 @@ export default function Home() {
     setErrorMessage('');
     setIsGenerating(true);
     setVideoUrl('');
-    
-    // Simulate generation steps for high premium feedback feel
-    const steps = [
-      'Reading image dimensions and scaling assets...',
-      'Applying premium dual-layer background blur filter graphs...',
-      'Compiling scene clips via local FFmpeg...',
-      'Stitching clips with concat demuxer...',
-      'Finalizing vertical YouTube Short output file...'
-    ];
+    setProgress(0);
+    setGenerationStep('Initializing video compilation...');
 
-    let currentStep = 0;
-    setGenerationStep(steps[0]);
-
-    const stepInterval = setInterval(() => {
-      if (currentStep < steps.length - 1) {
-        currentStep++;
-        setGenerationStep(steps[currentStep]);
-      }
-    }, 4500);
+    const runId = 'run_' + Date.now();
 
     try {
-      const res = await fetch('/api/generate-video', {
+      const initRes = await fetch('/api/generate-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           scenes,
           segments: transcriptSegments.length > 0 ? transcriptSegments : undefined,
-          youtubeVideoId: youtubeVideoId || undefined
+          youtubeVideoId: youtubeVideoId || undefined,
+          runId,
+          zoomSpeed,
+          transitionDuration
         }),
       });
 
-      const data = await res.json();
-      clearInterval(stepInterval);
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Video compilation failed.');
+      const initData = await initRes.json();
+      if (!initRes.ok) {
+        throw new Error(initData.error || 'Failed to initialize video generation.');
       }
 
-      setVideoUrl(data.videoPath);
+      // Start polling progress
+      const pollInterval = setInterval(async () => {
+        try {
+          const progRes = await fetch(`/api/generate-video/progress?runId=${runId}`);
+          if (!progRes.ok) {
+            console.error('Failed to query progress API.');
+            return;
+          }
+          const progData = await progRes.json();
+          
+          if (progData.progress !== undefined) {
+            setProgress(progData.progress);
+          }
+          if (progData.status) {
+            setGenerationStep(progData.status);
+          }
+
+          if (progData.error) {
+            clearInterval(pollInterval);
+            setErrorMessage(progData.error);
+            setIsGenerating(false);
+            setGenerationStep('');
+          } else if (progData.progress === 100) {
+            clearInterval(pollInterval);
+            setIsGenerating(false);
+            setGenerationStep('');
+            if (progData.videoPath) {
+              setVideoUrl(progData.videoPath);
+            } else {
+              setErrorMessage('Video generation completed, but no preview path was returned.');
+            }
+          }
+        } catch (pollErr) {
+          console.error('Error polling video progress:', pollErr);
+        }
+      }, 1000);
+
     } catch (err: unknown) {
-      clearInterval(stepInterval);
-      const errMsg = err instanceof Error ? err.message : 'Video generation failed.';
+      const errMsg = err instanceof Error ? err.message : 'Video generation failed to initiate.';
       setErrorMessage(errMsg);
-    } finally {
       setIsGenerating(false);
       setGenerationStep('');
     }
@@ -464,6 +488,75 @@ export default function Home() {
             </div>
           )}
 
+          {/* Video Style Settings Panel */}
+          {scenes.length > 0 && (
+            <section className="rounded-2xl glass-panel p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-300">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
+                <Sliders className="w-5 h-5 text-purple-400" />
+                2. Configure Video Style
+              </h2>
+              <p className="text-xs text-zinc-400 mb-6">
+                Adjust camera panning speed and scene transitions.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Zoom Speed Setting */}
+                <div className="flex flex-col gap-2.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                      Zoom/Pan Animation Speed
+                    </label>
+                    <span className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-black">
+                      {zoomSpeed}x
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.2"
+                    max="2.0"
+                    step="0.1"
+                    value={zoomSpeed}
+                    onChange={(e) => setZoomSpeed(parseFloat(e.target.value))}
+                    disabled={isGenerating}
+                    className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-purple-500 outline-none"
+                  />
+                  <div className="flex justify-between text-[10px] text-zinc-500 font-bold">
+                    <span>0.2x (Subtle Pan)</span>
+                    <span>1.0x (Default)</span>
+                    <span>2.0x (Dramatic Zoom)</span>
+                  </div>
+                </div>
+
+                {/* Transition Duration Setting */}
+                <div className="flex flex-col gap-2.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                      Crossfade Transition Duration
+                    </label>
+                    <span className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-black">
+                      {transitionDuration}s
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.0"
+                    max="1.5"
+                    step="0.1"
+                    value={transitionDuration}
+                    onChange={(e) => setTransitionDuration(parseFloat(e.target.value))}
+                    disabled={isGenerating}
+                    className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-purple-500 outline-none"
+                  />
+                  <div className="flex justify-between text-[10px] text-zinc-500 font-bold">
+                    <span>0.0s (Hard Cuts)</span>
+                    <span>0.3s (Default)</span>
+                    <span>1.5s (Long Fade)</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Extracted/Matched Scenes Panel */}
           {scenes.length > 0 && (
             <section className="rounded-2xl glass-panel p-6 shadow-2xl">
@@ -471,7 +564,7 @@ export default function Home() {
                 <div>
                   <h2 className="text-xl font-bold text-white flex items-center gap-2">
                     <ImageIcon className="w-5 h-5 text-purple-400" />
-                    2. Matched Visual Storyboard
+                    3. Matched Visual Storyboard
                   </h2>
                   <p className="text-xs text-zinc-400 mt-1">
                     Review matching scenes and customize the storyboard.
@@ -578,14 +671,21 @@ export default function Home() {
                 <div className="absolute inset-0 rounded-full border-4 border-purple-500/10 border-t-purple-500 animate-spin" />
                 <Film className="w-8 h-8 text-purple-400 animate-pulse" />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">Compiling Vertical Short</h3>
-              <p className="text-zinc-400 text-sm max-w-xs">{generationStep}</p>
+              <h3 className="text-lg font-bold text-white mb-1">Compiling Vertical Short</h3>
+              <span className="text-purple-400 text-xs font-black mb-3 bg-purple-500/10 px-2.5 py-0.5 rounded border border-purple-500/20">
+                {progress}% Completed
+              </span>
+              <p className="text-zinc-400 text-xs max-w-xs h-8 flex items-center justify-center">{generationStep}</p>
               
-              <div className="w-full bg-zinc-800 rounded-full h-1.5 mt-6 overflow-hidden">
-                <div className="bg-purple-500 h-1.5 rounded-full animate-[shimmer_2s_infinite] w-full" style={{
-                  backgroundImage: 'linear-gradient(90deg, #a855f7 25%, #c084fc 50%, #a855f7 75%)',
-                  backgroundSize: '200% 100%'
-                }} />
+              <div className="w-full bg-zinc-800 rounded-full h-2 mt-4 overflow-hidden">
+                <div 
+                  className="bg-purple-500 h-2 rounded-full transition-all duration-500 ease-out" 
+                  style={{
+                    width: `${progress}%`,
+                    backgroundImage: 'linear-gradient(90deg, #a855f7 25%, #c084fc 50%, #a855f7 75%)',
+                    backgroundSize: '200% 100%'
+                  }} 
+                />
               </div>
             </section>
           )}
@@ -608,7 +708,7 @@ export default function Home() {
             <section className="rounded-2xl glass-panel p-6 shadow-2xl flex flex-col items-center">
               <h2 className="text-xl font-bold text-white flex items-center gap-2 self-start mb-6">
                 <Play className="w-5 h-5 text-purple-400" />
-                3. Preview & Download
+                4. Preview & Download
               </h2>
 
               {/* 9:16 Vertical Video Screen */}

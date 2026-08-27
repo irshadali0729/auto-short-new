@@ -80,7 +80,7 @@ ${transcript}`;
           content: prompt,
         },
       ],
-      model: "llama-3.3-70b-versatile",
+      model: "groq/compound-mini",
       response_format: { type: "json_object" },
     });
 
