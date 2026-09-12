@@ -17,11 +17,23 @@ import {
   Sliders
 } from 'lucide-react';
 
+interface GraphicBeat {
+  prefixText?: string;
+  heroWord: string;
+  suffixText?: string;
+  style?: "stacked-kinetic" | "top-hero" | "thought-bubble" | "breakdown-card";
+  text?: string;
+  accent?: string;
+  start: number;
+  end: number;
+}
+
 interface Scene {
   keyword: string;
   duration: number;
   image: string;
   isFallback: boolean;
+  graphics?: GraphicBeat[];
 }
 
 
@@ -633,6 +645,25 @@ export default function Home() {
                         <span className="text-xs text-zinc-400 truncate block mt-0.5 opacity-75">
                           {scene.image}
                         </span>
+
+                        {scene.graphics && scene.graphics.length > 0 && (
+                          <div className="mt-2.5 pt-2 border-t border-zinc-800/80 flex flex-col gap-1">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              Kinetic Graphic
+                            </span>
+                            <div className="flex flex-col gap-1">
+                              {scene.graphics.map((g, gIdx) => (
+                                <div key={gIdx} className="px-2 py-1 rounded bg-zinc-950/80 border border-purple-500/20 text-[11px] font-semibold text-zinc-300 flex items-center gap-1.5 shadow-sm">
+                                  {g.prefixText && <span className="text-zinc-200">{g.prefixText}</span>}
+                                  <span className="text-amber-400 font-black uppercase bg-amber-400/10 px-1 rounded">{g.heroWord}</span>
+                                  {g.suffixText && <span className="text-zinc-300">{g.suffixText}</span>}
+                                  <span className="ml-auto text-[9px] text-zinc-500">{g.start.toFixed(1)}s-{g.end.toFixed(1)}s</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <button

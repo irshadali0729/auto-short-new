@@ -2,6 +2,18 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
+interface GraphicBeat {
+  prefixText?: string;
+  heroWord?: string;
+  suffixText?: string;
+  style?: "stacked-kinetic" | "top-hero" | "thought-bubble" | "breakdown-card";
+  text?: string;
+  accent?: string;
+  type?: "impact" | "money" | "result" | "platform";
+  start: number;
+  end: number;
+}
+
 export async function POST(request: Request) {
   try {
     const { scenes } = await request.json();
@@ -16,9 +28,7 @@ export async function POST(request: Request) {
     const libraryPath = path.join(process.cwd(), "image-library");
     const pexelsApiKey = process.env.PEXELS_API_KEY || "";
     const unsplashKey = process.env.UNSPLASH_ACCESS_KEY || "";
-    // Removed Clipdrop / fal.ai integrations due to exhausted/billing issues.
 
-    // Ensure image-library folder exists
     if (!fs.existsSync(libraryPath)) {
       fs.mkdirSync(libraryPath, { recursive: true });
     }
@@ -35,6 +45,7 @@ export async function POST(request: Request) {
       duration: number;
       image: string;
       isFallback: boolean;
+      graphics?: GraphicBeat[];
     }> = [];
 
     const usedImages = new Set<string>();
@@ -42,7 +53,7 @@ export async function POST(request: Request) {
     const usedUnsplashIds = new Set<string>();
 
     for (const scene of scenes) {
-      const { keyword, duration } = scene;
+      const { keyword, duration, graphics } = scene;
       const kw = keyword ? keyword.trim() : "";
 
       if (!kw) {
@@ -52,20 +63,17 @@ export async function POST(request: Request) {
           duration,
           image: fallback,
           isFallback: true,
+          graphics: Array.isArray(graphics) ? graphics : undefined,
         });
         usedImages.add(fallback);
         continue;
       }
 
-      // Note: AI image generation integrations removed. Proceed to Pexels and local fallbacks.
-
-      // Try external providers (Pexels / Unsplash). If both keys exist, randomize order to mix providers.
       const providers: string[] = [];
       if (pexelsApiKey) providers.push("pexels");
       if (unsplashKey) providers.push("unsplash");
 
       if (providers.length > 0) {
-        // Shuffle providers to get a mix across scenes when both are available
         for (let i = providers.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [providers[i], providers[j]] = [providers[j], providers[i]];
@@ -85,6 +93,7 @@ export async function POST(request: Request) {
                 duration,
                 image: pexelsFilename,
                 isFallback: false,
+                graphics: Array.isArray(graphics) ? graphics : undefined,
               });
               usedImages.add(pexelsFilename);
               found = true;
@@ -102,6 +111,7 @@ export async function POST(request: Request) {
                 duration,
                 image: unsplashFilename,
                 isFallback: false,
+                graphics: Array.isArray(graphics) ? graphics : undefined,
               });
               usedImages.add(unsplashFilename);
               found = true;
@@ -113,20 +123,17 @@ export async function POST(request: Request) {
         if (found) continue;
       }
 
-      // 4. Local Fallback - Direct case-insensitive substring match among unused images
       let matches = availableImages.filter(
         (img) =>
           img.toLowerCase().includes(kw.toLowerCase()) && !usedImages.has(img),
       );
 
-      // If no unused direct match, try allowing previously used images for this keyword
       if (matches.length === 0) {
         matches = availableImages.filter((img) =>
           img.toLowerCase().includes(kw.toLowerCase()),
         );
       }
 
-      // 5. Local Fallback - Word-by-word matching among unused images
       if (matches.length === 0) {
         const words = kw
           .toLowerCase()
@@ -140,7 +147,6 @@ export async function POST(request: Request) {
         }
       }
 
-      // If local matches exist, pick a random one
       if (matches.length > 0) {
         const chosen = matches[Math.floor(Math.random() * matches.length)];
         matchedScenes.push({
@@ -148,16 +154,17 @@ export async function POST(request: Request) {
           duration,
           image: chosen,
           isFallback: false,
+          graphics: Array.isArray(graphics) ? graphics : undefined,
         });
         usedImages.add(chosen);
       } else {
-        // 6. Ultimate Fallback: Select a completely random unused image
         const fallback = getUnusedRandomImage(availableImages, usedImages);
         matchedScenes.push({
           keyword,
           duration,
           image: fallback,
           isFallback: true,
+          graphics: Array.isArray(graphics) ? graphics : undefined,
         });
         usedImages.add(fallback);
       }
@@ -177,7 +184,7 @@ function getUnusedRandomImage(
   usedImages: Set<string>,
 ): string {
   if (allImages.length === 0) {
-    return "fallback.jpg"; // Ultimate safety default
+    return "fallback.jpg";
   }
   const unused = allImages.filter((img) => !usedImages.has(img));
   const pool = unused.length > 0 ? unused : allImages;
@@ -200,7 +207,6 @@ async function getPexelsPhoto(
   usedPexelsIds: Set<number>,
 ): Promise<string | null> {
   try {
-    // Ensure Islamic/Muslim context for general query keywords
     let searchQuery = query.trim().toLowerCase();
     const islamicKeywords = [
       "muslim",
@@ -239,15 +245,10 @@ async function getPexelsPhoto(
     }
 
     const data = await res.json();
-    if (
-      !data.photos ||
-      !Array.isArray(data.photos) ||
-      data.photos.length === 0
-    ) {
+    if (!data.photos || !Array.isArray(data.photos) || data.photos.length === 0) {
       return null;
     }
 
-    // Find first photo not used in this run
     let chosenPhoto = data.photos[0];
     for (const photo of data.photos) {
       if (!usedPexelsIds.has(photo.id)) {
@@ -259,10 +260,7 @@ async function getPexelsPhoto(
     usedPexelsIds.add(chosenPhoto.id);
 
     const photoId = chosenPhoto.id;
-    const imageUrl =
-      chosenPhoto.src.portrait ||
-      chosenPhoto.src.large ||
-      chosenPhoto.src.original;
+    const imageUrl = chosenPhoto.src.portrait || chosenPhoto.src.large || chosenPhoto.src.original;
     if (!imageUrl) return null;
 
     const altText = chosenPhoto.alt || "";
