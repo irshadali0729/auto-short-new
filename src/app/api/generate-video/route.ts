@@ -152,6 +152,7 @@ export async function POST(request: Request) {
       textOverlayMode,
       enableGraphicMotion,
       enableCaptions,
+      aspectRatio,
     } = await request.json();
 
     if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
@@ -171,6 +172,7 @@ export async function POST(request: Request) {
     const zoomSpeedMultiplier = typeof zoomSpeed === "number" ? zoomSpeed : 1.0;
     const transitionDurationSec =
       typeof transitionDuration === "number" ? transitionDuration : 0.3;
+    const targetRatio: "9:16" | "16:9" = aspectRatio === "16:9" ? "16:9" : "9:16";
 
     // Mutually exclusive text overlay mode
     const resolvedMode: "none" | "captions" | "graphics" =
@@ -194,6 +196,7 @@ export async function POST(request: Request) {
       zoomSpeedMultiplier,
       transitionDurationSec,
       resolvedMode,
+      targetRatio,
     ).catch((err) => {
       console.error("Background compilation crash:", err);
       progressMap.set(runId, {
@@ -218,12 +221,16 @@ async function compileVideoInBackground(
   zoomSpeedMultiplier: number,
   transitionDuration: number,
   textOverlayMode: "none" | "captions" | "graphics" = "captions",
+  targetRatio: "9:16" | "16:9" = "9:16",
 ) {
   let tempDir = "";
   try {
     const projectRoot = process.cwd();
     const imageLibraryDir = path.join(projectRoot, "image-library");
     const generatedDir = path.join(projectRoot, "generated");
+
+    const targetWidth = targetRatio === "16:9" ? 1920 : 1080;
+    const targetHeight = targetRatio === "16:9" ? 1080 : 1920;
 
     if (!fs.existsSync(generatedDir)) {
       fs.mkdirSync(generatedDir, { recursive: true });
@@ -289,7 +296,7 @@ async function compileVideoInBackground(
 
           const overlayPath = path.join(tempDir, `caption_${i}_${c}.png`);
           try {
-            await renderCaptionOverlayPng(capText, overlayPath);
+            await renderCaptionOverlayPng(capText, overlayPath, targetWidth, targetHeight);
             if (fs.existsSync(overlayPath)) {
               captionPngList.push({
                 path: overlayPath,
@@ -309,7 +316,7 @@ async function compileVideoInBackground(
           const beat = beats[b];
           const overlayPath = path.join(tempDir, `overlay_${i}_${b}.png`);
           try {
-            await renderGraphicOverlayPng(beat, overlayPath);
+            await renderGraphicOverlayPng(beat, overlayPath, targetWidth, targetHeight);
             if (fs.existsSync(overlayPath)) {
               overlayPngList.push({
                 path: overlayPath,
@@ -331,16 +338,16 @@ async function compileVideoInBackground(
       let filterGraph = "";
       if (isVideoAsset) {
         filterGraph =
-          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5,setpts=PTS-STARTPTS[bg];` +
-          `[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,setpts=PTS-STARTPTS[fg_scaled];` +
+          `[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${targetHeight},boxblur=20:5,setpts=PTS-STARTPTS[bg];` +
+          `[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,setpts=PTS-STARTPTS[fg_scaled];` +
           `[bg][fg_scaled]overlay=(W-w)/2:(H-h)/2[zoomed];` +
           `[zoomed]drawgrid=width=100:height=100:thickness=1:color=white@0.04[grid];`;
       } else {
         filterGraph =
-          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];` +
-          `[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg_scaled];` +
+          `[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${targetHeight},boxblur=20:5[bg];` +
+          `[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease[fg_scaled];` +
           `[bg][fg_scaled]overlay=(W-w)/2:(H-h)/2[merged];` +
-          `[merged]zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':d=1:s=1080x1920:fps=30[zoomed];` +
+          `[merged]zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':d=1:s=${targetWidth}x${targetHeight}:fps=30[zoomed];` +
           `[zoomed]drawgrid=width=100:height=100:thickness=1:color=white@0.04[grid];`;
       }
 

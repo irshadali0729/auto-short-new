@@ -39,6 +39,7 @@ interface MediaSettingsPayload {
   };
   mediaType?: "only_videos" | "only_images" | "both";
   useRelatableVisualSearch?: boolean;
+  aspectRatio?: "9:16" | "16:9";
 }
 
 function shuffleArray<T>(array: T[]): T[] {
@@ -151,6 +152,7 @@ export async function POST(request: Request) {
       !mediaSettings.sources || mediaSettings.sources.local !== false;
 
     const isRelatableMode = mediaSettings.useRelatableVisualSearch !== false;
+    const targetRatio: "9:16" | "16:9" = mediaSettings.aspectRatio || "9:16";
 
     const matchedScenes: Array<{
       keyword: string;
@@ -208,6 +210,7 @@ export async function POST(request: Request) {
             preferVideo,
             mediaFilter,
             true,
+            targetRatio,
             pexelsApiKey,
             unsplashKey,
             pixabayApiKey,
@@ -233,6 +236,7 @@ export async function POST(request: Request) {
             preferVideo,
             mediaFilter,
             true,
+            targetRatio,
             pexelsApiKey,
             unsplashKey,
             pixabayApiKey,
@@ -258,6 +262,7 @@ export async function POST(request: Request) {
             preferVideo,
             mediaFilter,
             true,
+            targetRatio,
             pexelsApiKey,
             unsplashKey,
             pixabayApiKey,
@@ -350,6 +355,7 @@ export async function POST(request: Request) {
             usedPexelsVideoIds,
             usedPixabayVideoIds,
             false,
+            targetRatio,
           );
         } else {
           foundAsset = await fetchPhotoFromProviders(
@@ -364,6 +370,7 @@ export async function POST(request: Request) {
             usedUnsplashIds,
             usedPixabayPhotoIds,
             false,
+            targetRatio,
           );
         }
 
@@ -382,6 +389,7 @@ export async function POST(request: Request) {
               usedUnsplashIds,
               usedPixabayPhotoIds,
               false,
+              targetRatio,
             );
           } else {
             foundAsset = await fetchVideoFromProviders(
@@ -393,6 +401,7 @@ export async function POST(request: Request) {
               usedPexelsVideoIds,
               usedPixabayVideoIds,
               false,
+              targetRatio,
             );
           }
         }
@@ -479,6 +488,7 @@ async function fetchMediaForQuery(
   preferVideo: boolean,
   mediaFilter: "only_videos" | "only_images" | "both",
   isRelatableMode: boolean,
+  targetRatio: "9:16" | "16:9",
   pexelsApiKey: string,
   unsplashKey: string,
   pixabayApiKey: string,
@@ -506,6 +516,7 @@ async function fetchMediaForQuery(
       usedPexelsVideoIds,
       usedPixabayVideoIds,
       isRelatableMode,
+      targetRatio,
     );
   } else {
     foundAsset = await fetchPhotoFromProviders(
@@ -520,6 +531,7 @@ async function fetchMediaForQuery(
       usedUnsplashIds,
       usedPixabayPhotoIds,
       isRelatableMode,
+      targetRatio,
     );
   }
 
@@ -537,6 +549,7 @@ async function fetchMediaForQuery(
         usedUnsplashIds,
         usedPixabayPhotoIds,
         isRelatableMode,
+        targetRatio,
       );
     } else {
       foundAsset = await fetchVideoFromProviders(
@@ -548,6 +561,7 @@ async function fetchMediaForQuery(
         usedPexelsVideoIds,
         usedPixabayVideoIds,
         isRelatableMode,
+        targetRatio,
       );
     }
   }
@@ -564,6 +578,7 @@ async function fetchVideoFromProviders(
   usedPexelsVideoIds: Set<number>,
   usedPixabayVideoIds: Set<number>,
   isRelatableMode: boolean = false,
+  targetRatio: "9:16" | "16:9" = "9:16",
 ): Promise<string | null> {
   const videoProviders: Array<"pexels_video" | "pixabay_video"> = [];
   if (pexelsApiKey && allowPexels) videoProviders.push("pexels_video");
@@ -578,6 +593,7 @@ async function fetchVideoFromProviders(
         pexelsApiKey,
         usedPexelsVideoIds,
         isRelatableMode,
+        targetRatio,
       );
       if (vid) return vid;
     } else if (provider === "pixabay_video") {
@@ -586,6 +602,7 @@ async function fetchVideoFromProviders(
         pixabayApiKey,
         usedPixabayVideoIds,
         isRelatableMode,
+        targetRatio,
       );
       if (vid) return vid;
     }
@@ -606,6 +623,7 @@ async function fetchPhotoFromProviders(
   usedUnsplashIds: Set<string>,
   usedPixabayPhotoIds: Set<number>,
   isRelatableMode: boolean = false,
+  targetRatio: "9:16" | "16:9" = "9:16",
 ): Promise<string | null> {
   const photoProviders: Array<"pexels_photo" | "unsplash_photo" | "pixabay_photo"> = [];
   if (pexelsApiKey && allowPexels) photoProviders.push("pexels_photo");
@@ -621,6 +639,7 @@ async function fetchPhotoFromProviders(
         pexelsApiKey,
         usedPexelsPhotoIds,
         isRelatableMode,
+        targetRatio,
       );
       if (photo) return photo;
     } else if (provider === "unsplash_photo") {
@@ -629,6 +648,7 @@ async function fetchPhotoFromProviders(
         unsplashKey,
         usedUnsplashIds,
         isRelatableMode,
+        targetRatio,
       );
       if (photo) return photo;
     } else if (provider === "pixabay_photo") {
@@ -637,6 +657,7 @@ async function fetchPhotoFromProviders(
         pixabayApiKey,
         usedPixabayPhotoIds,
         isRelatableMode,
+        targetRatio,
       );
       if (photo) return photo;
     }
@@ -789,12 +810,14 @@ async function getPexelsVideo(
   apiKey: string,
   usedPexelsVideoIds: Set<number>,
   isRelatableMode: boolean = false,
+  targetRatio: "9:16" | "16:9" = "9:16",
 ): Promise<string | null> {
   try {
     const searchQuery = resolveSearchQuery(query, isRelatableMode);
+    const orientation = targetRatio === "16:9" ? "landscape" : "portrait";
     const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(
       searchQuery,
-    )}&orientation=portrait&per_page=8`;
+    )}&orientation=${orientation}&per_page=8`;
 
     const res = await fetch(url, {
       headers: {
@@ -831,17 +854,19 @@ async function getPexelsVideo(
       link: string;
     }> = chosenVideo.video_files || [];
 
-    // Prioritize vertical HD or SD mp4 file
+    // Prioritize mp4 file matching the target aspect ratio
+    const isPortrait = targetRatio === "9:16";
     const bestFile =
       videoFiles.find(
         (f) =>
           (f.file_type === "video/mp4" || !f.file_type) &&
-          f.height > f.width &&
+          (isPortrait ? f.height > f.width : f.width > f.height) &&
           f.quality === "hd",
       ) ||
       videoFiles.find(
         (f) =>
-          (f.file_type === "video/mp4" || !f.file_type) && f.height > f.width,
+          (f.file_type === "video/mp4" || !f.file_type) &&
+          (isPortrait ? f.height > f.width : f.width > f.height),
       ) ||
       videoFiles.find((f) => f.file_type === "video/mp4") ||
       videoFiles[0];
@@ -849,12 +874,13 @@ async function getPexelsVideo(
     if (!bestFile || !bestFile.link) return null;
 
     const videoId = chosenVideo.id;
-    const filename = `pexels_video_${videoId}.mp4`;
+    const ratioSuffix = targetRatio === "16:9" ? "16x9" : "9x16";
+    const filename = `pexels_video_${videoId}_${ratioSuffix}.mp4`;
     const libraryPath = path.join(process.cwd(), "image-library");
     const destPath = path.join(libraryPath, filename);
 
     if (!fs.existsSync(destPath)) {
-      console.log(`Downloading Pexels vertical video ${videoId}...`);
+      console.log(`Downloading Pexels ${targetRatio} video ${videoId}...`);
       if (!fs.existsSync(libraryPath)) {
         fs.mkdirSync(libraryPath, { recursive: true });
       }
@@ -873,12 +899,14 @@ async function getPexelsPhoto(
   apiKey: string,
   usedPexelsIds: Set<number>,
   isRelatableMode: boolean = false,
+  targetRatio: "9:16" | "16:9" = "9:16",
 ): Promise<string | null> {
   try {
     const searchQuery = resolveSearchQuery(query, isRelatableMode);
+    const orientation = targetRatio === "16:9" ? "landscape" : "portrait";
     const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(
       searchQuery,
-    )}&orientation=portrait&per_page=8`;
+    )}&orientation=${orientation}&per_page=8`;
 
     const res = await fetch(url, {
       headers: {
@@ -908,9 +936,14 @@ async function getPexelsPhoto(
 
     const photoId = chosenPhoto.id;
     const imageUrl =
-      chosenPhoto.src.portrait ||
-      chosenPhoto.src.large ||
-      chosenPhoto.src.original;
+      targetRatio === "16:9"
+        ? chosenPhoto.src.landscape ||
+          chosenPhoto.src.large2x ||
+          chosenPhoto.src.large ||
+          chosenPhoto.src.original
+        : chosenPhoto.src.portrait ||
+          chosenPhoto.src.large ||
+          chosenPhoto.src.original;
     if (!imageUrl) return null;
 
     const altText = chosenPhoto.alt || "";
@@ -919,15 +952,16 @@ async function getPexelsPhoto(
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_+|_+$/g, "");
 
+    const ratioSuffix = targetRatio === "16:9" ? "16x9" : "9x16";
     const filename = slugifiedAlt
-      ? `pexels_${photoId}_${slugifiedAlt}.jpg`
-      : `pexels_${photoId}.jpg`;
+      ? `pexels_${photoId}_${slugifiedAlt}_${ratioSuffix}.jpg`
+      : `pexels_${photoId}_${ratioSuffix}.jpg`;
 
     const libraryPath = path.join(process.cwd(), "image-library");
     const destPath = path.join(libraryPath, filename);
 
     if (!fs.existsSync(destPath)) {
-      console.log(`Downloading Pexels photo ${photoId}...`);
+      console.log(`Downloading Pexels photo ${photoId} (${targetRatio})...`);
       if (!fs.existsSync(libraryPath)) {
         fs.mkdirSync(libraryPath, { recursive: true });
       }
@@ -946,12 +980,14 @@ async function getUnsplashPhoto(
   accessKey: string,
   usedUnsplashIds: Set<string>,
   isRelatableMode: boolean = false,
+  targetRatio: "9:16" | "16:9" = "9:16",
 ): Promise<string | null> {
   try {
     const searchQuery = resolveSearchQuery(query, isRelatableMode);
+    const orientation = targetRatio === "16:9" ? "landscape" : "portrait";
     const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(
       searchQuery,
-    )}&orientation=portrait&per_page=8`;
+    )}&orientation=${orientation}&per_page=8`;
 
     const res = await fetch(url, {
       headers: {
@@ -980,8 +1016,13 @@ async function getUnsplashPhoto(
     usedUnsplashIds.add(String(chosen.id));
 
     const photoId = chosen.id;
-    const imageUrl =
-      chosen.urls?.regular || chosen.urls?.small || chosen.urls?.raw;
+    const cropParams =
+      targetRatio === "16:9"
+        ? "&w=1920&h=1080&fit=crop"
+        : "&w=1080&h=1920&fit=crop";
+    const imageUrl = chosen.urls?.raw
+      ? `${chosen.urls.raw}${cropParams}`
+      : chosen.urls?.regular || chosen.urls?.small;
     if (!imageUrl) return null;
 
     const altText = chosen.alt_description || chosen.description || "";
@@ -990,15 +1031,16 @@ async function getUnsplashPhoto(
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_+|_+$/g, "");
 
+    const ratioSuffix = targetRatio === "16:9" ? "16x9" : "9x16";
     const filename = slugifiedAlt
-      ? `unsplash_${photoId}_${slugifiedAlt}.jpg`
-      : `unsplash_${photoId}.jpg`;
+      ? `unsplash_${photoId}_${slugifiedAlt}_${ratioSuffix}.jpg`
+      : `unsplash_${photoId}_${ratioSuffix}.jpg`;
 
     const libraryPath = path.join(process.cwd(), "image-library");
     const destPath = path.join(libraryPath, filename);
 
     if (!fs.existsSync(destPath)) {
-      console.log(`Downloading Unsplash photo ${photoId}...`);
+      console.log(`Downloading Unsplash photo ${photoId} (${targetRatio})...`);
       if (!fs.existsSync(libraryPath)) {
         fs.mkdirSync(libraryPath, { recursive: true });
       }
@@ -1017,6 +1059,7 @@ async function getPixabayVideo(
   apiKey: string,
   usedPixabayVideoIds: Set<number>,
   isRelatableMode: boolean = false,
+  targetRatio: "9:16" | "16:9" = "9:16",
 ): Promise<string | null> {
   if (!apiKey) return null;
   try {
@@ -1035,13 +1078,14 @@ async function getPixabayVideo(
     const unusedHits = data.hits.filter((hit: { id: number }) => !usedPixabayVideoIds.has(hit.id));
     const pool = unusedHits.length > 0 ? unusedHits : data.hits;
 
-    // Prioritize vertical/portrait video clips
-    const verticalHit = pool.find((hit: { videos?: { medium?: { width: number; height: number }; large?: { width: number; height: number } } }) => {
+    // Prioritize video clips matching target aspect ratio
+    const isPortrait = targetRatio === "9:16";
+    const matchedHit = pool.find((hit: { videos?: { medium?: { width: number; height: number }; large?: { width: number; height: number } } }) => {
       const vid = hit.videos?.medium || hit.videos?.large;
-      return vid && vid.height > vid.width;
+      return vid && (isPortrait ? vid.height > vid.width : vid.width > vid.height);
     });
 
-    const chosen = verticalHit || pool[0];
+    const chosen = matchedHit || pool[0];
     usedPixabayVideoIds.add(chosen.id);
 
     const videoUrl =
@@ -1051,12 +1095,13 @@ async function getPixabayVideo(
 
     if (!videoUrl) return null;
 
-    const filename = `pixabay_video_${chosen.id}.mp4`;
+    const ratioSuffix = targetRatio === "16:9" ? "16x9" : "9x16";
+    const filename = `pixabay_video_${chosen.id}_${ratioSuffix}.mp4`;
     const libraryPath = path.join(process.cwd(), "image-library");
     const destPath = path.join(libraryPath, filename);
 
     if (!fs.existsSync(destPath)) {
-      console.log(`Downloading Pixabay video ${chosen.id}...`);
+      console.log(`Downloading Pixabay video ${chosen.id} (${targetRatio})...`);
       if (!fs.existsSync(libraryPath)) {
         fs.mkdirSync(libraryPath, { recursive: true });
       }
@@ -1075,13 +1120,15 @@ async function getPixabayPhoto(
   apiKey: string,
   usedPixabayPhotoIds: Set<number>,
   isRelatableMode: boolean = false,
+  targetRatio: "9:16" | "16:9" = "9:16",
 ): Promise<string | null> {
   if (!apiKey) return null;
   try {
     const searchQuery = resolveSearchQuery(query, isRelatableMode);
+    const orientation = targetRatio === "16:9" ? "horizontal" : "vertical";
     const url = `https://pixabay.com/api/?key=${encodeURIComponent(
       apiKey,
-    )}&q=${encodeURIComponent(searchQuery)}&image_type=photo&orientation=vertical&per_page=8`;
+    )}&q=${encodeURIComponent(searchQuery)}&image_type=photo&orientation=${orientation}&per_page=8`;
 
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -1102,12 +1149,13 @@ async function getPixabayPhoto(
     const imageUrl = chosen.largeImageURL || chosen.webformatURL;
     if (!imageUrl) return null;
 
-    const filename = `pixabay_photo_${chosen.id}.jpg`;
+    const ratioSuffix = targetRatio === "16:9" ? "16x9" : "9x16";
+    const filename = `pixabay_photo_${chosen.id}_${ratioSuffix}.jpg`;
     const libraryPath = path.join(process.cwd(), "image-library");
     const destPath = path.join(libraryPath, filename);
 
     if (!fs.existsSync(destPath)) {
-      console.log(`Downloading Pixabay photo ${chosen.id}...`);
+      console.log(`Downloading Pixabay photo ${chosen.id} (${targetRatio})...`);
       if (!fs.existsSync(libraryPath)) {
         fs.mkdirSync(libraryPath, { recursive: true });
       }

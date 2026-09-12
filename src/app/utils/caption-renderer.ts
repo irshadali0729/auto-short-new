@@ -40,31 +40,39 @@ function wrapText(text: string, maxCharsPerLine: number = 34): string[] {
   return lines.slice(0, 3);
 }
 
-export function generateCaptionSvg(captionText: string): string {
-  const lines = wrapText(captionText, 34);
+export function generateCaptionSvg(
+  captionText: string,
+  targetWidth: number = 1080,
+  targetHeight: number = 1920,
+): string {
+  const isLandscape = targetWidth > targetHeight;
+  const maxChars = isLandscape ? 52 : 34;
+  const lines = wrapText(captionText, maxChars);
   const lineCount = lines.length || 1;
-  const lineHeight = 68;
-  const fontSize = lineCount > 2 ? 44 : lineCount === 2 ? 50 : 54;
+  const lineHeight = isLandscape ? 60 : 68;
+  const fontSize = lineCount > 2 ? (isLandscape ? 40 : 44) : lineCount === 2 ? (isLandscape ? 46 : 50) : (isLandscape ? 50 : 54);
 
-  // Position in lower third, safely above YouTube Shorts bottom metadata
-  const baseY = 1480 - (lineCount - 1) * (lineHeight / 2);
+  // Position in lower third, safely above bottom controls/metadata
+  const targetBaseRatio = isLandscape ? 0.82 : 0.77;
+  const baseY = Math.round(targetHeight * targetBaseRatio) - (lineCount - 1) * (lineHeight / 2);
+  const centerX = targetWidth / 2;
 
   // Calculate pill background dimensions
   const maxLineLength = Math.max(...lines.map((l) => l.length), 10);
-  const pillWidth = Math.min(980, Math.max(320, maxLineLength * (fontSize * 0.58) + 64));
+  const pillWidth = Math.min(targetWidth - 80, Math.max(320, maxLineLength * (fontSize * 0.58) + 64));
   const pillHeight = lineCount * lineHeight + 36;
-  const pillX = 540 - pillWidth / 2;
+  const pillX = centerX - pillWidth / 2;
   const pillY = baseY - fontSize + (fontSize === 54 ? 2 : -2) - 16;
 
   const textTspans = lines
     .map((line, idx) => {
       const yPos = baseY + idx * lineHeight;
-      return `<tspan x="540" y="${yPos}">${escapeXml(line)}</tspan>`;
+      return `<tspan x="${centerX}" y="${yPos}">${escapeXml(line)}</tspan>`;
     })
     .join("\n");
 
   return `
-  <svg width="1080" height="1920" viewBox="0 0 1080 1920" xmlns="http://www.w3.org/2000/svg">
+  <svg width="${targetWidth}" height="${targetHeight}" viewBox="0 0 ${targetWidth} ${targetHeight}" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <filter id="pillShadow" x="-20%" y="-20%" width="140%" height="140%">
         <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.8" />
@@ -112,14 +120,17 @@ export function generateCaptionSvg(captionText: string): string {
 export async function renderCaptionOverlayPng(
   captionText: string,
   outputPath: string,
+  targetWidth: number = 1080,
+  targetHeight: number = 1920,
 ): Promise<string> {
-  const svgString = generateCaptionSvg(captionText);
+  const svgString = generateCaptionSvg(captionText, targetWidth, targetHeight);
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
   await sharp(Buffer.from(svgString))
+    .resize(targetWidth, targetHeight)
     .png({ compressionLevel: 6 })
     .toFile(outputPath);
 

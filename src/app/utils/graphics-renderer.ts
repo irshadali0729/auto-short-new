@@ -244,12 +244,14 @@ export function generateOverlaySvg(beat: GraphicBeat): string {
 export async function renderGraphicOverlayPng(
   beat: GraphicBeat,
   outputPath: string,
+  targetWidth: number = 1080,
+  targetHeight: number = 1920,
 ): Promise<string> {
   const svgString = generateOverlaySvg(beat);
   const buffer = Buffer.from(svgString, "utf-8");
 
   await sharp(buffer)
-    .resize(1080, 1920)
+    .resize(targetWidth, targetHeight)
     .png({ compressionLevel: 6, adaptiveFiltering: false })
     .toFile(outputPath);
 

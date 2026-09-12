@@ -14,12 +14,15 @@ import {
   Sparkles,
   SlidersHorizontal,
   MessageSquareText,
-  Type
+  Type,
+  Smartphone,
+  Monitor
 } from 'lucide-react';
 
 export type MediaSourceKey = 'unsplash' | 'pixabay' | 'pexels' | 'local';
 export type MediaTypeFilter = 'only_videos' | 'only_images' | 'both';
 export type TextOverlayMode = 'none' | 'captions' | 'graphics';
+export type VideoAspectRatio = '9:16' | '16:9';
 
 export interface MediaSettings {
   sources: {
@@ -34,6 +37,7 @@ export interface MediaSettings {
   zoomSpeed: number;
   transitionDuration: number;
   useRelatableVisualSearch?: boolean;
+  aspectRatio: VideoAspectRatio;
 }
 
 export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
@@ -49,6 +53,7 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   zoomSpeed: 1.0,
   transitionDuration: 0.3,
   useRelatableVisualSearch: true,
+  aspectRatio: '9:16',
 };
 
 interface SettingsModalProps {
@@ -85,6 +90,9 @@ export default function SettingsModal({
   const [draftRelatableVisualSearch, setDraftRelatableVisualSearch] = useState<boolean>(
     settings.useRelatableVisualSearch !== false
   );
+  const [draftAspectRatio, setDraftAspectRatio] = useState<VideoAspectRatio>(
+    settings.aspectRatio || DEFAULT_MEDIA_SETTINGS.aspectRatio
+  );
   const [validationError, setValidationError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
@@ -102,6 +110,7 @@ export default function SettingsModal({
         typeof settings.transitionDuration === 'number' ? settings.transitionDuration : DEFAULT_MEDIA_SETTINGS.transitionDuration
       );
       setDraftRelatableVisualSearch(settings.useRelatableVisualSearch !== false);
+      setDraftAspectRatio(settings.aspectRatio || DEFAULT_MEDIA_SETTINGS.aspectRatio);
       setValidationError(null);
       // Focus management
       setTimeout(() => closeBtnRef.current?.focus(), 50);
@@ -155,6 +164,7 @@ export default function SettingsModal({
       zoomSpeed: draftZoomSpeed,
       transitionDuration: draftTransitionDuration,
       useRelatableVisualSearch: draftRelatableVisualSearch,
+      aspectRatio: draftAspectRatio,
     });
     onClose();
   };
@@ -166,6 +176,7 @@ export default function SettingsModal({
     setDraftZoomSpeed(DEFAULT_MEDIA_SETTINGS.zoomSpeed);
     setDraftTransitionDuration(DEFAULT_MEDIA_SETTINGS.transitionDuration);
     setDraftRelatableVisualSearch(DEFAULT_MEDIA_SETTINGS.useRelatableVisualSearch !== false);
+    setDraftAspectRatio(DEFAULT_MEDIA_SETTINGS.aspectRatio);
     setValidationError(null);
   };
 
@@ -218,6 +229,32 @@ export default function SettingsModal({
       label: 'Both images and stock video footage',
       description: 'Intelligently mix static photos and dynamic video clips',
       icon: SlidersHorizontal,
+    },
+  ];
+
+  const aspectRatioOptions: {
+    id: VideoAspectRatio;
+    label: string;
+    badge: string;
+    resolution: string;
+    description: string;
+    icon: React.ElementType;
+  }[] = [
+    {
+      id: '9:16',
+      label: '9:16 Vertical (Shorts & Reels)',
+      badge: 'Default (Shorts & Reels)',
+      resolution: '1080 × 1920',
+      description: 'Full-screen portrait format optimized for YouTube Shorts, Instagram Reels, and TikTok feeds.',
+      icon: Smartphone,
+    },
+    {
+      id: '16:9',
+      label: '16:9 Landscape (Widescreen)',
+      badge: 'YouTube Desktop',
+      resolution: '1920 × 1080',
+      description: 'Standard widescreen horizontal format for traditional YouTube desktop and landscape video players.',
+      icon: Monitor,
     },
   ];
 
@@ -461,6 +498,86 @@ export default function SettingsModal({
                 </div>
               </div>
             </label>
+          </fieldset>
+
+          {/* Section: Video Canvas & Aspect Ratio */}
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-rausch" />
+              Video Canvas & Aspect Ratio
+            </legend>
+
+            <p className="text-xs text-muted">
+              Choose the target format for video and photo assets. YouTube Shorts require 9:16 vertical full-screen.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1" role="radiogroup" aria-label="Video Aspect Ratio">
+              {aspectRatioOptions.map((opt) => {
+                const isSelected = draftAspectRatio === opt.id;
+                const IconComponent = opt.icon;
+
+                return (
+                  <label
+                    key={opt.id}
+                    htmlFor={`aspect-ratio-${opt.id}`}
+                    className={`relative flex flex-col justify-between p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                      isSelected
+                        ? 'bg-[#fff8f9] border-rausch shadow-airbnb'
+                        : 'bg-white border-hairline hover:border-border-strong hover:bg-surface-soft'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`p-2 rounded-lg ${isSelected ? 'bg-[#fff0f2] text-rausch' : 'bg-surface-soft text-muted'}`}>
+                          <IconComponent className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-sm font-bold text-ink block leading-tight">
+                            {opt.id}
+                          </span>
+                          <span className="text-[11px] font-semibold text-muted">
+                            {opt.resolution}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors shrink-0 ${
+                        isSelected 
+                          ? 'border-rausch bg-rausch' 
+                          : 'border-hairline bg-white'
+                      }`}>
+                        {isSelected && (
+                          <div className="w-2 h-2 rounded-full bg-white" />
+                        )}
+                      </div>
+                    </div>
+
+                    <input
+                      type="radio"
+                      id={`aspect-ratio-${opt.id}`}
+                      name="videoAspectRatio"
+                      value={opt.id}
+                      checked={isSelected}
+                      onChange={() => setDraftAspectRatio(opt.id)}
+                      className="sr-only"
+                    />
+
+                    <div>
+                      <span className={`inline-block text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border mb-1.5 ${
+                        isSelected
+                          ? 'bg-[#fff0f2] text-rausch border-[#ffd1da]'
+                          : 'bg-surface-soft text-muted border-hairline-soft'
+                      }`}>
+                        {opt.badge}
+                      </span>
+                      <p className="text-xs text-muted leading-tight">
+                        {opt.description}
+                      </p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
           </fieldset>
 
           {/* Section 2: Media Type Filter (Radio Buttons / Toggle Group) */}

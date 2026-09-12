@@ -362,6 +362,7 @@ export default function Home() {
           textOverlayMode: mediaSettings.textOverlayMode || (mediaSettings.enableGraphicMotion ? 'graphics' : 'captions'),
           enableGraphicMotion: mediaSettings.textOverlayMode === 'graphics',
           enableCaptions: mediaSettings.textOverlayMode === 'captions',
+          aspectRatio: mediaSettings.aspectRatio || '9:16',
         }),
       });
 
@@ -775,6 +776,9 @@ export default function Home() {
                             <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-white text-ink border border-hairline-soft shadow-sm backdrop-blur-md">
                               Scene {idx + 1}
                             </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-900/80 text-white shadow-sm border border-white/20 backdrop-blur-md">
+                              {mediaSettings.aspectRatio === '16:9' ? '16:9' : '9:16'}
+                            </span>
                             {/\.(mp4|webm|mov)$/i.test(scene.image) && (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rausch text-white shadow-sm flex items-center gap-1">
                                 <Film className="w-2.5 h-2.5" /> Video
@@ -966,9 +970,13 @@ export default function Home() {
                 <div className="w-16 h-16 rounded-full bg-white border border-hairline flex items-center justify-center mb-4 shadow-airbnb">
                   <Play className="w-6 h-6 text-muted" />
                 </div>
-                <h3 className="text-base font-bold text-ink mb-1">Shorts Video Player</h3>
+                <h3 className="text-base font-bold text-ink mb-1">
+                  {mediaSettings.aspectRatio === '16:9' ? 'Widescreen Video Player' : 'Shorts Video Player'}
+                </h3>
                 <p className="text-xs text-muted max-w-[240px]">
-                  Analyze your transcript, review visual storyboard matches, and compile your 9:16 vertical short.
+                  {mediaSettings.aspectRatio === '16:9'
+                    ? 'Analyze your transcript, review visual storyboard matches, and compile your 16:9 widescreen video.'
+                    : 'Analyze your transcript, review visual storyboard matches, and compile your 9:16 vertical short.'}
                 </p>
               </section>
             )}
@@ -976,13 +984,22 @@ export default function Home() {
             {/* Video Preview and Action Panel */}
             {videoUrl && !isGenerating && (
               <section className="airbnb-card p-6 shadow-airbnb border border-hairline bg-white flex flex-col items-center">
-                <h2 className="text-lg font-bold text-ink flex items-center gap-2 self-start mb-5">
-                  <Play className="w-4 h-4 text-rausch" />
-                  Preview & Download
-                </h2>
+                <div className="w-full flex items-center justify-between mb-5">
+                  <h2 className="text-lg font-bold text-ink flex items-center gap-2">
+                    <Play className="w-4 h-4 text-rausch" />
+                    Preview & Download
+                  </h2>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rausch/10 text-rausch border border-rausch/20">
+                    {mediaSettings.aspectRatio || '9:16'}
+                  </span>
+                </div>
 
-                {/* 9:16 Vertical Video Screen */}
-                <div className="relative w-full max-w-[280px] aspect-[9/16] rounded-2xl overflow-hidden border border-hairline bg-black shadow-airbnb">
+                {/* Responsive Video Screen */}
+                <div className={`relative w-full ${
+                  mediaSettings.aspectRatio === '16:9'
+                    ? 'max-w-[420px] aspect-[16/9]'
+                    : 'max-w-[280px] aspect-[9/16]'
+                } rounded-2xl overflow-hidden border border-hairline bg-black shadow-airbnb`}>
                   <video
                     src={videoUrl}
                     controls
