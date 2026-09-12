@@ -1,0 +1,104 @@
+# Implementation Plan - Relatable Visual Search & Multi-Tier Stock Media Matching
+
+This plan outlines how to overhaul transcript scene analysis and stock media querying so that videos and images matched from Pexels, Pixabay, Unsplash, and local storage are **highly relatable, cinematic, and contextually accurate** to the spoken script.
+
+---
+
+## 1. Problem Analysis: Why Current Searches Miss Context
+
+Currently, the matching engine suffers from 3 core limitations:
+1. **Literal vs Visual Mismatch**:
+   - The LLM currently extracts a 1–2 word literal keyword (e.g., `dil dukhaya`, `heartbreak`, `gunah`, `forgiveness`).
+   - The app then naively appends `" Muslim"`, creating queries like `"dil dukhaya Muslim"` or `"broken heart Muslim"`.
+   - Western stock APIs (Pexels, Pixabay, Unsplash) index zero Hindi/Urdu keywords, and abstract words like `"broken heart"` return cartoon illustrations or dating breakup photos that are completely out of place in Hadith shorts.
+2. **Single-Attempt Failure & Immediate Fallback**:
+   - If that single keyword query returns 0 results from Pexels/Pixabay, the engine immediately drops to a random fallback file from `image-library/`, causing irrelevant visual jumps.
+3. **Missing Portrait/Vertical Constraint on Pixabay**:
+   - Pixabay API uses `orientation=vertical` (whereas Pexels uses `orientation=portrait`). Without this, Pixabay returns horizontal landscape assets that get cropped awkwardly.
+
+---
+
+## 2. Proposed Architecture & Solution
+
+```mermaid
+flowchart TD
+    Transcript["Input Transcript (Hindi / Urdu / English)"] --> Groq["Groq AI Analysis Engine"]
+    Groq --> Metaphor["Visual Metaphor Translation<br/>(Maps spiritual/abstract ideas to concrete physical camera shots)"]
+    Metaphor --> SceneObj["Scene Object with Multi-Tier Queries<br/>1. visualQuery<br/>2. fallbackQuery<br/>3. moodQuery"]
+    
+    SceneObj --> Cascade["Cascading Match Engine"]
+    Cascade --> Tier1{"Try visualQuery<br/>(e.g., 'muslim man praying silhouette')"}
+    Tier1 -- Found --> Done["Cache & Assign Media"]
+    Tier1 -- Empty --> Tier2{"Try fallbackQuery<br/>(e.g., 'ancient mosque sunset architecture')"}
+    Tier2 -- Found --> Done
+    Tier2 -- Empty --> Tier3{"Try moodQuery<br/>(e.g., 'dramatic dark stormy clouds cinematic')"}
+    Tier3 -- Found --> Done
+    Tier3 -- Empty --> LocalMatch["Smart Tokenized Local Library Match"]
+```
+
+---
+
+## 3. Proposed Changes
+
+### Component 1: AI Transcript Analysis Engine
+#### [MODIFY] [`src/app/api/analyze-transcript/route.ts`](file:///e:/Live%20Practice/auto-shorts/src/app/api/analyze-transcript/route.ts)
+
+1. **Schema Upgrade for `GroqScene`**:
+   - Add `visualQuery` (string): Concrete, physical camera shot description in English (3–6 words) optimized for stock libraries (e.g., `"muslim man prostrating prayer silhouette"`, `"thoughtful lonely man dark cinematic lighting"`, `"kaaba mecca crowd sunset"`).
+   - Add `fallbackQuery` (string): Secondary physical alternative (e.g., `"ancient mosque architecture dome"`, `"desert sand dunes sunset"`).
+   - Add `moodQuery` (string): Universal atmospheric backup shot (e.g., `"dramatic storm clouds sunset sky"`, `"sun rays through clouds golden hour"`).
+   - Retain `keyword` (string): Clean human-readable label for UI display (e.g., `"Sincere Prayer"`, `"Broken Trust"`).
+2. **Groq Prompt Engineering**:
+   - Explicitly instruct the LLM:
+     > *"Stock video and photo libraries do not understand spiritual abstractions, internal emotions, or Hindi/Urdu idioms (e.g. 'dil dukhaya', 'gunah', 'maghfirat'). For each scene, translate the metaphorical meaning into a concrete, photogenic camera shot that real photographers shoot."*
+   - Provide concrete Islamic and emotional translation few-shot examples (e.g., missed prayer &rarr; silhouette prostration; hurting someone's heart &rarr; man sitting alone in deep thought with moody lighting; rights of Allah &rarr; sun rays breaking through dramatic clouds).
+   - Extract an overall `scriptMood` (`"solemn"` | `"spiritual"` | `"peaceful"` | `"urgent"`) to align atmospheric fallback scenes.
+
+---
+
+### Component 2: Multi-Tier Media Matching Engine
+#### [MODIFY] [`src/app/api/match-images/route.ts`](file:///e:/Live%20Practice/auto-shorts/src/app/api/match-images/route.ts)
+
+1. **Multi-Tier Cascading Fetcher**:
+   - Replace the single-attempt search with a multi-tier query waterfall:
+     - **Attempt 1**: `scene.visualQuery` (most specific cinematic shot).
+     - **Attempt 2**: `scene.fallbackQuery` (secondary physical subject).
+     - **Attempt 3**: `scene.moodQuery` (atmospheric universal shot).
+     - **Attempt 4**: Smart tokenized search against local `image-library/` files.
+2. **Provider API Enhancements**:
+   - **Pexels**: Keep `&orientation=portrait&per_page=8`. Append cinematic style boosters when query is short (e.g., `"cinematic 4k"`).
+   - **Pixabay**: Add `&orientation=vertical` (Pixabay's parameter for portrait orientation) to prevent landscape image cropping.
+   - **Unsplash**: Keep `&orientation=portrait&per_page=8`.
+3. **Smart Local Search**:
+   - Improve `matchLocalAssets`: Instead of exact substring matching on the whole keyword, split queries into root tokens (e.g. `["man", "praying", "mosque"]`) and score files by matching token count.
+
+---
+
+### Component 3: Storyboard UI & Types
+#### [MODIFY] [`src/app/page.tsx`](file:///e:/Live%20Practice/auto-shorts/src/app/page.tsx)
+
+1. **Scene Interface Update**:
+   - Include `visualQuery?: string` in `Scene` interface.
+2. **Storyboard Card Display**:
+   - Display the visual search concept beneath the keyword badge:
+     - e.g., `Keyword: Broken Trust` &bull; `Visual: "lonely man thoughtful dark cinematic"`
+   - Helps the user instantly understand *why* an image or video was selected, and provides ready-made keywords if they want to click "Replace Image".
+
+---
+
+## 4. Verification Plan
+
+### Automated Tests
+- Type checking:
+  ```bash
+  npx tsc --noEmit
+  ```
+- Verify JSON schema parsing with sample transcripts in Hindi, Urdu, and English.
+
+### Manual Verification
+- Test with the user's sample transcript:
+  - *"नमाज छूट जाए अल्लाह माफ कर सकता है... लेकिन खुदा की कसम अगर किसी का दिल दुखाया है..."*
+  - Verify that:
+    1. Groq generates physical visual queries like `"muslim man praying silhouette"` and `"lonely man thoughtful dark lighting"`, NOT literal `"dil dukhaya Muslim"`.
+    2. Pexels and Pixabay return relevant, high-quality vertical clips/photos.
+    3. The storyboard displays the matching visual shot description cleanly.

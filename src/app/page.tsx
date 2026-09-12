@@ -52,6 +52,11 @@ interface Scene {
   duration: number;
   image: string;
   isFallback: boolean;
+  visualQuery?: string;
+  fallbackQuery?: string;
+  moodQuery?: string;
+  matchedTier?: "visual" | "fallback" | "mood" | "local" | "random" | "legacy";
+  matchedQuery?: string;
   graphics?: GraphicBeat[];
   captions?: CaptionSlice[];
 }
@@ -243,6 +248,7 @@ export default function Home() {
           transcript, 
           targetLength: targetVideoLength || undefined,
           segments: transcriptSegments.length > 0 ? transcriptSegments : undefined,
+          useRelatableVisualSearch: mediaSettings.useRelatableVisualSearch !== false,
         }),
       });
 
@@ -776,11 +782,23 @@ export default function Home() {
                             )}
                           </div>
                           
-                          {scene.isFallback && (
+                          {scene.isFallback ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200 shadow-sm">
                               Fallback Match
                             </span>
-                          )}
+                          ) : scene.matchedTier === "mood" ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-900 border border-sky-200 shadow-sm">
+                              Atmospheric Match
+                            </span>
+                          ) : scene.matchedTier === "fallback" ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-200 shadow-sm">
+                              Alt Shot Match
+                            </span>
+                          ) : scene.matchedTier === "local" ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-200 shadow-sm">
+                              Local Match
+                            </span>
+                          ) : null}
                         </div>
 
                         {/* Duration Pill (Bottom Right) */}
@@ -794,11 +812,31 @@ export default function Home() {
                       {/* Metadata & Actions */}
                       <div className="p-4 flex flex-col justify-between flex-grow bg-white">
                         <div className="mb-3">
-                          <span className="text-[10px] tracking-wider uppercase font-bold text-muted block">Keyword Match</span>
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <span className="text-[10px] tracking-wider uppercase font-bold text-muted block">
+                              {mediaSettings.useRelatableVisualSearch !== false ? "Scene Concept" : "Keyword Match"}
+                            </span>
+                            {scene.matchedTier && scene.matchedTier !== "legacy" && scene.matchedTier !== "random" && (
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                {scene.matchedTier} match
+                              </span>
+                            )}
+                          </div>
                           <span className="text-sm font-bold text-ink truncate block capitalize">
                             {scene.keyword || 'Random Scene'}
                           </span>
-                          <span className="text-xs text-muted truncate block mt-0.5 opacity-80">
+
+                          {/* Relatable Visual Shot Description if available */}
+                          {mediaSettings.useRelatableVisualSearch !== false && scene.visualQuery && (
+                            <div className="mt-1.5 px-2.5 py-1.5 rounded-lg bg-[#fff8f9] border border-[#ffd1da] text-[11px] text-ink flex items-start gap-1.5 shadow-sm">
+                              <span className="text-rausch font-bold shrink-0 text-[10px] uppercase">Shot:</span>
+                              <span className="font-medium italic truncate" title={scene.visualQuery}>
+                                “{scene.visualQuery}”
+                              </span>
+                            </div>
+                          )}
+
+                          <span className="text-xs text-muted truncate block mt-1.5 opacity-80" title={scene.image}>
                             {scene.image}
                           </span>
 

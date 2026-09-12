@@ -33,6 +33,7 @@ export interface MediaSettings {
   enableGraphicMotion?: boolean;
   zoomSpeed: number;
   transitionDuration: number;
+  useRelatableVisualSearch?: boolean;
 }
 
 export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
@@ -47,6 +48,7 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   enableGraphicMotion: false,
   zoomSpeed: 1.0,
   transitionDuration: 0.3,
+  useRelatableVisualSearch: true,
 };
 
 interface SettingsModalProps {
@@ -80,6 +82,9 @@ export default function SettingsModal({
   const [draftTransitionDuration, setDraftTransitionDuration] = useState<number>(
     typeof settings.transitionDuration === 'number' ? settings.transitionDuration : DEFAULT_MEDIA_SETTINGS.transitionDuration
   );
+  const [draftRelatableVisualSearch, setDraftRelatableVisualSearch] = useState<boolean>(
+    settings.useRelatableVisualSearch !== false
+  );
   const [validationError, setValidationError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
@@ -96,6 +101,7 @@ export default function SettingsModal({
       setDraftTransitionDuration(
         typeof settings.transitionDuration === 'number' ? settings.transitionDuration : DEFAULT_MEDIA_SETTINGS.transitionDuration
       );
+      setDraftRelatableVisualSearch(settings.useRelatableVisualSearch !== false);
       setValidationError(null);
       // Focus management
       setTimeout(() => closeBtnRef.current?.focus(), 50);
@@ -148,6 +154,7 @@ export default function SettingsModal({
       enableGraphicMotion: draftTextOverlayMode === 'graphics',
       zoomSpeed: draftZoomSpeed,
       transitionDuration: draftTransitionDuration,
+      useRelatableVisualSearch: draftRelatableVisualSearch,
     });
     onClose();
   };
@@ -158,6 +165,7 @@ export default function SettingsModal({
     setDraftTextOverlayMode(DEFAULT_MEDIA_SETTINGS.textOverlayMode);
     setDraftZoomSpeed(DEFAULT_MEDIA_SETTINGS.zoomSpeed);
     setDraftTransitionDuration(DEFAULT_MEDIA_SETTINGS.transitionDuration);
+    setDraftRelatableVisualSearch(DEFAULT_MEDIA_SETTINGS.useRelatableVisualSearch !== false);
     setValidationError(null);
   };
 
@@ -373,6 +381,86 @@ export default function SettingsModal({
                 );
               })}
             </div>
+          </fieldset>
+
+          {/* Section: AI Visual Search & Matching Engine (Toggle Flag) */}
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-rausch" />
+              AI Visual Search Engine
+            </legend>
+
+            <p className="text-xs text-muted">
+              Configure how script scenes are translated into stock queries. You can disable this to immediately fall back to the legacy keyword matching.
+            </p>
+
+            <label
+              htmlFor="relatable-visual-search-toggle"
+              className={`relative flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                draftRelatableVisualSearch
+                  ? 'bg-[#fff8f9] border-rausch shadow-airbnb'
+                  : 'bg-white border-hairline hover:border-border-strong hover:bg-surface-soft'
+              }`}
+            >
+              <div className="pt-0.5 shrink-0">
+                <input
+                  type="checkbox"
+                  id="relatable-visual-search-toggle"
+                  checked={draftRelatableVisualSearch}
+                  onChange={(e) => setDraftRelatableVisualSearch(e.target.checked)}
+                  className="sr-only"
+                />
+                <div
+                  className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
+                    draftRelatableVisualSearch
+                      ? 'border-rausch bg-rausch text-white'
+                      : 'border-hairline bg-white'
+                  }`}
+                >
+                  {draftRelatableVisualSearch && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                </div>
+              </div>
+
+              <div className="flex-grow min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-sm font-bold text-ink flex items-center gap-2">
+                    Relatable Visual Search & Multi-Tier Matching
+                  </span>
+                  <span
+                    className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
+                      draftRelatableVisualSearch
+                        ? 'bg-[#fff0f2] text-rausch border-[#ffd1da]'
+                        : 'bg-surface-soft text-muted border-hairline-soft'
+                    }`}
+                  >
+                    {draftRelatableVisualSearch ? 'Recommended (v2.0)' : 'Legacy Mode'}
+                  </span>
+                </div>
+
+                <p className="text-xs text-muted leading-relaxed">
+                  Translates spiritual and metaphorical phrases into concrete, photogenic camera shots (e.g. converting heartache into thoughtful cinematic lighting) and cascades through primary, secondary, and mood queries to prevent random fallbacks.
+                </p>
+
+                <div className="mt-2.5 pt-2 border-t border-hairline-soft flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px]">
+                  <span>
+                    {draftRelatableVisualSearch ? (
+                      <span className="text-emerald-700 font-medium flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
+                        Active: Metaphor Mapping & Cascading Fallback (Tier 1 &rarr; 4)
+                      </span>
+                    ) : (
+                      <span className="text-amber-700 font-medium flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
+                        Active: Legacy Single-Keyword Matching
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[10px] text-muted italic">
+                    Uncheck to switch to old implementation
+                  </span>
+                </div>
+              </div>
+            </label>
           </fieldset>
 
           {/* Section 2: Media Type Filter (Radio Buttons / Toggle Group) */}

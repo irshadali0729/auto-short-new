@@ -200,6 +200,9 @@ interface GroqScene {
   keyword: string;
   duration: number;
   prompt: string;
+  visualQuery?: string;
+  fallbackQuery?: string;
+  moodQuery?: string;
   graphics?: GraphicBeat[];
   tags?: string[];
   caption?: string;
@@ -283,55 +286,13 @@ function extractAndParseScenes(rawContent: string): GroqScene[] {
   throw new Error("Groq returned invalid or unparseable scene data.");
 }
 
-export async function POST(request: Request) {
-  try {
-    const { transcript, targetLength, segments } = await request.json();
-
-    if (
-      !transcript ||
-      typeof transcript !== "string" ||
-      transcript.trim() === ""
-    ) {
-      return NextResponse.json(
-        { error: "Transcript is required" },
-        { status: 400 },
-      );
-    }
-
-    const apiKey = process.env.GROQ_API_KEY;
-    console.log(
-      "GROQ_API_KEY check - Is set:",
-      !!apiKey,
-      "Length:",
-      apiKey?.length || 0,
-    );
-
-    if (!apiKey || apiKey.trim() === "") {
-      return NextResponse.json(
-        {
-          error:
-            "Groq API Key is missing. Please configure GROQ_API_KEY in your Railway service variables or .env.local file.",
-        },
-        { status: 500 },
-      );
-    }
-
-    const groq = new Groq({
-      apiKey: apiKey,
-    });
-
-    const hasSegments = Array.isArray(segments) && segments.length > 0;
-    const normalizedSegments = hasSegments ? normalizeSegments(segments) : [];
-    const formattedSegmentsText = hasSegments
-      ? normalizedSegments
-          .map(
-            (s: TranscriptSegment, idx: number) =>
-              `[${idx + 1}] (${s.start.toFixed(2)}s - ${s.end.toFixed(2)}s) "${s.text}"`,
-          )
-          .join("\n")
-      : "";
-
-    const prompt = `You are creating Islamic YouTube Shorts.
+function buildLegacyPrompt(
+  transcript: string,
+  targetLength: number | undefined,
+  formattedSegmentsText: string,
+  hasSegments: boolean,
+): string {
+  return `You are creating Islamic YouTube Shorts.
 Analyze the transcript.
 Extract visual scenes.
 Return English keywords, durations, and highly detailed anime-style image generation prompts.
@@ -396,6 +357,150 @@ Example output:
 
 Transcript:
 ${transcript}`;
+}
+
+function buildRelatableVisualPrompt(
+  transcript: string,
+  targetLength: number | undefined,
+  formattedSegmentsText: string,
+  hasSegments: boolean,
+): string {
+  return `You are an expert cinematic director creating viral, highly engaging Islamic YouTube Shorts.
+Analyze the transcript and break it down into visually striking, relatable scenes.
+Translate the metaphorical, spiritual, and emotional essence into concrete, photogenic camera shots that real photographers shoot for stock media (Pexels, Pixabay, Unsplash).
+
+CRITICAL VISUAL METAPHOR & STOCK SEARCH RULES:
+* Western stock libraries (Pexels, Pixabay, Unsplash) DO NOT understand Hindi/Urdu idioms or spiritual abstractions (e.g., 'dil dukhaya', 'gunah', 'maghfirat', 'tawbah', 'haq', 'namaz chhoot jaye', 'forgiveness', 'broken heart').
+* Searching literal translations like "dil dukhaya Muslim" or "broken heart Muslim" completely fails or returns cheesy dating breakup photos.
+* You MUST translate spiritual concepts into concrete physical camera shots in English:
+  - "दिल दुखाया" (Hurting someone's feelings/heart) -> "thoughtful lonely man dark cinematic lighting" OR "sad man sitting in shadows deep thought"
+  - "नमाज़ छूट जाए" (Missed prayer/remorse) -> "muslim man praying silhouette sunset" OR "man prostrating prayer silhouette"
+  - "अल्लाह माफ़ कर सकता है" (Allah's mercy/forgiveness) -> "sun rays breaking through dramatic storm clouds" OR "hands raised dua prayer golden hour"
+  - "ख़ुदा की क़सम" (Solemn oath / intense warning) -> "dramatic storm clouds lightning cinematic" OR "man walking alone desert dunes sunset"
+  - "हक़ूक़ उल इबाद" (Rights of people/trust) -> "two men shaking hands greeting silhouette" OR "crowd silhouettes walking golden hour"
+  - Peace & tranquility -> "ancient mosque dome sunset silhouette" OR "kaaba mecca crowd golden hour"
+* "visualQuery" (string): 3 to 6 words describing a concrete, physical camera shot in English for stock video/photo search. Focus on physical subjects, lighting, and composition (e.g. "muslim man praying silhouette", "thoughtful lonely man dark cinematic lighting", "ancient mosque dome sunset").
+* "fallbackQuery" (string): Secondary concrete physical alternative shot (3-5 words in English) if the primary shot is unavailable (e.g., "ancient mosque architecture dome", "desert sand dunes cinematic sunset").
+* "moodQuery" (string): Universal atmospheric backup shot (3-5 words in English) matching the emotional weight (e.g., "dramatic storm clouds sunset sky", "sun rays through clouds golden hour").
+* "keyword" (string): Concise 1-3 word human-readable topic label in English for the UI storyboard badge (e.g., "Broken Trust", "Sincere Prayer", "Divine Mercy").
+
+General Rules:
+* Return valid JSON only without markdown or code fences.
+* Do not use unescaped quotes or raw newlines inside string values.
+* Return a JSON object with a single key "scenes" which contains an array of objects.
+* Each scene object must have:
+  - "keyword" (string): 1-3 word English label for UI display.
+  - "visualQuery" (string): 3-6 words concrete camera shot in English.
+  - "fallbackQuery" (string): 3-5 words secondary camera shot in English.
+  - "moodQuery" (string): 3-5 words atmospheric backup shot in English.
+  - "duration" (number): Scene duration in seconds.
+  - "prompt" (string): A detailed text-to-image prompt in "cinematic anime style", ending with: "vertical 9:16 aspect ratio, soft lighting, highly detailed, 1k".
+  - "tags" (array of strings): 3-5 visual keywords.
+  - "caption" (string): Short caption describing the visual shot (10-20 words).
+  - "graphics" (array of objects): 1-2 emphasis overlay beats per scene.
+    * CRITICAL LANGUAGE RULE: Words inside "graphics" (prefixText, heroWord, suffixText) MUST STRICTLY BE IN THE EXACT SAME LANGUAGE AND SCRIPT AS THE INPUT TRANSCRIPT!
+      - If transcript is Hindi: use Hindi (Devanagari) words (e.g. prefixText: "खुदा की कसम", heroWord: "दिल दुखाया").
+      - If transcript is Hinglish: use Hinglish words (e.g. prefixText: "Khuda ki qasam", heroWord: "dil dukhaya").
+      - If transcript is English: use English words (e.g. prefixText: "I don't have", heroWord: "time.").
+      - DO NOT translate graphics words to English if transcript is in Hindi or Hinglish!
+    * Each graphic beat must include:
+      - "prefixText" (string): 1-4 context words.
+      - "heroWord" (string): The single most important emphasis punchline word.
+      - "suffixText" (string, optional): Trailing context words.
+      - "style" (string): "stacked-kinetic", "top-hero", or "thought-bubble".
+      - "start" (number): Start timestamp in seconds within this scene.
+      - "end" (number): End timestamp in seconds within this scene.
+* Generate 5-10 scenes.
+${
+  hasSegments
+    ? `* REAL AUDIO SEGMENTS WITH EXACT TIMESTAMPS:
+${formattedSegmentsText}
+
+CRITICAL TIMELINE SYNCHRONIZATION RULES:
+- The video has exact audio timestamps provided in the segments above.
+- You MUST align the scenes to these exact audio segments.
+- The "duration" of each scene MUST match the exact duration of the segments it covers (e.g., if Scene 1 covers 0.00s to 4.90s, duration is 4.90).
+- For graphic beats, set "start" and "end" relative to that scene's start time matching when the heroWord is spoken in the segment.`
+    : targetLength
+      ? `* The total duration of all scenes combined must be exactly ${targetLength} seconds. Adjust the duration of individual scenes so they sum up to exactly ${targetLength}.`
+      : "* Total duration of all scenes combined should ideally be between 15 to 45 seconds."
+}
+
+Example output:
+{
+  "scenes": [
+    {
+      "keyword": "Broken Trust",
+      "visualQuery": "thoughtful lonely man dark cinematic lighting",
+      "fallbackQuery": "man walking alone desert dunes sunset",
+      "moodQuery": "dramatic storm clouds sunset sky",
+      "duration": 5,
+      "tags": ["lonely_man", "cinematic", "shadows"],
+      "caption": "A solitary thoughtful man seated in moody dramatic lighting reflecting in silence.",
+      "graphics": [
+        {"prefixText":"खुदा की कसम","heroWord":"दिल दुखाया","style":"stacked-kinetic","start":0.4,"end":2.4}
+      ],
+      "prompt": "An elegant anime style illustration of a thoughtful man sitting alone in dramatic shadow lighting, vertical 9:16 aspect ratio, soft lighting, highly detailed, 1k"
+    }
+  ]
+}
+
+Transcript:
+${transcript}`;
+}
+
+export async function POST(request: Request) {
+  try {
+    const { transcript, targetLength, segments, useRelatableVisualSearch = true } = await request.json();
+
+    if (
+      !transcript ||
+      typeof transcript !== "string" ||
+      transcript.trim() === ""
+    ) {
+      return NextResponse.json(
+        { error: "Transcript is required" },
+        { status: 400 },
+      );
+    }
+
+    const apiKey = process.env.GROQ_API_KEY;
+    console.log(
+      "GROQ_API_KEY check - Is set:",
+      !!apiKey,
+      "Length:",
+      apiKey?.length || 0,
+    );
+
+    if (!apiKey || apiKey.trim() === "") {
+      return NextResponse.json(
+        {
+          error:
+            "Groq API Key is missing. Please configure GROQ_API_KEY in your Railway service variables or .env.local file.",
+        },
+        { status: 500 },
+      );
+    }
+
+    const groq = new Groq({
+      apiKey: apiKey,
+    });
+
+    const hasSegments = Array.isArray(segments) && segments.length > 0;
+    const normalizedSegments = hasSegments ? normalizeSegments(segments) : [];
+    const formattedSegmentsText = hasSegments
+      ? normalizedSegments
+          .map(
+            (s: TranscriptSegment, idx: number) =>
+              `[${idx + 1}] (${s.start.toFixed(2)}s - ${s.end.toFixed(2)}s) "${s.text}"`,
+          )
+          .join("\n")
+      : "";
+
+    // Switch between Relatable Visual Search and Legacy Prompt based on flag
+    const prompt = useRelatableVisualSearch !== false
+      ? buildRelatableVisualPrompt(transcript, targetLength, formattedSegmentsText, hasSegments)
+      : buildLegacyPrompt(transcript, targetLength, formattedSegmentsText, hasSegments);
 
     const candidateModels = [
       "openai/gpt-oss-120b",
@@ -442,6 +547,9 @@ ${transcript}`;
         scene.prompt ||
           `${scene.keyword || "Muslim scene"}, cinematic anime style, vertical 9:16 aspect ratio, soft lighting, highly detailed, 1k`,
       ),
+      visualQuery: scene.visualQuery ? String(scene.visualQuery).trim() : undefined,
+      fallbackQuery: scene.fallbackQuery ? String(scene.fallbackQuery).trim() : undefined,
+      moodQuery: scene.moodQuery ? String(scene.moodQuery).trim() : undefined,
       tags: Array.isArray(scene.tags) ? scene.tags : undefined,
       caption: scene.caption ? String(scene.caption) : undefined,
       graphics: Array.isArray(scene.graphics) ? scene.graphics : undefined,

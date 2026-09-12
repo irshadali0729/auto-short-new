@@ -23,6 +23,9 @@ interface CaptionSlice {
 interface SceneInput {
   keyword: string;
   duration: number;
+  visualQuery?: string;
+  fallbackQuery?: string;
+  moodQuery?: string;
   graphics?: GraphicBeat[];
   captions?: CaptionSlice[];
 }
@@ -35,6 +38,7 @@ interface MediaSettingsPayload {
     local?: boolean;
   };
   mediaType?: "only_videos" | "only_images" | "both";
+  useRelatableVisualSearch?: boolean;
 }
 
 function shuffleArray<T>(array: T[]): T[] {
@@ -65,6 +69,36 @@ function buildIslamicQuery(query: string): string {
   const lower = q.toLowerCase();
   const hasIslamicContext = ISLAMIC_KEYWORDS.some((k) => lower.includes(k));
   return hasIslamicContext ? q : `${q} Muslim`;
+}
+
+function resolveSearchQuery(query: string, isRelatableMode: boolean = false): string {
+  const q = query.trim();
+  if (!isRelatableMode) {
+    return buildIslamicQuery(q);
+  }
+
+  const lower = q.toLowerCase();
+  const prayerWords = [
+    "prayer",
+    "prostrating",
+    "worship",
+    "mosque",
+    "dua",
+    "quran",
+    "salah",
+    "kaaba",
+    "mecca",
+    "medina",
+    "masjid"
+  ];
+  const hasPrayerContext = prayerWords.some((w) => lower.includes(w));
+  const hasIslamicContext = ISLAMIC_KEYWORDS.some((k) => lower.includes(k));
+
+  if (hasPrayerContext && !hasIslamicContext) {
+    return `${q} Muslim`;
+  }
+
+  return q;
 }
 
 export async function POST(request: Request) {
@@ -116,11 +150,18 @@ export async function POST(request: Request) {
     const allowLocal =
       !mediaSettings.sources || mediaSettings.sources.local !== false;
 
+    const isRelatableMode = mediaSettings.useRelatableVisualSearch !== false;
+
     const matchedScenes: Array<{
       keyword: string;
       duration: number;
       image: string;
       isFallback: boolean;
+      visualQuery?: string;
+      fallbackQuery?: string;
+      moodQuery?: string;
+      matchedTier?: "visual" | "fallback" | "mood" | "local" | "random" | "legacy";
+      matchedQuery?: string;
       graphics?: GraphicBeat[];
       captions?: CaptionSlice[];
     }> = [];
@@ -133,8 +174,8 @@ export async function POST(request: Request) {
     const usedPixabayVideoIds = new Set<number>();
 
     for (let sceneIdx = 0; sceneIdx < scenes.length; sceneIdx++) {
-      const scene = scenes[sceneIdx];
-      const { keyword, duration, graphics, captions } = scene;
+      const scene: SceneInput = scenes[sceneIdx];
+      const { keyword, duration, graphics, captions, visualQuery, fallbackQuery, moodQuery } = scene;
       const kw = keyword ? keyword.trim() : "";
 
       // Determine preference for this scene: video vs image
@@ -148,51 +189,169 @@ export async function POST(request: Request) {
         preferVideo = sceneIdx % 2 === 0;
       }
 
-      if (!kw) {
-        const fallback = getFallbackAsset(availableAssets, usedAssets, preferVideo);
+      if (isRelatableMode) {
+        // ==========================================
+        // RELATABLE VISUAL SEARCH & MULTI-TIER CASCADE
+        // ==========================================
+        const q1 = (visualQuery || kw).trim();
+        const q2 = (fallbackQuery || "").trim();
+        const q3 = (moodQuery || "").trim();
+
+        let chosenAsset: string | null = null;
+        let matchedTier: "visual" | "fallback" | "mood" | "local" | "random" = "random";
+        let matchedQuery = q1;
+
+        // Tier 1: Specific photogenic camera shot
+        if (q1) {
+          chosenAsset = await fetchMediaForQuery(
+            q1,
+            preferVideo,
+            mediaFilter,
+            true,
+            pexelsApiKey,
+            unsplashKey,
+            pixabayApiKey,
+            allowPexels,
+            allowUnsplash,
+            allowPixabay,
+            usedPexelsPhotoIds,
+            usedPexelsVideoIds,
+            usedUnsplashIds,
+            usedPixabayPhotoIds,
+            usedPixabayVideoIds,
+          );
+          if (chosenAsset) {
+            matchedTier = "visual";
+            matchedQuery = q1;
+          }
+        }
+
+        // Tier 2: Secondary physical alternative shot
+        if (!chosenAsset && q2) {
+          chosenAsset = await fetchMediaForQuery(
+            q2,
+            preferVideo,
+            mediaFilter,
+            true,
+            pexelsApiKey,
+            unsplashKey,
+            pixabayApiKey,
+            allowPexels,
+            allowUnsplash,
+            allowPixabay,
+            usedPexelsPhotoIds,
+            usedPexelsVideoIds,
+            usedUnsplashIds,
+            usedPixabayPhotoIds,
+            usedPixabayVideoIds,
+          );
+          if (chosenAsset) {
+            matchedTier = "fallback";
+            matchedQuery = q2;
+          }
+        }
+
+        // Tier 3: Universal atmospheric / mood shot
+        if (!chosenAsset && q3) {
+          chosenAsset = await fetchMediaForQuery(
+            q3,
+            preferVideo,
+            mediaFilter,
+            true,
+            pexelsApiKey,
+            unsplashKey,
+            pixabayApiKey,
+            allowPexels,
+            allowUnsplash,
+            allowPixabay,
+            usedPexelsPhotoIds,
+            usedPexelsVideoIds,
+            usedUnsplashIds,
+            usedPixabayPhotoIds,
+            usedPixabayVideoIds,
+          );
+          if (chosenAsset) {
+            matchedTier = "mood";
+            matchedQuery = q3;
+          }
+        }
+
+        // Tier 4: Smart tokenized search against local image library
+        if (!chosenAsset && allowLocal) {
+          const localMatch = matchSmartLocalAssets(
+            availableAssets,
+            [q1, q2, q3, kw].filter(Boolean),
+            usedAssets,
+            preferVideo,
+            mediaFilter === "only_videos",
+          );
+          if (localMatch) {
+            chosenAsset = localMatch;
+            matchedTier = "local";
+            matchedQuery = "Local Library Match";
+          }
+        }
+
+        // Tier 5: Random unused fallback asset
+        if (!chosenAsset) {
+          chosenAsset = getFallbackAsset(
+            availableAssets,
+            usedAssets,
+            preferVideo,
+          );
+          matchedTier = "random";
+          matchedQuery = "Fallback Asset";
+        }
+
         matchedScenes.push({
           keyword,
           duration,
-          image: fallback,
-          isFallback: true,
+          image: chosenAsset,
+          isFallback: matchedTier === "random",
+          visualQuery,
+          fallbackQuery,
+          moodQuery,
+          matchedTier,
+          matchedQuery,
           graphics: Array.isArray(graphics) ? graphics : undefined,
           captions: Array.isArray(captions) ? captions : undefined,
         });
-        usedAssets.add(fallback);
-        continue;
-      }
-
-      let foundAsset: string | null = null;
-
-      // 1. Try preferred media type first
-      if (preferVideo) {
-        foundAsset = await fetchVideoFromProviders(
-          kw,
-          pexelsApiKey,
-          pixabayApiKey,
-          allowPexels,
-          allowPixabay,
-          usedPexelsVideoIds,
-          usedPixabayVideoIds,
-        );
+        usedAssets.add(chosenAsset);
       } else {
-        foundAsset = await fetchPhotoFromProviders(
-          kw,
-          pexelsApiKey,
-          unsplashKey,
-          pixabayApiKey,
-          allowPexels,
-          allowUnsplash,
-          allowPixabay,
-          usedPexelsPhotoIds,
-          usedUnsplashIds,
-          usedPixabayPhotoIds,
-        );
-      }
+        // ==========================================
+        // LEGACY SINGLE-KEYWORD MATCHING IMPLEMENTATION
+        // ==========================================
+        if (!kw) {
+          const fallback = getFallbackAsset(availableAssets, usedAssets, preferVideo);
+          matchedScenes.push({
+            keyword,
+            duration,
+            image: fallback,
+            isFallback: true,
+            matchedTier: "legacy",
+            matchedQuery: "Fallback",
+            graphics: Array.isArray(graphics) ? graphics : undefined,
+            captions: Array.isArray(captions) ? captions : undefined,
+          });
+          usedAssets.add(fallback);
+          continue;
+        }
 
-      // 2. If 'both' mode and preferred media type failed, try opposite media type
-      if (!foundAsset && mediaFilter === "both") {
+        let foundAsset: string | null = null;
+
+        // 1. Try preferred media type first
         if (preferVideo) {
+          foundAsset = await fetchVideoFromProviders(
+            kw,
+            pexelsApiKey,
+            pixabayApiKey,
+            allowPexels,
+            allowPixabay,
+            usedPexelsVideoIds,
+            usedPixabayVideoIds,
+            false,
+          );
+        } else {
           foundAsset = await fetchPhotoFromProviders(
             kw,
             pexelsApiKey,
@@ -204,75 +363,102 @@ export async function POST(request: Request) {
             usedPexelsPhotoIds,
             usedUnsplashIds,
             usedPixabayPhotoIds,
-          );
-        } else {
-          foundAsset = await fetchVideoFromProviders(
-            kw,
-            pexelsApiKey,
-            pixabayApiKey,
-            allowPexels,
-            allowPixabay,
-            usedPexelsVideoIds,
-            usedPixabayVideoIds,
+            false,
           );
         }
-      }
 
-      // If remote provider found asset, record and continue
-      if (foundAsset) {
-        matchedScenes.push({
-          keyword,
-          duration,
-          image: foundAsset,
-          isFallback: false,
-          graphics: Array.isArray(graphics) ? graphics : undefined,
-          captions: Array.isArray(captions) ? captions : undefined,
-        });
-        usedAssets.add(foundAsset);
-        continue;
-      }
+        // 2. If 'both' mode and preferred media type failed, try opposite media type
+        if (!foundAsset && mediaFilter === "both") {
+          if (preferVideo) {
+            foundAsset = await fetchPhotoFromProviders(
+              kw,
+              pexelsApiKey,
+              unsplashKey,
+              pixabayApiKey,
+              allowPexels,
+              allowUnsplash,
+              allowPixabay,
+              usedPexelsPhotoIds,
+              usedUnsplashIds,
+              usedPixabayPhotoIds,
+              false,
+            );
+          } else {
+            foundAsset = await fetchVideoFromProviders(
+              kw,
+              pexelsApiKey,
+              pixabayApiKey,
+              allowPexels,
+              allowPixabay,
+              usedPexelsVideoIds,
+              usedPixabayVideoIds,
+              false,
+            );
+          }
+        }
 
-      // 3. Try matching local assets
-      if (allowLocal) {
-        const localMatches = matchLocalAssets(
-          availableAssets,
-          kw,
-          usedAssets,
-          preferVideo,
-          mediaFilter === "only_videos",
-        );
-
-        if (localMatches.length > 0) {
-          const chosen =
-            localMatches[Math.floor(Math.random() * localMatches.length)];
+        // If remote provider found asset, record and continue
+        if (foundAsset) {
           matchedScenes.push({
             keyword,
             duration,
-            image: chosen,
+            image: foundAsset,
             isFallback: false,
+            matchedTier: "legacy",
+            matchedQuery: kw,
             graphics: Array.isArray(graphics) ? graphics : undefined,
             captions: Array.isArray(captions) ? captions : undefined,
           });
-          usedAssets.add(chosen);
+          usedAssets.add(foundAsset);
           continue;
         }
-      }
 
-      // 4. Fallback to random unused local asset
-      const fallback = getFallbackAsset(
-        availableAssets,
-        usedAssets,
-        preferVideo,
-      );
-      matchedScenes.push({
-        keyword,
-        duration,
-        image: fallback,
-        isFallback: true,
-        graphics: Array.isArray(graphics) ? graphics : undefined,
-        captions: Array.isArray(captions) ? captions : undefined,
-      });
-      usedAssets.add(fallback);
+        // 3. Try matching local assets
+        if (allowLocal) {
+          const localMatches = matchLocalAssets(
+            availableAssets,
+            kw,
+            usedAssets,
+            preferVideo,
+            mediaFilter === "only_videos",
+          );
+
+          if (localMatches.length > 0) {
+            const chosen =
+              localMatches[Math.floor(Math.random() * localMatches.length)];
+            matchedScenes.push({
+              keyword,
+              duration,
+              image: chosen,
+              isFallback: false,
+              matchedTier: "legacy",
+              matchedQuery: kw,
+              graphics: Array.isArray(graphics) ? graphics : undefined,
+              captions: Array.isArray(captions) ? captions : undefined,
+            });
+            usedAssets.add(chosen);
+            continue;
+          }
+        }
+
+        // 4. Fallback to random unused local asset
+        const fallback = getFallbackAsset(
+          availableAssets,
+          usedAssets,
+          preferVideo,
+        );
+        matchedScenes.push({
+          keyword,
+          duration,
+          image: fallback,
+          isFallback: true,
+          matchedTier: "legacy",
+          matchedQuery: "Fallback",
+          graphics: Array.isArray(graphics) ? graphics : undefined,
+          captions: Array.isArray(captions) ? captions : undefined,
+        });
+        usedAssets.add(fallback);
+      }
     }
 
     return NextResponse.json({ matches: matchedScenes });
@@ -288,6 +474,87 @@ export async function POST(request: Request) {
 // Provider Fetching Orchestrators
 // ==========================================
 
+async function fetchMediaForQuery(
+  query: string,
+  preferVideo: boolean,
+  mediaFilter: "only_videos" | "only_images" | "both",
+  isRelatableMode: boolean,
+  pexelsApiKey: string,
+  unsplashKey: string,
+  pixabayApiKey: string,
+  allowPexels: boolean,
+  allowUnsplash: boolean,
+  allowPixabay: boolean,
+  usedPexelsPhotoIds: Set<number>,
+  usedPexelsVideoIds: Set<number>,
+  usedUnsplashIds: Set<string>,
+  usedPixabayPhotoIds: Set<number>,
+  usedPixabayVideoIds: Set<number>,
+): Promise<string | null> {
+  const q = query.trim();
+  if (!q) return null;
+
+  let foundAsset: string | null = null;
+
+  if (preferVideo) {
+    foundAsset = await fetchVideoFromProviders(
+      q,
+      pexelsApiKey,
+      pixabayApiKey,
+      allowPexels,
+      allowPixabay,
+      usedPexelsVideoIds,
+      usedPixabayVideoIds,
+      isRelatableMode,
+    );
+  } else {
+    foundAsset = await fetchPhotoFromProviders(
+      q,
+      pexelsApiKey,
+      unsplashKey,
+      pixabayApiKey,
+      allowPexels,
+      allowUnsplash,
+      allowPixabay,
+      usedPexelsPhotoIds,
+      usedUnsplashIds,
+      usedPixabayPhotoIds,
+      isRelatableMode,
+    );
+  }
+
+  if (!foundAsset && mediaFilter === "both") {
+    if (preferVideo) {
+      foundAsset = await fetchPhotoFromProviders(
+        q,
+        pexelsApiKey,
+        unsplashKey,
+        pixabayApiKey,
+        allowPexels,
+        allowUnsplash,
+        allowPixabay,
+        usedPexelsPhotoIds,
+        usedUnsplashIds,
+        usedPixabayPhotoIds,
+        isRelatableMode,
+      );
+    } else {
+      foundAsset = await fetchVideoFromProviders(
+        q,
+        pexelsApiKey,
+        pixabayApiKey,
+        allowPexels,
+        allowPixabay,
+        usedPexelsVideoIds,
+        usedPixabayVideoIds,
+        isRelatableMode,
+      );
+    }
+  }
+
+  return foundAsset;
+}
+
 async function fetchVideoFromProviders(
   keyword: string,
   pexelsApiKey: string,
@@ -296,6 +563,7 @@ async function fetchVideoFromProviders(
   allowPixabay: boolean,
   usedPexelsVideoIds: Set<number>,
   usedPixabayVideoIds: Set<number>,
+  isRelatableMode: boolean = false,
 ): Promise<string | null> {
   const videoProviders: Array<"pexels_video" | "pixabay_video"> = [];
   if (pexelsApiKey && allowPexels) videoProviders.push("pexels_video");
@@ -309,6 +577,7 @@ async function fetchVideoFromProviders(
         keyword,
         pexelsApiKey,
         usedPexelsVideoIds,
+        isRelatableMode,
       );
       if (vid) return vid;
     } else if (provider === "pixabay_video") {
@@ -316,6 +585,7 @@ async function fetchVideoFromProviders(
         keyword,
         pixabayApiKey,
         usedPixabayVideoIds,
+        isRelatableMode,
       );
       if (vid) return vid;
     }
@@ -335,6 +605,7 @@ async function fetchPhotoFromProviders(
   usedPexelsPhotoIds: Set<number>,
   usedUnsplashIds: Set<string>,
   usedPixabayPhotoIds: Set<number>,
+  isRelatableMode: boolean = false,
 ): Promise<string | null> {
   const photoProviders: Array<"pexels_photo" | "unsplash_photo" | "pixabay_photo"> = [];
   if (pexelsApiKey && allowPexels) photoProviders.push("pexels_photo");
@@ -349,6 +620,7 @@ async function fetchPhotoFromProviders(
         keyword,
         pexelsApiKey,
         usedPexelsPhotoIds,
+        isRelatableMode,
       );
       if (photo) return photo;
     } else if (provider === "unsplash_photo") {
@@ -356,6 +628,7 @@ async function fetchPhotoFromProviders(
         keyword,
         unsplashKey,
         usedUnsplashIds,
+        isRelatableMode,
       );
       if (photo) return photo;
     } else if (provider === "pixabay_photo") {
@@ -363,6 +636,7 @@ async function fetchPhotoFromProviders(
         keyword,
         pixabayApiKey,
         usedPixabayPhotoIds,
+        isRelatableMode,
       );
       if (photo) return photo;
     }
@@ -414,6 +688,66 @@ function matchLocalAssets(
   return matches;
 }
 
+function matchSmartLocalAssets(
+  availableAssets: string[],
+  queries: string[],
+  usedAssets: Set<string>,
+  preferVideo: boolean,
+  onlyVideos: boolean,
+): string | null {
+  let candidatePool = availableAssets.filter((a) => !usedAssets.has(a));
+  if (candidatePool.length === 0) candidatePool = availableAssets;
+
+  if (onlyVideos) {
+    candidatePool = candidatePool.filter(isVideoFile);
+  } else if (preferVideo) {
+    const videoMatches = candidatePool.filter(isVideoFile);
+    if (videoMatches.length > 0) candidatePool = videoMatches;
+  }
+
+  if (candidatePool.length === 0) return null;
+
+  const stopWords = new Set([
+    "the", "and", "for", "with", "from", "that", "this", "shot", "style",
+    "video", "photo", "image", "dark", "soft", "high", "cinematic", "real"
+  ]);
+
+  const allTokens = queries.flatMap((q) =>
+    q
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !stopWords.has(w))
+  );
+
+  if (allTokens.length === 0) return null;
+
+  let bestScore = 0;
+  let bestMatches: string[] = [];
+
+  for (const asset of candidatePool) {
+    const assetLower = asset.toLowerCase();
+    let score = 0;
+    for (const token of allTokens) {
+      if (assetLower.includes(token)) {
+        score++;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatches = [asset];
+    } else if (score > 0 && score === bestScore) {
+      bestMatches.push(asset);
+    }
+  }
+
+  if (bestMatches.length > 0 && bestScore > 0) {
+    return bestMatches[Math.floor(Math.random() * bestMatches.length)];
+  }
+
+  return null;
+}
+
 function getFallbackAsset(
   allAssets: string[],
   usedAssets: Set<string>,
@@ -454,12 +788,13 @@ async function getPexelsVideo(
   query: string,
   apiKey: string,
   usedPexelsVideoIds: Set<number>,
+  isRelatableMode: boolean = false,
 ): Promise<string | null> {
   try {
-    const searchQuery = buildIslamicQuery(query);
+    const searchQuery = resolveSearchQuery(query, isRelatableMode);
     const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(
       searchQuery,
-    )}&orientation=portrait&per_page=6`;
+    )}&orientation=portrait&per_page=8`;
 
     const res = await fetch(url, {
       headers: {
@@ -537,12 +872,13 @@ async function getPexelsPhoto(
   query: string,
   apiKey: string,
   usedPexelsIds: Set<number>,
+  isRelatableMode: boolean = false,
 ): Promise<string | null> {
   try {
-    const searchQuery = buildIslamicQuery(query);
+    const searchQuery = resolveSearchQuery(query, isRelatableMode);
     const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(
       searchQuery,
-    )}&orientation=portrait&per_page=6`;
+    )}&orientation=portrait&per_page=8`;
 
     const res = await fetch(url, {
       headers: {
@@ -609,12 +945,13 @@ async function getUnsplashPhoto(
   query: string,
   accessKey: string,
   usedUnsplashIds: Set<string>,
+  isRelatableMode: boolean = false,
 ): Promise<string | null> {
   try {
-    const searchQuery = buildIslamicQuery(query);
+    const searchQuery = resolveSearchQuery(query, isRelatableMode);
     const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(
       searchQuery,
-    )}&orientation=portrait&per_page=6`;
+    )}&orientation=portrait&per_page=8`;
 
     const res = await fetch(url, {
       headers: {
@@ -679,13 +1016,14 @@ async function getPixabayVideo(
   query: string,
   apiKey: string,
   usedPixabayVideoIds: Set<number>,
+  isRelatableMode: boolean = false,
 ): Promise<string | null> {
   if (!apiKey) return null;
   try {
-    const searchQuery = buildIslamicQuery(query);
+    const searchQuery = resolveSearchQuery(query, isRelatableMode);
     const url = `https://pixabay.com/api/videos/?key=${encodeURIComponent(
       apiKey,
-    )}&q=${encodeURIComponent(searchQuery)}&per_page=6`;
+    )}&q=${encodeURIComponent(searchQuery)}&per_page=8`;
 
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -694,13 +1032,16 @@ async function getPixabayVideo(
       return null;
     }
 
-    let chosen = data.hits[0];
-    for (const hit of data.hits) {
-      if (!usedPixabayVideoIds.has(hit.id)) {
-        chosen = hit;
-        break;
-      }
-    }
+    const unusedHits = data.hits.filter((hit: { id: number }) => !usedPixabayVideoIds.has(hit.id));
+    const pool = unusedHits.length > 0 ? unusedHits : data.hits;
+
+    // Prioritize vertical/portrait video clips
+    const verticalHit = pool.find((hit: { videos?: { medium?: { width: number; height: number }; large?: { width: number; height: number } } }) => {
+      const vid = hit.videos?.medium || hit.videos?.large;
+      return vid && vid.height > vid.width;
+    });
+
+    const chosen = verticalHit || pool[0];
     usedPixabayVideoIds.add(chosen.id);
 
     const videoUrl =
@@ -733,13 +1074,14 @@ async function getPixabayPhoto(
   query: string,
   apiKey: string,
   usedPixabayPhotoIds: Set<number>,
+  isRelatableMode: boolean = false,
 ): Promise<string | null> {
   if (!apiKey) return null;
   try {
-    const searchQuery = buildIslamicQuery(query);
+    const searchQuery = resolveSearchQuery(query, isRelatableMode);
     const url = `https://pixabay.com/api/?key=${encodeURIComponent(
       apiKey,
-    )}&q=${encodeURIComponent(searchQuery)}&image_type=photo&orientation=vertical&per_page=6`;
+    )}&q=${encodeURIComponent(searchQuery)}&image_type=photo&orientation=vertical&per_page=8`;
 
     const res = await fetch(url);
     if (!res.ok) return null;
