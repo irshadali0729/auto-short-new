@@ -25,6 +25,10 @@ export async function GET(
       contentType = 'image/gif';
     } else if (lowerName.endsWith('.webp')) {
       contentType = 'image/webp';
+    } else if (lowerName.endsWith('.mp4')) {
+      contentType = 'video/mp4';
+    } else if (lowerName.endsWith('.webm')) {
+      contentType = 'video/webm';
     }
 
     return new NextResponse(fileBuffer, {

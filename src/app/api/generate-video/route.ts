@@ -139,8 +139,13 @@ function buildGraphicsFilter(scene: Scene): { filterChain: string; lastLabel: st
 
 export async function POST(request: Request) {
   try {
-    const { scenes, runId, zoomSpeed, transitionDuration } =
-      await request.json();
+    const {
+      scenes,
+      runId,
+      zoomSpeed,
+      transitionDuration,
+      enableGraphicMotion,
+    } = await request.json();
 
     if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
       return NextResponse.json(
@@ -159,6 +164,7 @@ export async function POST(request: Request) {
     const zoomSpeedMultiplier = typeof zoomSpeed === "number" ? zoomSpeed : 1.0;
     const transitionDurationSec =
       typeof transitionDuration === "number" ? transitionDuration : 0.3;
+    const useGraphicMotion = enableGraphicMotion !== false;
 
     progressMap.set(runId, {
       complete: false,
@@ -171,6 +177,7 @@ export async function POST(request: Request) {
       scenes,
       zoomSpeedMultiplier,
       transitionDurationSec,
+      useGraphicMotion,
     ).catch((err) => {
       console.error("Background compilation crash:", err);
       progressMap.set(runId, {
@@ -194,6 +201,7 @@ async function compileVideoInBackground(
   scenes: Scene[],
   zoomSpeedMultiplier: number,
   transitionDuration: number,
+  enableGraphicMotion: boolean = true,
 ) {
   let tempDir = "";
   try {
@@ -250,64 +258,81 @@ async function compileVideoInBackground(
 
       const overlayPngList: Array<{ path: string; start: number; end: number }> = [];
 
-      for (let b = 0; b < beats.length; b++) {
-        const beat = beats[b];
-        const overlayPath = path.join(tempDir, `overlay_${i}_${b}.png`);
-        try {
-          await renderGraphicOverlayPng(beat, overlayPath);
-          if (fs.existsSync(overlayPath)) {
-            overlayPngList.push({
-              path: overlayPath,
-              start: Math.max(0, Number(beat.start) || 0),
-              end: Math.min(
-                duration,
-                Math.max((Number(beat.start) || 0) + 0.8, Number(beat.end) || duration),
-              ),
-            });
+      // Only generate graphic overlay PNGs if Graphic Motion is enabled
+      if (enableGraphicMotion) {
+        for (let b = 0; b < beats.length; b++) {
+          const beat = beats[b];
+          const overlayPath = path.join(tempDir, `overlay_${i}_${b}.png`);
+          try {
+            await renderGraphicOverlayPng(beat, overlayPath);
+            if (fs.existsSync(overlayPath)) {
+              overlayPngList.push({
+                path: overlayPath,
+                start: Math.max(0, Number(beat.start) || 0),
+                end: Math.min(
+                  duration,
+                  Math.max((Number(beat.start) || 0) + 0.8, Number(beat.end) || duration),
+                ),
+              });
+            }
+          } catch (overlayErr) {
+            console.warn(`Failed to render graphic overlay ${i}_${b}:`, overlayErr);
           }
-        } catch (overlayErr) {
-          console.warn(`Failed to render graphic overlay ${i}_${b}:`, overlayErr);
         }
       }
 
-      let filterGraph =
-        `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];` +
-        `[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg_scaled];` +
-        `[bg][fg_scaled]overlay=(W-w)/2:(H-h)/2[merged];` +
-        `[merged]zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':d=1:s=1080x1920:fps=30[zoomed];` +
-        `[zoomed]drawgrid=width=100:height=100:thickness=1:color=white@0.04[grid];`;
+      const isVideoAsset = /\.(mp4|webm|mov)$/i.test(imageFilename);
+
+      let filterGraph = "";
+      if (isVideoAsset) {
+        filterGraph =
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5,setpts=PTS-STARTPTS[bg];` +
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,setpts=PTS-STARTPTS[fg_scaled];` +
+          `[bg][fg_scaled]overlay=(W-w)/2:(H-h)/2[zoomed];` +
+          `[zoomed]drawgrid=width=100:height=100:thickness=1:color=white@0.04[grid];`;
+      } else {
+        filterGraph =
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];` +
+          `[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg_scaled];` +
+          `[bg][fg_scaled]overlay=(W-w)/2:(H-h)/2[merged];` +
+          `[merged]zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':d=1:s=1080x1920:fps=30[zoomed];` +
+          `[zoomed]drawgrid=width=100:height=100:thickness=1:color=white@0.04[grid];`;
+      }
 
       let currentLabel = "grid";
 
-      if (overlayPngList.length > 0) {
-        overlayPngList.forEach((ov, idx) => {
-          const inputIdx = 1 + idx;
-          const nextLabel = `v_ov_${idx}`;
-          const fadedLabel = `faded_ov_${idx}`;
-          const st = ov.start.toFixed(2);
-          const et = ov.end.toFixed(2);
-          const beatDuration = Math.max(0.1, ov.end - ov.start);
-          const fadeInDur = Math.min(0.25, beatDuration / 3).toFixed(2);
-          const fadeOutDur = Math.min(0.2, beatDuration / 3).toFixed(2);
-          const fadeOutStart = Math.max(
-            ov.start,
-            ov.end - Number(fadeOutDur),
-          ).toFixed(2);
+      // Only compose graphic overlays into FFmpeg filter graph if Graphic Motion is enabled
+      if (enableGraphicMotion) {
+        if (overlayPngList.length > 0) {
+          overlayPngList.forEach((ov, idx) => {
+            const inputIdx = 1 + idx;
+            const nextLabel = `v_ov_${idx}`;
+            const fadedLabel = `faded_ov_${idx}`;
+            const st = ov.start.toFixed(2);
+            const et = ov.end.toFixed(2);
+            const beatDuration = Math.max(0.1, ov.end - ov.start);
+            const fadeInDur = Math.min(0.25, beatDuration / 3).toFixed(2);
+            const fadeOutDur = Math.min(0.2, beatDuration / 3).toFixed(2);
+            const fadeOutStart = Math.max(
+              ov.start,
+              ov.end - Number(fadeOutDur),
+            ).toFixed(2);
 
-          // Smooth alpha fade-in and fade-out applied directly to the RGBA overlay stream
-          filterGraph += `[${inputIdx}:v]format=rgba,fade=t=in:st=${st}:d=${fadeInDur}:alpha=1,fade=t=out:st=${fadeOutStart}:d=${fadeOutDur}:alpha=1[${fadedLabel}];`;
+            // Smooth alpha fade-in and fade-out applied directly to the RGBA overlay stream
+            filterGraph += `[${inputIdx}:v]format=rgba,fade=t=in:st=${st}:d=${fadeInDur}:alpha=1,fade=t=out:st=${fadeOutStart}:d=${fadeOutDur}:alpha=1[${fadedLabel}];`;
 
-          // Kinetic slide-up 35px into rest position, evaluated per frame with escaped commas
-          const yExpr = `'if(lt(t\\,${st})\\,35\\,if(lt(t\\,${st}+0.25)\\,35*(1-(t-${st})/0.25)\\,0))'`;
-          filterGraph += `[${currentLabel}][${fadedLabel}]overlay=x=0:y=${yExpr}:eval=frame:enable='between(t\\,${st}\\,${et})'[${nextLabel}];`;
-          currentLabel = nextLabel;
-        });
-      } else {
-        const { filterChain: graphicsChain, lastLabel: drawTextLabel } =
-          buildGraphicsFilter(scene);
-        if (graphicsChain) {
-          filterGraph += graphicsChain;
-          currentLabel = drawTextLabel;
+            // Kinetic slide-up 35px into rest position, evaluated per frame with escaped commas
+            const yExpr = `'if(lt(t\\,${st})\\,35\\,if(lt(t\\,${st}+0.25)\\,35*(1-(t-${st})/0.25)\\,0))'`;
+            filterGraph += `[${currentLabel}][${fadedLabel}]overlay=x=0:y=${yExpr}:eval=frame:enable='between(t\\,${st}\\,${et})'[${nextLabel}];`;
+            currentLabel = nextLabel;
+          });
+        } else {
+          const { filterChain: graphicsChain, lastLabel: drawTextLabel } =
+            buildGraphicsFilter(scene);
+          if (graphicsChain) {
+            filterGraph += graphicsChain;
+            currentLabel = drawTextLabel;
+          }
         }
       }
 
@@ -317,13 +342,12 @@ async function compileVideoInBackground(
         filterGraph += `[${currentLabel}]format=yuv420p[outv]`;
       }
 
-      const ffmpegArgs = [
-        "-y",
-        "-loop",
-        "1",
-        "-i",
-        inputImagePath,
-      ];
+      const ffmpegArgs = ["-y"];
+      if (isVideoAsset) {
+        ffmpegArgs.push("-stream_loop", "-1", "-i", inputImagePath);
+      } else {
+        ffmpegArgs.push("-loop", "1", "-i", inputImagePath);
+      }
 
       for (const ov of overlayPngList) {
         ffmpegArgs.push("-loop", "1", "-i", ov.path);

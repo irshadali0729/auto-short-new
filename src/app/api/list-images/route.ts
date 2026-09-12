@@ -11,7 +11,7 @@ export async function GET() {
     }
 
     const allFiles = fs.readdirSync(libraryPath);
-    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+    const supportedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.webm'];
     
     // Sort alphabetically for clean presentation
     const availableImages = allFiles

@@ -8,14 +8,18 @@ import {
   Play, 
   Download, 
   AlertCircle, 
-  Search, 
-  X, 
   RefreshCw,
   Film,
   CheckCircle2,
   Clock,
-  Sliders
+  Sliders,
+  Settings
 } from 'lucide-react';
+import SettingsModal, { 
+  MediaSettings, 
+  DEFAULT_MEDIA_SETTINGS 
+} from '@/app/components/SettingsModal';
+import ReplaceImageModal from '@/app/components/ReplaceImageModal';
 
 interface GraphicBeat {
   prefixText?: string;
@@ -52,14 +56,39 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
-  const [zoomSpeed, setZoomSpeed] = useState<number>(1.0);
-  const [transitionDuration, setTransitionDuration] = useState<number>(0.3);
   const [pollCount, setPollCount] = useState<number>(0);
+
+  // Settings Panel state
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [mediaSettings, setMediaSettings] = useState<MediaSettings>(DEFAULT_MEDIA_SETTINGS);
+
+  // Load saved settings from localStorage on client mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('hadith_shorts_media_settings');
+      if (saved) {
+        setMediaSettings({
+          ...DEFAULT_MEDIA_SETTINGS,
+          ...JSON.parse(saved),
+        });
+      }
+    } catch (err) {
+      console.warn('Could not read media settings from localStorage:', err);
+    }
+  }, []);
+
+  const handleSaveSettings = (newSettings: MediaSettings) => {
+    setMediaSettings(newSettings);
+    try {
+      localStorage.setItem('hadith_shorts_media_settings', JSON.stringify(newSettings));
+    } catch (err) {
+      console.warn('Could not save media settings to localStorage:', err);
+    }
+  };
   
   // Image replacement state
   const [allLibraryImages, setAllLibraryImages] = useState<string[]>([]);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Load all images from the library on load for manual overriding
@@ -154,11 +183,14 @@ export default function Home() {
 
       const extractedScenes = analyzeData.scenes;
 
-      // 2. Match images based on keywords
+      // 2. Match images based on keywords & user mediaSettings
       const matchRes = await fetch('/api/match-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenes: extractedScenes }),
+        body: JSON.stringify({ 
+          scenes: extractedScenes,
+          mediaSettings,
+        }),
       });
 
       const matchData = await matchRes.json();
@@ -214,7 +246,6 @@ export default function Home() {
 
   const handleReplaceClick = (index: number) => {
     setReplacingIndex(index);
-    setSearchQuery('');
     setIsModalOpen(true);
   };
 
@@ -250,8 +281,9 @@ export default function Home() {
         body: JSON.stringify({ 
           scenes,
           runId,
-          zoomSpeed,
-          transitionDuration
+          zoomSpeed: mediaSettings.zoomSpeed ?? 1.0,
+          transitionDuration: mediaSettings.transitionDuration ?? 0.3,
+          enableGraphicMotion: mediaSettings.enableGraphicMotion !== false,
         }),
       });
 
@@ -312,10 +344,6 @@ export default function Home() {
     }
   };
 
-  const filteredImages = allLibraryImages.filter(img => 
-    img.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   return (
     <main className="relative min-h-screen px-4 py-8 md:py-16 max-w-6xl mx-auto z-10">
       {/* Background Radial Glow decoration */}
@@ -324,16 +352,67 @@ export default function Home() {
 
       {/* Header */}
       <header className="flex flex-col items-center mb-12 text-center">
-        <div className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full border border-purple-500/20 bg-purple-500/5 text-purple-400 text-sm font-medium mb-4 backdrop-blur-md">
-          <Film className="w-4 h-4" />
-          <span>Hadith Shorts Maker — Local Sandbox Edition</span>
+        <div className="flex flex-wrap items-center justify-center gap-2.5 mb-4">
+          <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-purple-500/20 bg-purple-500/5 text-purple-400 text-sm font-medium backdrop-blur-md">
+            <Film className="w-4 h-4" />
+            <span>Hadith Shorts Maker — Local Sandbox Edition</span>
+          </div>
+
+          {/* Clearly labeled Settings Button */}
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-zinc-700/80 bg-zinc-900/90 hover:bg-zinc-800 hover:border-purple-500/40 text-zinc-300 hover:text-white text-xs font-bold transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40 cursor-pointer"
+            aria-label="Open Media Source and Type Settings"
+            id="settings-open-button"
+          >
+            <Settings className="w-3.5 h-3.5 text-purple-400" />
+            <span>Settings</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-black border border-purple-500/30">
+              {Object.values(mediaSettings.sources).filter(Boolean).length} Sources
+            </span>
+          </button>
         </div>
+
         <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white mb-3 bg-gradient-to-r from-white via-zinc-200 to-purple-400 bg-clip-text text-transparent">
           Hadith Shorts Maker
         </h1>
         <p className="text-zinc-400 max-w-xl text-base md:text-lg">
           Generate gorgeous, vertical YouTube Shorts instantly using localized AI keyword scene matching and FFmpeg rendering.
         </p>
+
+        {/* Live configuration indicator badge */}
+        <div className="mt-3.5 inline-flex flex-wrap items-center gap-2 px-3.5 py-1.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-xs text-zinc-400 shadow-inner">
+          <Sliders className="w-3.5 h-3.5 text-purple-400" />
+          <span className="text-zinc-500 font-medium">Filter:</span>
+          <span className="font-bold text-zinc-200 capitalize">{mediaSettings.mediaType.replace(/_/g, ' ')}</span>
+          <span className="text-zinc-600">•</span>
+          <span className="text-zinc-500 font-medium">Sources:</span>
+          <span className="font-bold text-zinc-200">
+            {Object.entries(mediaSettings.sources)
+              .filter(([_, enabled]) => enabled)
+              .map(([name]) => name.charAt(0).toUpperCase() + name.slice(1))
+              .join(', ')}
+          </span>
+          <span className="text-zinc-600">•</span>
+          <span className="text-zinc-500 font-medium">Motion:</span>
+          <span className={`font-bold ${mediaSettings.enableGraphicMotion !== false ? 'text-purple-400' : 'text-zinc-400'}`}>
+            {mediaSettings.enableGraphicMotion !== false ? 'Enabled' : 'Disabled'}
+          </span>
+          <span className="text-zinc-600">•</span>
+          <span className="text-zinc-500 font-medium">Zoom:</span>
+          <span className="font-bold text-zinc-200 tabular-nums">{(mediaSettings.zoomSpeed ?? 1.0).toFixed(1)}x</span>
+          <span className="text-zinc-600">•</span>
+          <span className="text-zinc-500 font-medium">Fade:</span>
+          <span className="font-bold text-zinc-200 tabular-nums">{(mediaSettings.transitionDuration ?? 0.3).toFixed(1)}s</span>
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            className="text-purple-400 hover:text-purple-300 ml-1 font-bold underline text-[11px] transition-colors"
+          >
+            Configure
+          </button>
+        </div>
       </header>
 
       {/* Main Grid Layout */}
@@ -491,75 +570,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Video Style Settings Panel */}
-          {scenes.length > 0 && (
-            <section className="rounded-2xl glass-panel p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-300">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-2">
-                <Sliders className="w-5 h-5 text-purple-400" />
-                2. Configure Video Style
-              </h2>
-              <p className="text-xs text-zinc-400 mb-6">
-                Adjust camera panning speed and scene transitions.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Zoom Speed Setting */}
-                <div className="flex flex-col gap-2.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
-                      Zoom/Pan Animation Speed
-                    </label>
-                    <span className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-black">
-                      {zoomSpeed}x
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.2"
-                    max="2.0"
-                    step="0.1"
-                    value={zoomSpeed}
-                    onChange={(e) => setZoomSpeed(parseFloat(e.target.value))}
-                    disabled={isGenerating}
-                    className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-purple-500 outline-none"
-                  />
-                  <div className="flex justify-between text-[10px] text-zinc-500 font-bold">
-                    <span>0.2x (Subtle Pan)</span>
-                    <span>1.0x (Default)</span>
-                    <span>2.0x (Dramatic Zoom)</span>
-                  </div>
-                </div>
-
-                {/* Transition Duration Setting */}
-                <div className="flex flex-col gap-2.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
-                      Crossfade Transition Duration
-                    </label>
-                    <span className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-black">
-                      {transitionDuration}s
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.0"
-                    max="1.5"
-                    step="0.1"
-                    value={transitionDuration}
-                    onChange={(e) => setTransitionDuration(parseFloat(e.target.value))}
-                    disabled={isGenerating}
-                    className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-purple-500 outline-none"
-                  />
-                  <div className="flex justify-between text-[10px] text-zinc-500 font-bold">
-                    <span>0.0s (Hard Cuts)</span>
-                    <span>0.3s (Default)</span>
-                    <span>1.5s (Long Fade)</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-          )}
-
           {/* Extracted/Matched Scenes Panel */}
           {scenes.length > 0 && (
             <section className="rounded-2xl glass-panel p-6 shadow-2xl">
@@ -567,7 +577,7 @@ export default function Home() {
                 <div>
                   <h2 className="text-xl font-bold text-white flex items-center gap-2">
                     <ImageIcon className="w-5 h-5 text-purple-400" />
-                    3. Matched Visual Storyboard
+                    2. Matched Visual Storyboard
                   </h2>
                   <p className="text-xs text-zinc-400 mt-1">
                     Review matching scenes and customize the storyboard.
@@ -602,24 +612,42 @@ export default function Home() {
                 {scenes.map((scene, idx) => (
                   <div key={idx} className="rounded-xl glass-card overflow-hidden flex flex-col relative group">
                     
-                    {/* Scene Image Preview */}
+                    {/* Scene Media Preview (Video or Image) */}
                     <div className="relative h-44 bg-zinc-950 flex items-center justify-center overflow-hidden">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`/api/images/${encodeURIComponent(scene.image)}`}
-                        alt={scene.keyword}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        onError={(e) => {
-                          // Fallback if image fails to render
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
-                      />
+                      {/\.(mp4|webm|mov)$/i.test(scene.image) ? (
+                        <video
+                          src={`/api/images/${encodeURIComponent(scene.image)}`}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                      ) : (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={`/api/images/${encodeURIComponent(scene.image)}`}
+                          alt={scene.keyword}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          onError={(e) => {
+                            // Fallback if image fails to render
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      )}
 
                       {/* Scene Badge Indicator */}
                       <div className="absolute top-2 left-2 flex flex-col gap-1.5">
-                        <span className="px-2.5 py-1 rounded-md text-xs font-black bg-black/75 text-white border border-white/10 backdrop-blur-sm shadow-md">
-                          Scene {idx + 1}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="px-2.5 py-1 rounded-md text-xs font-black bg-black/75 text-white border border-white/10 backdrop-blur-sm shadow-md">
+                            Scene {idx + 1}
+                          </span>
+                          {/\.(mp4|webm|mov)$/i.test(scene.image) && (
+                            <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-purple-600/90 text-white shadow-md flex items-center gap-1">
+                              <Film className="w-2.5 h-2.5" /> Video
+                            </span>
+                          )}
+                        </div>
                         
                         {scene.isFallback && (
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/90 text-zinc-950 shadow-md">
@@ -648,9 +676,11 @@ export default function Home() {
 
                         {scene.graphics && scene.graphics.length > 0 && (
                           <div className="mt-2.5 pt-2 border-t border-zinc-800/80 flex flex-col gap-1">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1">
+                            <span className={`text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                              mediaSettings.enableGraphicMotion !== false ? 'text-purple-400' : 'text-zinc-500 line-through'
+                            }`}>
                               <Sparkles className="w-2.5 h-2.5" />
-                              Kinetic Graphic
+                              Kinetic Graphic {mediaSettings.enableGraphicMotion === false && '(Disabled in settings)'}
                             </span>
                             <div className="flex flex-col gap-1">
                               {scene.graphics.map((g, gIdx) => (
@@ -783,101 +813,26 @@ export default function Home() {
       </div>
 
       {/* Searchable Replace Image Selection Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          
-          {/* Backdrop Blur overlay */}
-          <div 
-            className="absolute inset-0 bg-black/85 backdrop-blur-sm"
-            onClick={() => setIsModalOpen(false)}
-          />
-          
-          {/* Modal Content container */}
-          <div className="relative w-full max-w-3xl max-h-[85vh] rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            
-            {/* Header */}
-            <div className="p-5 border-b border-zinc-800/80 flex items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-bold text-white">Select Replacement Image</h3>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  Choose a physical asset from the local image-library folder.
-                </p>
-              </div>
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      <ReplaceImageModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setReplacingIndex(null);
+        }}
+        onSelectImage={handleSelectImage}
+        allImages={allLibraryImages}
+        currentImage={replacingIndex !== null && scenes[replacingIndex] ? scenes[replacingIndex].image : undefined}
+        sceneIndex={replacingIndex}
+        sceneKeyword={replacingIndex !== null && scenes[replacingIndex] ? scenes[replacingIndex].keyword : undefined}
+      />
 
-            {/* Search Input Bar */}
-            <div className="p-4 bg-zinc-900/30 border-b border-zinc-800/60 flex items-center gap-3">
-              <Search className="w-4 h-4 text-zinc-500 shrink-0" />
-              <input
-                type="text"
-                className="w-full bg-transparent border-0 text-sm text-zinc-200 placeholder-zinc-500 outline-none focus:ring-0"
-                placeholder="Search images by name or keyword..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                autoFocus
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="text-zinc-500 hover:text-zinc-300">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Scrollable Gallery grid */}
-            <div className="p-6 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 flex-grow">
-              {filteredImages.length > 0 ? (
-                filteredImages.map((image, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSelectImage(image)}
-                    className="flex flex-col text-left rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800/80 hover:border-purple-500/50 hover:shadow-[0_0_15px_rgba(168,85,247,0.15)] group transition-all"
-                  >
-                    <div className="relative h-24 bg-zinc-950 flex items-center justify-center overflow-hidden">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={`/api/images/${encodeURIComponent(image)}`}
-                        alt={image}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                    </div>
-                    <div className="p-3">
-                      <span className="text-[10px] font-medium text-zinc-400 truncate block group-hover:text-purple-400 transition-colors">
-                        {image}
-                      </span>
-                    </div>
-                  </button>
-                ))
-              ) : (
-                <div className="col-span-full py-12 text-center flex flex-col items-center justify-center">
-                  <ImageIcon className="w-8 h-8 text-zinc-700 mb-2" />
-                  <p className="text-sm font-bold text-zinc-500">No matching assets found</p>
-                  <p className="text-xs text-zinc-600 mt-0.5">Try searching with a different term.</p>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-zinc-800/80 bg-zinc-900/40 text-right flex items-center justify-between text-xs text-zinc-500">
-              <span>Showing {filteredImages.length} of {allLibraryImages.length} images</span>
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 rounded-lg bg-zinc-900 border border-zinc-800 font-bold hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
-              >
-                Close
-              </button>
-            </div>
-
-          </div>
-
-        </div>
-      )}
+      {/* Settings Configuration Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={mediaSettings}
+        onSave={handleSaveSettings}
+      />
     </main>
   );
 }
