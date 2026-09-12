@@ -13,9 +13,23 @@ export interface GraphicBeat {
   end: number;
 }
 
+export interface TranscriptSegment {
+  text: string;
+  start: number;
+  duration: number;
+  end: number;
+}
+
+export interface CaptionSlice {
+  text: string;
+  start: number;
+  end: number;
+}
+
 function buildGraphicBeats(
   transcript: string,
   duration: number,
+  segments?: TranscriptSegment[],
 ): GraphicBeat[] {
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 6;
   const cleanedTranscript = transcript.replace(/\s+/g, " ").trim();
@@ -68,6 +82,120 @@ function buildGraphicBeats(
   return beats;
 }
 
+function normalizeSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
+  if (!segments || segments.length === 0) return [];
+  const sorted = [...segments].sort((a, b) => a.start - b.start);
+  return sorted.map((seg, idx) => {
+    const nextSeg = sorted[idx + 1];
+    const rawEnd = Number.isFinite(seg.end) && seg.end > seg.start ? seg.end : seg.start + (seg.duration || 0);
+    // In YouTube transcripts, segments overlap on screen for readability.
+    // The actual spoken span of segment i concludes when nextSeg starts speaking.
+    const effectiveEnd = nextSeg && nextSeg.start > seg.start && nextSeg.start < rawEnd
+      ? nextSeg.start
+      : rawEnd;
+    const effectiveDuration = Number(Math.max(0.5, effectiveEnd - seg.start).toFixed(2));
+    return {
+      ...seg,
+      duration: effectiveDuration,
+      end: Number(effectiveEnd.toFixed(2)),
+    };
+  });
+}
+
+function alignScenesToSegments(
+  scenes: GroqScene[],
+  rawSegments: TranscriptSegment[],
+): GroqScene[] {
+  if (!rawSegments || rawSegments.length === 0) return scenes;
+  const segments = normalizeSegments(rawSegments);
+
+  const numScenes = scenes.length;
+  const numSegments = segments.length;
+  if (numScenes === 0) return scenes;
+
+  let currentSegmentIdx = 0;
+
+  return scenes.map((scene, sceneIdx) => {
+    const isFirstScene = sceneIdx === 0;
+    const isLastScene = sceneIdx === numScenes - 1;
+    const segStart = currentSegmentIdx;
+
+    const remainingScenes = numScenes - sceneIdx;
+    const remainingSegments = numSegments - currentSegmentIdx;
+
+    const segmentsForThisScene = isLastScene
+      ? Math.max(1, remainingSegments)
+      : Math.max(1, Math.round(remainingSegments / remainingScenes));
+
+    const segEnd = isLastScene
+      ? numSegments - 1
+      : Math.min(numSegments - 1, currentSegmentIdx + segmentsForThisScene - 1);
+
+    currentSegmentIdx = segEnd + 1;
+
+    // First scene starts from 0.0s to ensure no silent initial blank freeze
+    const sceneStartTime = isFirstScene ? 0 : (segments[segStart]?.start ?? 0);
+    const sceneEndTime = isLastScene
+      ? (segments[numSegments - 1]?.end ?? (sceneStartTime + 5))
+      : (segments[segEnd]?.end ?? (sceneStartTime + 5));
+
+    const accurateDuration = Number(
+      Math.max(1.0, sceneEndTime - sceneStartTime).toFixed(2),
+    );
+
+    const alignedGraphics = (scene.graphics || []).map((beat) => {
+      const hero = String(beat.heroWord || beat.accent || "").trim().toLowerCase();
+
+      let matchedSegment = segments[segStart];
+      for (let s = segStart; s <= segEnd; s++) {
+        if (segments[s]?.text.toLowerCase().includes(hero)) {
+          matchedSegment = segments[s];
+          break;
+        }
+      }
+
+      const relStart = Math.max(
+        0,
+        (matchedSegment?.start ?? sceneStartTime) - sceneStartTime,
+      );
+      const relDuration = Math.max(0.8, matchedSegment?.duration ?? 1.5);
+      const relEnd = Math.min(
+        accurateDuration,
+        Math.max(relStart + 0.8, relStart + relDuration),
+      );
+
+      return {
+        ...beat,
+        start: Number(relStart.toFixed(2)),
+        end: Number(relEnd.toFixed(2)),
+      };
+    });
+
+    const sceneCaptions: CaptionSlice[] = [];
+    for (let s = segStart; s <= segEnd; s++) {
+      if (segments[s]) {
+        const relStart = Math.max(0, segments[s].start - sceneStartTime);
+        const relEnd = Math.min(
+          accurateDuration,
+          Math.max(relStart + 0.5, segments[s].end - sceneStartTime),
+        );
+        sceneCaptions.push({
+          text: segments[s].text,
+          start: Number(relStart.toFixed(2)),
+          end: Number(relEnd.toFixed(2)),
+        });
+      }
+    }
+
+    return {
+      ...scene,
+      duration: accurateDuration,
+      graphics: alignedGraphics.length > 0 ? alignedGraphics : undefined,
+      captions: sceneCaptions.length > 0 ? sceneCaptions : undefined,
+    };
+  });
+}
+
 interface GroqScene {
   keyword: string;
   duration: number;
@@ -75,6 +203,7 @@ interface GroqScene {
   graphics?: GraphicBeat[];
   tags?: string[];
   caption?: string;
+  captions?: CaptionSlice[];
 }
 
 function extractAndParseScenes(rawContent: string): GroqScene[] {
@@ -156,7 +285,7 @@ function extractAndParseScenes(rawContent: string): GroqScene[] {
 
 export async function POST(request: Request) {
   try {
-    const { transcript, targetLength } = await request.json();
+    const { transcript, targetLength, segments } = await request.json();
 
     if (
       !transcript ||
@@ -191,6 +320,17 @@ export async function POST(request: Request) {
       apiKey: apiKey,
     });
 
+    const hasSegments = Array.isArray(segments) && segments.length > 0;
+    const normalizedSegments = hasSegments ? normalizeSegments(segments) : [];
+    const formattedSegmentsText = hasSegments
+      ? normalizedSegments
+          .map(
+            (s: TranscriptSegment, idx: number) =>
+              `[${idx + 1}] (${s.start.toFixed(2)}s - ${s.end.toFixed(2)}s) "${s.text}"`,
+          )
+          .join("\n")
+      : "";
+
     const prompt = `You are creating Islamic YouTube Shorts.
 Analyze the transcript.
 Extract visual scenes.
@@ -223,7 +363,20 @@ Rules:
 * Since these are Islamic shorts, prepend "Muslim" or "Islamic" or configure Islamic context for keywords, characters, and activities to ensure visual relevance (e.g. use "Muslim woman" instead of "woman", "Islamic prayer" instead of "prayer", "Muslim husband" instead of "husband", "Muslim couple" instead of "love", "Muslim peace" instead of "peace").
 * The prompts should depict respectful, modest, and beautiful anime art.
 * Generate 5-10 scenes.
-${targetLength ? `* The total duration of all scenes combined must be exactly ${targetLength} seconds. Adjust the duration of individual scenes (which must be numbers) so they sum up to exactly ${targetLength}.` : "* Total duration of all scenes combined should ideally be between 15 to 45 seconds."}
+${
+  hasSegments
+    ? `* REAL AUDIO SEGMENTS WITH EXACT TIMESTAMPS:
+${formattedSegmentsText}
+
+CRITICAL TIMELINE SYNCHRONIZATION RULES:
+- The video has exact audio timestamps provided in the segments above.
+- You MUST align the scenes to these exact audio segments.
+- The "duration" of each scene MUST match the exact duration of the segments it covers (e.g., if Scene 1 covers 0.00s to 4.90s, duration is 4.90).
+- For graphic beats, set "start" and "end" relative to that scene's start time matching when the heroWord is spoken in the segment.`
+    : targetLength
+      ? `* The total duration of all scenes combined must be exactly ${targetLength} seconds. Adjust the duration of individual scenes (which must be numbers) so they sum up to exactly ${targetLength}.`
+      : "* Total duration of all scenes combined should ideally be between 15 to 45 seconds."
+}
 
 Example output:
 {
@@ -293,55 +446,60 @@ ${transcript}`;
       caption: scene.caption ? String(scene.caption) : undefined,
       graphics: Array.isArray(scene.graphics) ? scene.graphics : undefined,
     }));
-    const targetLengthNum = Number(targetLength);
-    if (targetLengthNum && !isNaN(targetLengthNum) && targetLengthNum > 0) {
-      const currentSum = finalScenes.reduce(
-        (acc: number, s: GroqScene) => acc + (Number(s.duration) || 0),
-        0,
-      );
-      if (currentSum > 0) {
-        finalScenes = finalScenes.map((s: GroqScene) => ({
-          ...s,
-          duration: Number(
-            (
-              (Number(s.duration) || 0) *
-              (targetLengthNum / currentSum)
-            ).toFixed(2),
-          ),
-        }));
 
-        const newSum = finalScenes.reduce(
-          (acc: number, s: GroqScene) => acc + s.duration,
+    if (hasSegments) {
+      finalScenes = alignScenesToSegments(finalScenes, segments);
+    } else {
+      const targetLengthNum = Number(targetLength);
+      if (targetLengthNum && !isNaN(targetLengthNum) && targetLengthNum > 0) {
+        const currentSum = finalScenes.reduce(
+          (acc: number, s: GroqScene) => acc + (Number(s.duration) || 0),
           0,
         );
-        const difference = targetLengthNum - newSum;
-        if (Math.abs(difference) > 0.001 && finalScenes.length > 0) {
-          finalScenes[finalScenes.length - 1].duration = Number(
-            (finalScenes[finalScenes.length - 1].duration + difference).toFixed(
-              2,
+        if (currentSum > 0) {
+          finalScenes = finalScenes.map((s: GroqScene) => ({
+            ...s,
+            duration: Number(
+              (
+                (Number(s.duration) || 0) *
+                (targetLengthNum / currentSum)
+              ).toFixed(2),
             ),
-          );
-        }
-      } else {
-        const equalDuration = Number(
-          (targetLengthNum / finalScenes.length).toFixed(2),
-        );
-        finalScenes = finalScenes.map((s: GroqScene) => ({
-          ...s,
-          duration: equalDuration,
-        }));
+          }));
 
-        const newSum = finalScenes.reduce(
-          (acc: number, s: GroqScene) => acc + s.duration,
-          0,
-        );
-        const difference = targetLengthNum - newSum;
-        if (Math.abs(difference) > 0.001 && finalScenes.length > 0) {
-          finalScenes[finalScenes.length - 1].duration = Number(
-            (finalScenes[finalScenes.length - 1].duration + difference).toFixed(
-              2,
-            ),
+          const newSum = finalScenes.reduce(
+            (acc: number, s: GroqScene) => acc + s.duration,
+            0,
           );
+          const difference = targetLengthNum - newSum;
+          if (Math.abs(difference) > 0.001 && finalScenes.length > 0) {
+            finalScenes[finalScenes.length - 1].duration = Number(
+              (finalScenes[finalScenes.length - 1].duration + difference).toFixed(
+                2,
+              ),
+            );
+          }
+        } else {
+          const equalDuration = Number(
+            (targetLengthNum / finalScenes.length).toFixed(2),
+          );
+          finalScenes = finalScenes.map((s: GroqScene) => ({
+            ...s,
+            duration: equalDuration,
+          }));
+
+          const newSum = finalScenes.reduce(
+            (acc: number, s: GroqScene) => acc + s.duration,
+            0,
+          );
+          const difference = targetLengthNum - newSum;
+          if (Math.abs(difference) > 0.001 && finalScenes.length > 0) {
+            finalScenes[finalScenes.length - 1].duration = Number(
+              (finalScenes[finalScenes.length - 1].duration + difference).toFixed(
+                2,
+              ),
+            );
+          }
         }
       }
     }
@@ -376,11 +534,25 @@ ${transcript}`;
                 end,
               };
             })
-          : buildGraphicBeats(transcript, duration);
+          : buildGraphicBeats(transcript, duration, hasSegments ? segments : undefined);
+
+      const captions: CaptionSlice[] =
+        Array.isArray(scene.captions) && scene.captions.length > 0
+          ? scene.captions
+          : scene.caption || scene.keyword
+            ? [
+                {
+                  text: scene.caption || scene.keyword,
+                  start: 0.0,
+                  end: duration,
+                },
+              ]
+            : [];
 
       return {
         ...scene,
         graphics,
+        captions: captions.length > 0 ? captions : undefined,
       };
     });
 

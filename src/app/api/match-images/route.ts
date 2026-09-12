@@ -14,6 +14,19 @@ interface GraphicBeat {
   end: number;
 }
 
+interface CaptionSlice {
+  text: string;
+  start: number;
+  end: number;
+}
+
+interface SceneInput {
+  keyword: string;
+  duration: number;
+  graphics?: GraphicBeat[];
+  captions?: CaptionSlice[];
+}
+
 interface MediaSettingsPayload {
   sources?: {
     unsplash?: boolean;
@@ -109,6 +122,7 @@ export async function POST(request: Request) {
       image: string;
       isFallback: boolean;
       graphics?: GraphicBeat[];
+      captions?: CaptionSlice[];
     }> = [];
 
     const usedAssets = new Set<string>();
@@ -120,7 +134,7 @@ export async function POST(request: Request) {
 
     for (let sceneIdx = 0; sceneIdx < scenes.length; sceneIdx++) {
       const scene = scenes[sceneIdx];
-      const { keyword, duration, graphics } = scene;
+      const { keyword, duration, graphics, captions } = scene;
       const kw = keyword ? keyword.trim() : "";
 
       // Determine preference for this scene: video vs image
@@ -142,6 +156,7 @@ export async function POST(request: Request) {
           image: fallback,
           isFallback: true,
           graphics: Array.isArray(graphics) ? graphics : undefined,
+          captions: Array.isArray(captions) ? captions : undefined,
         });
         usedAssets.add(fallback);
         continue;
@@ -211,6 +226,7 @@ export async function POST(request: Request) {
           image: foundAsset,
           isFallback: false,
           graphics: Array.isArray(graphics) ? graphics : undefined,
+          captions: Array.isArray(captions) ? captions : undefined,
         });
         usedAssets.add(foundAsset);
         continue;
@@ -235,6 +251,7 @@ export async function POST(request: Request) {
             image: chosen,
             isFallback: false,
             graphics: Array.isArray(graphics) ? graphics : undefined,
+            captions: Array.isArray(captions) ? captions : undefined,
           });
           usedAssets.add(chosen);
           continue;
@@ -253,6 +270,7 @@ export async function POST(request: Request) {
         image: fallback,
         isFallback: true,
         graphics: Array.isArray(graphics) ? graphics : undefined,
+        captions: Array.isArray(captions) ? captions : undefined,
       });
       usedAssets.add(fallback);
     }

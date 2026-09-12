@@ -12,11 +12,14 @@ import {
   HardDrive, 
   Globe, 
   Sparkles,
-  SlidersHorizontal
+  SlidersHorizontal,
+  MessageSquareText,
+  Type
 } from 'lucide-react';
 
 export type MediaSourceKey = 'unsplash' | 'pixabay' | 'pexels' | 'local';
 export type MediaTypeFilter = 'only_videos' | 'only_images' | 'both';
+export type TextOverlayMode = 'none' | 'captions' | 'graphics';
 
 export interface MediaSettings {
   sources: {
@@ -26,7 +29,8 @@ export interface MediaSettings {
     local: boolean;
   };
   mediaType: MediaTypeFilter;
-  enableGraphicMotion: boolean;
+  textOverlayMode: TextOverlayMode;
+  enableGraphicMotion?: boolean;
   zoomSpeed: number;
   transitionDuration: number;
 }
@@ -39,7 +43,8 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
     local: true,
   },
   mediaType: 'both',
-  enableGraphicMotion: true,
+  textOverlayMode: 'captions',
+  enableGraphicMotion: false,
   zoomSpeed: 1.0,
   transitionDuration: 0.3,
 };
@@ -51,6 +56,12 @@ interface SettingsModalProps {
   onSave: (newSettings: MediaSettings) => void;
 }
 
+function resolveOverlayMode(s: MediaSettings): TextOverlayMode {
+  if (s.textOverlayMode) return s.textOverlayMode;
+  if (s.enableGraphicMotion) return 'graphics';
+  return 'captions';
+}
+
 export default function SettingsModal({
   isOpen,
   onClose,
@@ -60,8 +71,8 @@ export default function SettingsModal({
   // Local scratch state for form editing before confirming
   const [draftSources, setDraftSources] = useState(settings.sources);
   const [draftMediaType, setDraftMediaType] = useState<MediaTypeFilter>(settings.mediaType);
-  const [draftEnableGraphicMotion, setDraftEnableGraphicMotion] = useState<boolean>(
-    settings.enableGraphicMotion !== false
+  const [draftTextOverlayMode, setDraftTextOverlayMode] = useState<TextOverlayMode>(
+    resolveOverlayMode(settings)
   );
   const [draftZoomSpeed, setDraftZoomSpeed] = useState<number>(
     typeof settings.zoomSpeed === 'number' ? settings.zoomSpeed : DEFAULT_MEDIA_SETTINGS.zoomSpeed
@@ -78,7 +89,7 @@ export default function SettingsModal({
     if (isOpen) {
       setDraftSources(settings.sources);
       setDraftMediaType(settings.mediaType);
-      setDraftEnableGraphicMotion(settings.enableGraphicMotion !== false);
+      setDraftTextOverlayMode(resolveOverlayMode(settings));
       setDraftZoomSpeed(
         typeof settings.zoomSpeed === 'number' ? settings.zoomSpeed : DEFAULT_MEDIA_SETTINGS.zoomSpeed
       );
@@ -133,7 +144,8 @@ export default function SettingsModal({
     onSave({
       sources: draftSources,
       mediaType: draftMediaType,
-      enableGraphicMotion: draftEnableGraphicMotion,
+      textOverlayMode: draftTextOverlayMode,
+      enableGraphicMotion: draftTextOverlayMode === 'graphics',
       zoomSpeed: draftZoomSpeed,
       transitionDuration: draftTransitionDuration,
     });
@@ -143,7 +155,7 @@ export default function SettingsModal({
   const handleResetDefaults = () => {
     setDraftSources(DEFAULT_MEDIA_SETTINGS.sources);
     setDraftMediaType(DEFAULT_MEDIA_SETTINGS.mediaType);
-    setDraftEnableGraphicMotion(DEFAULT_MEDIA_SETTINGS.enableGraphicMotion);
+    setDraftTextOverlayMode(DEFAULT_MEDIA_SETTINGS.textOverlayMode);
     setDraftZoomSpeed(DEFAULT_MEDIA_SETTINGS.zoomSpeed);
     setDraftTransitionDuration(DEFAULT_MEDIA_SETTINGS.transitionDuration);
     setValidationError(null);
@@ -198,6 +210,36 @@ export default function SettingsModal({
       label: 'Both images and stock video footage',
       description: 'Intelligently mix static photos and dynamic video clips',
       icon: SlidersHorizontal,
+    },
+  ];
+
+  const overlayModeOptions: {
+    id: TextOverlayMode;
+    label: string;
+    badge: string;
+    description: string;
+    icon: React.ElementType;
+  }[] = [
+    {
+      id: 'captions',
+      label: 'Spoken Captions Only',
+      badge: 'Recommended',
+      description: 'Displays clean spoken subtitles synchronized with the audio speech timeline in the lower third.',
+      icon: MessageSquareText,
+    },
+    {
+      id: 'graphics',
+      label: 'Graphic Motion Only',
+      badge: 'Kinetic',
+      description: 'Displays dynamic animated hero typography (gold gradients, dual-tone punchlines, and slide-up animations).',
+      icon: Sparkles,
+    },
+    {
+      id: 'none',
+      label: 'None (Clean Video)',
+      badge: 'Pure Footage',
+      description: 'Generates clean background video and photo imagery with zero on-screen text overlays.',
+      icon: Film,
     },
   ];
 
@@ -399,61 +441,79 @@ export default function SettingsModal({
             </div>
           </fieldset>
 
-          {/* Section 3: Graphic Motion & Kinetic Overlays */}
+          {/* Section 3: On-Screen Text & Motion Overlays (Mutually Exclusive) */}
           <fieldset className="space-y-3">
             <legend className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-400" />
-              Graphic Motion & Kinetic Overlays
+              <Type className="w-4 h-4 text-purple-400" />
+              On-Screen Text & Motion Overlays
             </legend>
 
             <p className="text-xs text-zinc-400">
-              Configure whether kinetic typography and emphasis graphic overlays are animated over the final video.
+              Choose how on-screen text is presented. Captions and graphic motion are mutually exclusive and will never be displayed together.
             </p>
 
-            <label
-              htmlFor="toggle-graphic-motion"
-              className={`relative flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
-                draftEnableGraphicMotion
-                  ? 'bg-purple-950/20 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
-                  : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/70'
-              }`}
-            >
-              <div className="pt-0.5">
-                <input
-                  type="checkbox"
-                  id="toggle-graphic-motion"
-                  checked={draftEnableGraphicMotion}
-                  onChange={(e) => setDraftEnableGraphicMotion(e.target.checked)}
-                  className="sr-only"
-                  aria-checked={draftEnableGraphicMotion}
-                />
-                <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
-                  draftEnableGraphicMotion 
-                    ? 'bg-purple-600 border-purple-500 text-white' 
-                    : 'border-zinc-700 bg-zinc-900'
-                }`}>
-                  {draftEnableGraphicMotion && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                </div>
-              </div>
+            <div className="flex flex-col gap-2.5 pt-1" role="radiogroup" aria-label="Text Overlay Mode">
+              {overlayModeOptions.map((opt) => {
+                const isSelected = draftTextOverlayMode === opt.id;
+                const IconComponent = opt.icon;
 
-              <div className="flex-grow min-w-0">
-                <div className="flex items-center justify-between gap-1 mb-0.5">
-                  <span className="text-sm font-bold text-white flex items-center gap-1.5">
-                    Graphic Motion
-                  </span>
-                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
-                    draftEnableGraphicMotion
-                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                      : 'bg-zinc-800 text-zinc-400 border-zinc-700/50'
-                  }`}>
-                    {draftEnableGraphicMotion ? 'Used in video' : 'Not used'}
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  If checked, uses kinetic motion graphic overlays (gold gradients, dual-tone punchlines, and slide-up animations) over each scene. If unchecked, generates clean background footage without graphics.
-                </p>
-              </div>
-            </label>
+                return (
+                  <label
+                    key={opt.id}
+                    htmlFor={`overlay-mode-${opt.id}`}
+                    className={`relative flex items-center gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                      isSelected
+                        ? 'bg-purple-950/20 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
+                        : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/70'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      id={`overlay-mode-${opt.id}`}
+                      name="textOverlayMode"
+                      value={opt.id}
+                      checked={isSelected}
+                      onChange={() => setDraftTextOverlayMode(opt.id)}
+                      className="sr-only"
+                    />
+
+                    {/* Styled Radio Circle */}
+                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors shrink-0 ${
+                      isSelected 
+                        ? 'border-purple-500 bg-purple-500/20' 
+                        : 'border-zinc-700 bg-zinc-900'
+                    }`}>
+                      {isSelected && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 flex-grow min-w-0">
+                      <div className={`p-2 rounded-lg ${isSelected ? 'bg-purple-500/20 text-purple-300' : 'bg-zinc-800/80 text-zinc-400'}`}>
+                        <IconComponent className="w-4 h-4" />
+                      </div>
+                      <div className="flex-grow min-w-0">
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <span className="text-sm font-bold text-white block">
+                            {opt.label}
+                          </span>
+                          <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
+                            isSelected
+                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                              : 'bg-zinc-800 text-zinc-400 border-zinc-700/50'
+                          }`}>
+                            {opt.badge}
+                          </span>
+                        </div>
+                        <span className="text-xs text-zinc-400 block leading-tight">
+                          {opt.description}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
           </fieldset>
 
           {/* Section 4: Camera & Transition Dynamics */}

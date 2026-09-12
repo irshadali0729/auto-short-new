@@ -8,6 +8,10 @@ import {
   GraphicBeat,
   renderGraphicOverlayPng,
 } from "@/app/utils/graphics-renderer";
+import {
+  CaptionSlice,
+  renderCaptionOverlayPng,
+} from "@/app/utils/caption-renderer";
 
 const ffmpegPath = ffmpegInstaller.path;
 
@@ -17,6 +21,7 @@ interface Scene {
   image: string;
   isFallback: boolean;
   graphics?: GraphicBeat[];
+  captions?: CaptionSlice[];
 }
 
 interface ProgressData {
@@ -144,7 +149,9 @@ export async function POST(request: Request) {
       runId,
       zoomSpeed,
       transitionDuration,
+      textOverlayMode,
       enableGraphicMotion,
+      enableCaptions,
     } = await request.json();
 
     if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
@@ -164,7 +171,16 @@ export async function POST(request: Request) {
     const zoomSpeedMultiplier = typeof zoomSpeed === "number" ? zoomSpeed : 1.0;
     const transitionDurationSec =
       typeof transitionDuration === "number" ? transitionDuration : 0.3;
-    const useGraphicMotion = enableGraphicMotion !== false;
+
+    // Mutually exclusive text overlay mode
+    const resolvedMode: "none" | "captions" | "graphics" =
+      textOverlayMode === "captions" || textOverlayMode === "graphics" || textOverlayMode === "none"
+        ? textOverlayMode
+        : enableGraphicMotion && !enableCaptions
+          ? "graphics"
+          : enableCaptions && !enableGraphicMotion
+            ? "captions"
+            : "none";
 
     progressMap.set(runId, {
       complete: false,
@@ -177,7 +193,7 @@ export async function POST(request: Request) {
       scenes,
       zoomSpeedMultiplier,
       transitionDurationSec,
-      useGraphicMotion,
+      resolvedMode,
     ).catch((err) => {
       console.error("Background compilation crash:", err);
       progressMap.set(runId, {
@@ -201,7 +217,7 @@ async function compileVideoInBackground(
   scenes: Scene[],
   zoomSpeedMultiplier: number,
   transitionDuration: number,
-  enableGraphicMotion: boolean = true,
+  textOverlayMode: "none" | "captions" | "graphics" = "captions",
 ) {
   let tempDir = "";
   try {
@@ -257,9 +273,38 @@ async function compileVideoInBackground(
           : buildDefaultGraphicBeats(duration);
 
       const overlayPngList: Array<{ path: string; start: number; end: number }> = [];
+      const captionPngList: Array<{ path: string; start: number; end: number }> = [];
 
-      // Only generate graphic overlay PNGs if Graphic Motion is enabled
-      if (enableGraphicMotion) {
+      // Mutually exclusive: only render captions OR graphic motion, never both
+      if (textOverlayMode === "captions") {
+        const sceneCaptions =
+          Array.isArray(scene.captions) && scene.captions.length > 0
+            ? scene.captions
+            : [];
+
+        for (let c = 0; c < sceneCaptions.length; c++) {
+          const cap = sceneCaptions[c];
+          const capText = (cap.text || "").trim();
+          if (!capText) continue;
+
+          const overlayPath = path.join(tempDir, `caption_${i}_${c}.png`);
+          try {
+            await renderCaptionOverlayPng(capText, overlayPath);
+            if (fs.existsSync(overlayPath)) {
+              captionPngList.push({
+                path: overlayPath,
+                start: Math.max(0, Number(cap.start) || 0),
+                end: Math.min(
+                  duration,
+                  Math.max((Number(cap.start) || 0) + 0.5, Number(cap.end) || duration),
+                ),
+              });
+            }
+          } catch (capErr) {
+            console.warn(`Failed to render caption overlay ${i}_${c}:`, capErr);
+          }
+        }
+      } else if (textOverlayMode === "graphics") {
         for (let b = 0; b < beats.length; b++) {
           const beat = beats[b];
           const overlayPath = path.join(tempDir, `overlay_${i}_${b}.png`);
@@ -301,8 +346,24 @@ async function compileVideoInBackground(
 
       let currentLabel = "grid";
 
-      // Only compose graphic overlays into FFmpeg filter graph if Graphic Motion is enabled
-      if (enableGraphicMotion) {
+      // Mutually exclusive overlay composition into FFmpeg filter graph
+      if (textOverlayMode === "captions" && captionPngList.length > 0) {
+        captionPngList.forEach((ov, idx) => {
+          const inputIdx = 1 + idx;
+          const nextLabel = `v_cap_${idx}`;
+          const fadedLabel = `faded_cap_${idx}`;
+          const st = ov.start.toFixed(2);
+          const et = ov.end.toFixed(2);
+          const capDur = Math.max(0.1, ov.end - ov.start);
+          const fadeIn = Math.min(0.15, capDur / 4).toFixed(2);
+          const fadeOut = Math.min(0.15, capDur / 4).toFixed(2);
+          const fadeOutStart = Math.max(ov.start, ov.end - Number(fadeOut)).toFixed(2);
+
+          filterGraph += `[${inputIdx}:v]format=rgba,fade=t=in:st=${st}:d=${fadeIn}:alpha=1,fade=t=out:st=${fadeOutStart}:d=${fadeOut}:alpha=1[${fadedLabel}];`;
+          filterGraph += `[${currentLabel}][${fadedLabel}]overlay=x=0:y=0:enable='between(t\\,${st}\\,${et})'[${nextLabel}];`;
+          currentLabel = nextLabel;
+        });
+      } else if (textOverlayMode === "graphics") {
         if (overlayPngList.length > 0) {
           overlayPngList.forEach((ov, idx) => {
             const inputIdx = 1 + idx;
@@ -349,7 +410,14 @@ async function compileVideoInBackground(
         ffmpegArgs.push("-loop", "1", "-i", inputImagePath);
       }
 
-      for (const ov of overlayPngList) {
+      const activePngList =
+        textOverlayMode === "captions"
+          ? captionPngList
+          : textOverlayMode === "graphics"
+            ? overlayPngList
+            : [];
+
+      for (const ov of activePngList) {
         ffmpegArgs.push("-loop", "1", "-i", ov.path);
       }
 

@@ -13,7 +13,9 @@ import {
   CheckCircle2,
   Clock,
   Sliders,
-  Settings
+  Settings,
+  MessageSquareText,
+  Type
 } from 'lucide-react';
 import SettingsModal, { 
   MediaSettings, 
@@ -32,12 +34,26 @@ interface GraphicBeat {
   end: number;
 }
 
+export interface TranscriptSegment {
+  text: string;
+  start: number;
+  duration: number;
+  end: number;
+}
+
+export interface CaptionSlice {
+  text: string;
+  start: number;
+  end: number;
+}
+
 interface Scene {
   keyword: string;
   duration: number;
   image: string;
   isFallback: boolean;
   graphics?: GraphicBeat[];
+  captions?: CaptionSlice[];
 }
 
 
@@ -45,6 +61,7 @@ interface Scene {
 
 export default function Home() {
   const [transcript, setTranscript] = useState('');
+  const [transcriptSegments, setTranscriptSegments] = useState<TranscriptSegment[]>([]);
   const [youtubeLink, setYoutubeLink] = useState('');
   const [isFetchingTranscript, setIsFetchingTranscript] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -134,12 +151,61 @@ export default function Home() {
       }
 
       if (data.transcript && Array.isArray(data.transcript)) {
-        const text = data.transcript
-          .map((s: { text?: string; phrase?: string } | string) => typeof s === 'string' ? s : (s.text || s.phrase || ''))
-          .join(' ');
-        setTranscript(text);
+        const rawSegments = data.transcript;
+        const tempSegments: { text: string; start: number; rawEnd: number }[] = [];
 
-        if (data.length_seconds) {
+        for (const s of rawSegments) {
+          if (s && typeof s === 'object') {
+            const txt = (s.text || s.phrase || '').trim();
+            if (!txt) continue;
+            const start = Number(s.start ?? s.offset ?? 0);
+            const duration = Number(s.duration ?? 0);
+            tempSegments.push({
+              text: txt,
+              start: Number(start.toFixed(2)),
+              rawEnd: Number((start + duration).toFixed(2)),
+            });
+          }
+        }
+
+        // Sort by start timestamp
+        tempSegments.sort((a, b) => a.start - b.start);
+
+        // De-overlap segments: YouTube captions overlap on-screen, but actual spoken time ends when the next segment begins
+        const parsedSegments: TranscriptSegment[] = tempSegments.map((seg, i) => {
+          const nextSeg = tempSegments[i + 1];
+          const end = nextSeg && nextSeg.start > seg.start && nextSeg.start < seg.rawEnd
+            ? nextSeg.start
+            : seg.rawEnd;
+          const duration = Number(Math.max(0.5, end - seg.start).toFixed(2));
+          return {
+            text: seg.text,
+            start: seg.start,
+            duration,
+            end: Number(end.toFixed(2)),
+          };
+        });
+
+        const text = parsedSegments.length > 0
+          ? parsedSegments.map(s => s.text).join(' ')
+          : rawSegments
+              .map((s: { text?: string; phrase?: string } | string) => typeof s === 'string' ? s : (s.text || s.phrase || ''))
+              .join(' ');
+
+        setTranscript(text);
+        setTranscriptSegments(parsedSegments);
+
+        const maxEndTime = parsedSegments.length > 0
+          ? parsedSegments[parsedSegments.length - 1].end
+          : (data.length_seconds ? Number(data.length_seconds) : 0);
+
+        if (parsedSegments.length > 0) {
+          const durationSec = Math.round(maxEndTime);
+          setTargetVideoLength(durationSec);
+          setInfoMessage(
+            `Successfully imported ${parsedSegments.length} timestamped spoken segments (${maxEndTime.toFixed(1)}s audio duration) from YouTube. Audio timeline is accurately synchronized.`
+          );
+        } else if (data.length_seconds) {
           setTargetVideoLength(Number(data.length_seconds));
           setInfoMessage(`Successfully imported transcript from YouTube video. Target length set to ${data.lengthText || data.length_seconds + 's'}.`);
         } else {
@@ -169,11 +235,15 @@ export default function Home() {
     setVideoUrl('');
 
     try {
-      // 1. Analyze transcript to get keywords/durations
+      // 1. Analyze transcript to get keywords/durations (with real timeline segments if present)
       const analyzeRes = await fetch('/api/analyze-transcript', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript, targetLength: targetVideoLength || undefined }),
+        body: JSON.stringify({ 
+          transcript, 
+          targetLength: targetVideoLength || undefined,
+          segments: transcriptSegments.length > 0 ? transcriptSegments : undefined,
+        }),
       });
 
       const analyzeData = await analyzeRes.json();
@@ -283,7 +353,9 @@ export default function Home() {
           runId,
           zoomSpeed: mediaSettings.zoomSpeed ?? 1.0,
           transitionDuration: mediaSettings.transitionDuration ?? 0.3,
-          enableGraphicMotion: mediaSettings.enableGraphicMotion !== false,
+          textOverlayMode: mediaSettings.textOverlayMode || (mediaSettings.enableGraphicMotion ? 'graphics' : 'captions'),
+          enableGraphicMotion: mediaSettings.textOverlayMode === 'graphics',
+          enableCaptions: mediaSettings.textOverlayMode === 'captions',
         }),
       });
 
@@ -395,9 +467,13 @@ export default function Home() {
               .join(', ')}
           </span>
           <span className="text-zinc-600">•</span>
-          <span className="text-zinc-500 font-medium">Motion:</span>
-          <span className={`font-bold ${mediaSettings.enableGraphicMotion !== false ? 'text-purple-400' : 'text-zinc-400'}`}>
-            {mediaSettings.enableGraphicMotion !== false ? 'Enabled' : 'Disabled'}
+          <span className="text-zinc-500 font-medium">Overlay:</span>
+          <span className="font-bold text-purple-400 capitalize">
+            {mediaSettings.textOverlayMode === 'graphics'
+              ? 'Graphic Motion'
+              : mediaSettings.textOverlayMode === 'none'
+                ? 'None'
+                : 'Captions'}
           </span>
           <span className="text-zinc-600">•</span>
           <span className="text-zinc-500 font-medium">Zoom:</span>
@@ -511,6 +587,35 @@ export default function Home() {
               <div className="flex-grow border-t border-zinc-800/80"></div>
             </div>
 
+            {/* Audio Timeline Sync Status Banner */}
+            {transcriptSegments.length > 0 && (
+              <div className="flex items-center justify-between px-3.5 py-2 mb-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-300 shadow-sm transition-all animate-fadeIn">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="font-semibold">
+                    Timeline Synced: <span className="text-emerald-100 font-bold tabular-nums">{transcriptSegments.length}</span> YouTube audio caption slices
+                  </span>
+                  <span className="text-emerald-400/70 hidden sm:inline">
+                    (audio length: <span className="tabular-nums font-bold text-emerald-200">{transcriptSegments[transcriptSegments.length - 1]?.end.toFixed(1)}s</span>)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTranscriptSegments([]);
+                    setInfoMessage('Unlinked YouTube timeline sync. AI will now calculate scene timing using natural spoken rate estimation.');
+                  }}
+                  className="text-[11px] text-emerald-400 hover:text-emerald-200 underline font-medium transition-colors ml-2"
+                  title="Unlink segments to switch to speech rate estimation"
+                >
+                  Unlink Sync
+                </button>
+              </div>
+            )}
+
             <textarea
               className="w-full h-44 rounded-xl glass-input p-4 text-zinc-100 placeholder-zinc-500 resize-none font-sans text-base transition-all"
               placeholder="Paste your Hindi, Urdu, or English transcript here..."
@@ -609,7 +714,10 @@ export default function Home() {
 
               {/* Storyboard Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {scenes.map((scene, idx) => (
+                {scenes.map((scene, idx) => {
+                  const sceneStart = scenes.slice(0, idx).reduce((acc, s) => acc + s.duration, 0);
+                  const sceneEnd = sceneStart + scene.duration;
+                  return (
                   <div key={idx} className="rounded-xl glass-card overflow-hidden flex flex-col relative group">
                     
                     {/* Scene Media Preview (Video or Image) */}
@@ -656,10 +764,11 @@ export default function Home() {
                         )}
                       </div>
 
-                      {/* Duration Tag */}
-                      <div className="absolute bottom-2 right-2 px-2 py-1 rounded bg-black/60 backdrop-blur-sm text-white text-[11px] font-medium flex items-center gap-1 border border-white/5">
+                      {/* Duration Tag with Timeline Sync Range */}
+                      <div className="absolute bottom-2 right-2 px-2.5 py-1 rounded-lg bg-black/80 backdrop-blur-md text-white text-[11px] font-medium flex items-center gap-1.5 border border-white/10 tabular-nums shadow-lg">
                         <Clock className="w-3 h-3 text-purple-400" />
-                        {scene.duration}s
+                        <span className="font-bold">{scene.duration.toFixed(1)}s</span>
+                        <span className="text-zinc-400 text-[10px]">({sceneStart.toFixed(1)}s - {sceneEnd.toFixed(1)}s)</span>
                       </div>
                     </div>
 
@@ -674,24 +783,60 @@ export default function Home() {
                           {scene.image}
                         </span>
 
-                        {scene.graphics && scene.graphics.length > 0 && (
-                          <div className="mt-2.5 pt-2 border-t border-zinc-800/80 flex flex-col gap-1">
-                            <span className={`text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 ${
-                              mediaSettings.enableGraphicMotion !== false ? 'text-purple-400' : 'text-zinc-500 line-through'
-                            }`}>
-                              <Sparkles className="w-2.5 h-2.5" />
-                              Kinetic Graphic {mediaSettings.enableGraphicMotion === false && '(Disabled in settings)'}
-                            </span>
-                            <div className="flex flex-col gap-1">
-                              {scene.graphics.map((g, gIdx) => (
-                                <div key={gIdx} className="px-2 py-1 rounded bg-zinc-950/80 border border-purple-500/20 text-[11px] font-semibold text-zinc-300 flex items-center gap-1.5 shadow-sm">
-                                  {g.prefixText && <span className="text-zinc-200">{g.prefixText}</span>}
-                                  <span className="text-amber-400 font-black uppercase bg-amber-400/10 px-1 rounded">{g.heroWord}</span>
-                                  {g.suffixText && <span className="text-zinc-300">{g.suffixText}</span>}
-                                  <span className="ml-auto text-[9px] text-zinc-500">{g.start.toFixed(1)}s-{g.end.toFixed(1)}s</span>
-                                </div>
-                              ))}
+                        {/* Overlay Section based on mutually exclusive textOverlayMode */}
+                        {mediaSettings.textOverlayMode === 'captions' ? (
+                          scene.captions && scene.captions.length > 0 ? (
+                            <div className="mt-2.5 pt-2 border-t border-zinc-800/80 flex flex-col gap-1">
+                              <span className="text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 text-emerald-400">
+                                <MessageSquareText className="w-2.5 h-2.5" />
+                                Spoken Captions (Synced)
+                              </span>
+                              <div className="flex flex-col gap-1">
+                                {scene.captions.map((c, cIdx) => {
+                                  const absStart = sceneStart + c.start;
+                                  return (
+                                    <div key={cIdx} className="px-2.5 py-1.5 rounded-lg bg-zinc-950/80 border border-emerald-500/20 text-[11px] font-medium text-zinc-200 flex items-center justify-between gap-2 shadow-sm">
+                                      <span className="truncate italic">“{c.text}”</span>
+                                      <span className="shrink-0 text-[10px] text-zinc-400 tabular-nums ml-1">
+                                        +{c.start.toFixed(1)}s <span className="text-zinc-500">(at {absStart.toFixed(1)}s)</span>
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
+                          ) : null
+                        ) : mediaSettings.textOverlayMode === 'graphics' ? (
+                          scene.graphics && scene.graphics.length > 0 ? (
+                            <div className="mt-2.5 pt-2 border-t border-zinc-800/80 flex flex-col gap-1">
+                              <span className="text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 text-purple-400">
+                                <Sparkles className="w-2.5 h-2.5" />
+                                Kinetic Graphic
+                              </span>
+                              <div className="flex flex-col gap-1">
+                                {scene.graphics.map((g, gIdx) => {
+                                  const absStart = sceneStart + g.start;
+                                  return (
+                                    <div key={gIdx} className="px-2.5 py-1.5 rounded-lg bg-zinc-950/80 border border-purple-500/20 text-[11px] font-semibold text-zinc-300 flex items-center justify-between gap-1.5 shadow-sm">
+                                      <div className="flex items-center gap-1 truncate">
+                                        {g.prefixText && <span className="text-zinc-400 font-normal">{g.prefixText}</span>}
+                                        <span className="text-amber-400 font-black uppercase bg-amber-400/10 px-1 rounded">{g.heroWord}</span>
+                                        {g.suffixText && <span className="text-zinc-400 font-normal">{g.suffixText}</span>}
+                                      </div>
+                                      <span className="shrink-0 text-[10px] text-zinc-400 font-medium tabular-nums ml-1">
+                                        +{g.start.toFixed(1)}s <span className="text-zinc-500">(at {absStart.toFixed(1)}s)</span>
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null
+                        ) : (
+                          <div className="mt-2.5 pt-2 border-t border-zinc-800/80">
+                            <span className="text-[10px] text-zinc-500 italic">
+                              Text overlays disabled in settings (clean video)
+                            </span>
                           </div>
                         )}
                       </div>
@@ -706,7 +851,8 @@ export default function Home() {
                     </div>
 
                   </div>
-                ))}
+                );
+              })}
               </div>
             </section>
           )}

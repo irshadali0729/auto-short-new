@@ -7,6 +7,9 @@ export interface GraphicBeat {
   heroWord: string;
   suffixText?: string;
   style?: "stacked-kinetic" | "top-hero" | "thought-bubble" | "breakdown-card";
+  text?: string;
+  accent?: string;
+  type?: "impact" | "money" | "result" | "platform";
   start: number;
   end: number;
 }
