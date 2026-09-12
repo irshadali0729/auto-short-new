@@ -251,9 +251,9 @@ export default function SettingsModal({
       aria-labelledby="settings-dialog-title"
       aria-describedby="settings-dialog-desc"
     >
-      {/* Backdrop overlay */}
+      {/* Backdrop overlay (50% scrim from DESIGN.md) */}
       <div 
-        className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity animate-in fade-in duration-200" 
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity animate-in fade-in duration-200" 
         onClick={onClose}
         aria-hidden="true"
       />
@@ -261,19 +261,19 @@ export default function SettingsModal({
       {/* Modal Dialog Box */}
       <div 
         ref={dialogRef}
-        className="relative w-full max-w-2xl rounded-2xl border border-zinc-800 bg-zinc-950/95 shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-10 my-auto"
+        className="relative w-full max-w-2xl rounded-2xl border border-hairline bg-white shadow-airbnb flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-10 my-auto"
       >
         {/* Header */}
-        <div className="p-6 border-b border-zinc-800/80 flex items-start justify-between gap-4 bg-zinc-900/40">
+        <div className="p-6 border-b border-hairline-soft flex items-start justify-between gap-4 bg-white">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
+            <div className="p-2.5 rounded-full bg-[#fff0f2] text-rausch">
               <SettingsIcon className="w-5 h-5" />
             </div>
             <div>
-              <h2 id="settings-dialog-title" className="text-xl font-bold text-white tracking-tight">
+              <h2 id="settings-dialog-title" className="text-xl font-bold text-ink tracking-tight">
                 Media & Source Configuration
               </h2>
-              <p id="settings-dialog-desc" className="text-xs text-zinc-400 mt-0.5">
+              <p id="settings-dialog-desc" className="text-xs text-muted mt-0.5">
                 Customize where assets are fetched and what media types are utilized.
               </p>
             </div>
@@ -282,7 +282,7 @@ export default function SettingsModal({
           <button 
             ref={closeBtnRef}
             onClick={onClose}
-            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+            className="w-9 h-9 rounded-full bg-white border border-hairline text-ink hover:bg-surface-soft transition-colors flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-ink"
             aria-label="Close settings dialog"
           >
             <X className="w-4 h-4" />
@@ -292,34 +292,34 @@ export default function SettingsModal({
         {/* Validation Warning Alert */}
         {validationError && (
           <div 
-            className="mx-6 mt-4 p-3.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 flex items-center gap-2.5 text-xs font-semibold animate-in fade-in duration-150"
+            className="mx-6 mt-4 p-3.5 rounded-xl border border-red-200 bg-[#fff5f5] text-[#c13515] flex items-center gap-2.5 text-xs font-semibold animate-in fade-in duration-150"
             role="alert"
           >
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
             <span>{validationError}</span>
           </div>
         )}
 
         {/* Scrollable Form Body */}
-        <div className="p-6 space-y-8 overflow-y-auto max-h-[calc(85vh-160px)]">
+        <div className="p-6 space-y-7 overflow-y-auto max-h-[calc(85vh-160px)]">
           
           {/* Section 1: Source Selection (Checkboxes) */}
           <fieldset className="space-y-3">
             <div className="flex items-center justify-between">
-              <legend className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Globe className="w-4 h-4 text-purple-400" />
+              <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+                <Globe className="w-4 h-4 text-rausch" />
                 Source Selection
               </legend>
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-md border ${
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-md border ${
                 isSourceSelectionValid 
-                  ? 'bg-purple-500/10 text-purple-300 border-purple-500/20' 
-                  : 'bg-red-500/10 text-red-300 border-red-500/30'
+                  ? 'bg-surface-soft text-ink border-hairline' 
+                  : 'bg-red-50 text-[#c13515] border-red-200'
               }`}>
                 {selectedSourcesCount} selected
               </span>
             </div>
             
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-muted">
               Select one or more repositories to source video backgrounds and matching imagery.
             </p>
 
@@ -333,8 +333,8 @@ export default function SettingsModal({
                     htmlFor={`source-${src.key}`}
                     className={`relative flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
                       isChecked
-                        ? 'bg-purple-950/20 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
-                        : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/70'
+                        ? 'bg-[#fff8f9] border-rausch shadow-airbnb'
+                        : 'bg-white border-hairline hover:border-border-strong hover:bg-surface-soft'
                     }`}
                   >
                     <div className="pt-0.5">
@@ -348,8 +348,8 @@ export default function SettingsModal({
                       />
                       <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
                         isChecked 
-                          ? 'bg-purple-600 border-purple-500 text-white' 
-                          : 'border-zinc-700 bg-zinc-900'
+                          ? 'bg-rausch border-rausch text-white' 
+                          : 'border-hairline bg-white'
                       }`}>
                         {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                       </div>
@@ -357,15 +357,15 @@ export default function SettingsModal({
 
                     <div className="flex-grow min-w-0">
                       <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className="text-sm font-bold text-white flex items-center gap-1.5">
-                          <IconComponent className={`w-3.5 h-3.5 ${isChecked ? 'text-purple-400' : 'text-zinc-400'}`} />
+                        <span className="text-sm font-bold text-ink flex items-center gap-1.5">
+                          <IconComponent className={`w-3.5 h-3.5 ${isChecked ? 'text-rausch' : 'text-muted'}`} />
                           {src.label}
                         </span>
-                        <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/50">
+                        <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-surface-soft text-muted border border-hairline-soft">
                           {src.badge}
                         </span>
                       </div>
-                      <p className="text-[11px] text-zinc-400 leading-tight">
+                      <p className="text-[11px] text-muted leading-tight">
                         {src.tagline}
                       </p>
                     </div>
@@ -377,12 +377,12 @@ export default function SettingsModal({
 
           {/* Section 2: Media Type Filter (Radio Buttons / Toggle Group) */}
           <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Film className="w-4 h-4 text-purple-400" />
+            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+              <Film className="w-4 h-4 text-rausch" />
               Media Type Filter
             </legend>
 
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-muted">
               Filter the assets requested by the auto-matcher for each generated scene.
             </p>
 
@@ -397,8 +397,8 @@ export default function SettingsModal({
                     htmlFor={`media-type-${opt.id}`}
                     className={`relative flex items-center gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
                       isSelected
-                        ? 'bg-purple-950/20 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
-                        : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/70'
+                        ? 'bg-[#fff8f9] border-rausch shadow-airbnb'
+                        : 'bg-white border-hairline hover:border-border-strong hover:bg-surface-soft'
                     }`}
                   >
                     <input
@@ -414,23 +414,23 @@ export default function SettingsModal({
                     {/* Styled Radio Circle */}
                     <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors shrink-0 ${
                       isSelected 
-                        ? 'border-purple-500 bg-purple-500/20' 
-                        : 'border-zinc-700 bg-zinc-900'
+                        ? 'border-rausch bg-rausch' 
+                        : 'border-hairline bg-white'
                     }`}>
                       {isSelected && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+                        <div className="w-2 h-2 rounded-full bg-white" />
                       )}
                     </div>
 
                     <div className="flex items-center gap-3 flex-grow min-w-0">
-                      <div className={`p-2 rounded-lg ${isSelected ? 'bg-purple-500/20 text-purple-300' : 'bg-zinc-800/80 text-zinc-400'}`}>
+                      <div className={`p-2 rounded-lg ${isSelected ? 'bg-[#fff0f2] text-rausch' : 'bg-surface-soft text-muted'}`}>
                         <IconComponent className="w-4 h-4" />
                       </div>
                       <div className="flex-grow min-w-0">
-                        <span className="text-sm font-bold text-white block">
+                        <span className="text-sm font-bold text-ink block">
                           {opt.label}
                         </span>
-                        <span className="text-xs text-zinc-400 block mt-0.5">
+                        <span className="text-xs text-muted block mt-0.5">
                           {opt.description}
                         </span>
                       </div>
@@ -443,12 +443,12 @@ export default function SettingsModal({
 
           {/* Section 3: On-Screen Text & Motion Overlays (Mutually Exclusive) */}
           <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Type className="w-4 h-4 text-purple-400" />
+            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+              <Type className="w-4 h-4 text-rausch" />
               On-Screen Text & Motion Overlays
             </legend>
 
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-muted">
               Choose how on-screen text is presented. Captions and graphic motion are mutually exclusive and will never be displayed together.
             </p>
 
@@ -463,8 +463,8 @@ export default function SettingsModal({
                     htmlFor={`overlay-mode-${opt.id}`}
                     className={`relative flex items-center gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
                       isSelected
-                        ? 'bg-purple-950/20 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
-                        : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900/70'
+                        ? 'bg-[#fff8f9] border-rausch shadow-airbnb'
+                        : 'bg-white border-hairline hover:border-border-strong hover:bg-surface-soft'
                     }`}
                   >
                     <input
@@ -480,32 +480,32 @@ export default function SettingsModal({
                     {/* Styled Radio Circle */}
                     <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors shrink-0 ${
                       isSelected 
-                        ? 'border-purple-500 bg-purple-500/20' 
-                        : 'border-zinc-700 bg-zinc-900'
+                        ? 'border-rausch bg-rausch' 
+                        : 'border-hairline bg-white'
                     }`}>
                       {isSelected && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+                        <div className="w-2 h-2 rounded-full bg-white" />
                       )}
                     </div>
 
                     <div className="flex items-center gap-3 flex-grow min-w-0">
-                      <div className={`p-2 rounded-lg ${isSelected ? 'bg-purple-500/20 text-purple-300' : 'bg-zinc-800/80 text-zinc-400'}`}>
+                      <div className={`p-2 rounded-lg ${isSelected ? 'bg-[#fff0f2] text-rausch' : 'bg-surface-soft text-muted'}`}>
                         <IconComponent className="w-4 h-4" />
                       </div>
                       <div className="flex-grow min-w-0">
                         <div className="flex items-center justify-between gap-1 mb-0.5">
-                          <span className="text-sm font-bold text-white block">
+                          <span className="text-sm font-bold text-ink block">
                             {opt.label}
                           </span>
                           <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
                             isSelected
-                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                              : 'bg-zinc-800 text-zinc-400 border-zinc-700/50'
+                              ? 'bg-[#fff0f2] text-rausch border-[#ffd1da]'
+                              : 'bg-surface-soft text-muted border-hairline-soft'
                           }`}>
                             {opt.badge}
                           </span>
                         </div>
-                        <span className="text-xs text-zinc-400 block leading-tight">
+                        <span className="text-xs text-muted block leading-tight">
                           {opt.description}
                         </span>
                       </div>
@@ -518,23 +518,23 @@ export default function SettingsModal({
 
           {/* Section 4: Camera & Transition Dynamics */}
           <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <SlidersHorizontal className="w-4 h-4 text-purple-400" />
+            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-rausch" />
               Camera Dynamics & Transitions
             </legend>
 
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-muted">
               Configure camera zooming motion across clips and crossfade transition timing between scenes.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
               {/* Zoom Speed Card */}
-              <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/40 flex flex-col gap-3">
+              <div className="p-4 rounded-xl border border-hairline bg-surface-soft/60 flex flex-col gap-3">
                 <div className="flex justify-between items-center">
-                  <label htmlFor="settings-zoom-speed" className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+                  <label htmlFor="settings-zoom-speed" className="text-xs font-bold text-ink uppercase tracking-wider">
                     Zoom/Pan Speed
                   </label>
-                  <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-black tabular-nums">
+                  <span className="px-2 py-0.5 rounded-md bg-[#fff0f2] border border-[#ffd1da] text-rausch text-xs font-bold tabular-nums">
                     {draftZoomSpeed.toFixed(1)}x
                   </span>
                 </div>
@@ -547,14 +547,14 @@ export default function SettingsModal({
                   step="0.1"
                   value={draftZoomSpeed}
                   onChange={(e) => setDraftZoomSpeed(parseFloat(e.target.value))}
-                  className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-purple-500 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50"
+                  className="w-full h-2 bg-hairline rounded-lg appearance-none cursor-pointer accent-[#ff385c] outline-none focus-visible:ring-2 focus-visible:ring-rausch"
                   aria-valuemin={0.2}
                   aria-valuemax={2.0}
                   aria-valuenow={draftZoomSpeed}
                   aria-valuetext={`${draftZoomSpeed.toFixed(1)}x speed`}
                 />
 
-                <div className="flex justify-between text-[10px] text-zinc-500 font-semibold">
+                <div className="flex justify-between text-[10px] text-muted font-medium">
                   <span>0.2x (Subtle)</span>
                   <span>1.0x (Default)</span>
                   <span>2.0x (Dramatic)</span>
@@ -562,12 +562,12 @@ export default function SettingsModal({
               </div>
 
               {/* Transition Duration Card */}
-              <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/40 flex flex-col gap-3">
+              <div className="p-4 rounded-xl border border-hairline bg-surface-soft/60 flex flex-col gap-3">
                 <div className="flex justify-between items-center">
-                  <label htmlFor="settings-transition-duration" className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+                  <label htmlFor="settings-transition-duration" className="text-xs font-bold text-ink uppercase tracking-wider">
                     Crossfade Duration
                   </label>
-                  <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-black tabular-nums">
+                  <span className="px-2 py-0.5 rounded-md bg-[#fff0f2] border border-[#ffd1da] text-rausch text-xs font-bold tabular-nums">
                     {draftTransitionDuration.toFixed(1)}s
                   </span>
                 </div>
@@ -580,14 +580,14 @@ export default function SettingsModal({
                   step="0.1"
                   value={draftTransitionDuration}
                   onChange={(e) => setDraftTransitionDuration(parseFloat(e.target.value))}
-                  className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-purple-500 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50"
+                  className="w-full h-2 bg-hairline rounded-lg appearance-none cursor-pointer accent-[#ff385c] outline-none focus-visible:ring-2 focus-visible:ring-rausch"
                   aria-valuemin={0.0}
                   aria-valuemax={1.5}
                   aria-valuenow={draftTransitionDuration}
                   aria-valuetext={`${draftTransitionDuration.toFixed(1)} seconds`}
                 />
 
-                <div className="flex justify-between text-[10px] text-zinc-500 font-semibold">
+                <div className="flex justify-between text-[10px] text-muted font-medium">
                   <span>0.0s (Hard Cut)</span>
                   <span>0.3s (Default)</span>
                   <span>1.5s (Slow Fade)</span>
@@ -599,11 +599,11 @@ export default function SettingsModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-5 border-t border-zinc-800/80 bg-zinc-900/40 flex items-center justify-between gap-3">
+        <div className="p-5 border-t border-hairline-soft bg-white flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={handleResetDefaults}
-            className="text-xs font-semibold text-zinc-400 hover:text-white transition-colors underline-offset-4 hover:underline"
+            className="text-xs font-semibold text-muted hover:text-ink transition-colors underline-offset-4 hover:underline"
           >
             Reset to defaults
           </button>
@@ -612,7 +612,7 @@ export default function SettingsModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-zinc-800 bg-zinc-900 text-xs font-bold text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+              className="px-4 py-2.5 rounded-lg border border-hairline bg-white text-xs font-bold text-ink hover:bg-surface-soft transition-colors"
             >
               Cancel
             </button>
@@ -620,10 +620,10 @@ export default function SettingsModal({
               type="button"
               onClick={handleSave}
               disabled={!isSourceSelectionValid}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md ${
+              className={`px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
                 !isSourceSelectionValid
-                  ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed border border-zinc-700/50'
-                  : 'bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:-translate-y-0.5'
+                  ? 'bg-rausch-disabled text-white cursor-not-allowed'
+                  : 'bg-rausch hover:bg-rausch-active text-white'
               }`}
             >
               <Check className="w-3.5 h-3.5" />
