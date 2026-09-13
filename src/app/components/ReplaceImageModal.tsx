@@ -34,7 +34,9 @@ type SourceFilter = 'all' | 'pexels' | 'pixabay' | 'unsplash' | 'local';
 export function parseMediaMetadata(filename: string) {
   const isVideo = /\.(mp4|webm|mov)$/i.test(filename);
   const cleanPath = filename.replace(/\\/g, '/');
-  const baseFilename = cleanPath.split('/').pop() || cleanPath;
+  const segments = cleanPath.split('/');
+  const category = segments.length > 1 ? segments[0] : 'General';
+  const baseFilename = segments[segments.length - 1] || cleanPath;
   const lastDot = baseFilename.lastIndexOf('.');
   const ext = lastDot !== -1 ? baseFilename.slice(lastDot).toLowerCase() : '';
   const nameWithoutExt = lastDot !== -1 ? baseFilename.slice(0, lastDot) : baseFilename;
@@ -67,9 +69,8 @@ export function parseMediaMetadata(filename: string) {
       .trim()
       .replace(/\b\w/g, (char) => char.toUpperCase()) || nameWithoutExt;
 
-  return { isVideo, source, sourceKey, formattedTitle, ext };
+  return { isVideo, source, sourceKey, formattedTitle, ext, category };
 }
-
 
 export default function ReplaceImageModal({
   isOpen,
@@ -83,6 +84,7 @@ export default function ReplaceImageModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [mediaTypeFilter, setMediaTypeFilter] = useState<MediaTypeFilter>('all');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [hoveredVideo, setHoveredVideo] = useState<string | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -95,6 +97,7 @@ export default function ReplaceImageModal({
       setSearchQuery('');
       setMediaTypeFilter('all');
       setSourceFilter('all');
+      setCategoryFilter('all');
       setHoveredVideo(null);
 
       // Accessibility: focus search input on open
@@ -122,6 +125,17 @@ export default function ReplaceImageModal({
       ...parseMediaMetadata(img),
     }));
   }, [allImages]);
+
+  // Distinct category folders found in local media
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>();
+    parsedList.forEach((item) => {
+      if (item.category && item.category !== 'General') {
+        set.add(item.category);
+      }
+    });
+    return Array.from(set).sort();
+  }, [parsedList]);
 
   // Count summaries for filter pills
   const counts = useMemo(() => {
@@ -155,19 +169,26 @@ export default function ReplaceImageModal({
       // 2. Source filter
       if (sourceFilter !== 'all' && item.sourceKey !== sourceFilter) return false;
 
-      // 3. Search query
+      // 3. Category filter
+      if (categoryFilter !== 'all' && item.category.toLowerCase() !== categoryFilter.toLowerCase()) {
+        return false;
+      }
+
+      // 4. Search query
       if (query) {
         const matchesFilename = item.filename.toLowerCase().includes(query);
         const matchesTitle = item.formattedTitle.toLowerCase().includes(query);
         const matchesSource = item.source.toLowerCase().includes(query);
-        if (!matchesFilename && !matchesTitle && !matchesSource) {
+        const matchesCategory = item.category.toLowerCase().includes(query);
+        if (!matchesFilename && !matchesTitle && !matchesSource && !matchesCategory) {
           return false;
         }
       }
 
       return true;
     });
-  }, [parsedList, searchQuery, mediaTypeFilter, sourceFilter]);
+  }, [parsedList, searchQuery, mediaTypeFilter, sourceFilter, categoryFilter]);
+
 
   if (!isOpen) return null;
 
@@ -351,7 +372,46 @@ export default function ReplaceImageModal({
               })}
             </div>
           </div>
+
+          {/* Local Subfolder Categories Row (If any available) */}
+          {availableCategories.length > 0 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1 text-xs border-t border-hairline-soft">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted shrink-0 mr-1 flex items-center gap-1">
+                <span>📁</span>
+                <span>Folders:</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('all')}
+                className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all shrink-0 ${
+                  categoryFilter === 'all'
+                    ? 'bg-ink text-white shadow-xs'
+                    : 'bg-white text-muted hover:text-ink border border-hairline-soft'
+                }`}
+              >
+                All Folders
+              </button>
+              {availableCategories.map((cat) => {
+                const isActive = categoryFilter.toLowerCase() === cat.toLowerCase();
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategoryFilter(isActive ? 'all' : cat)}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all shrink-0 flex items-center gap-1 ${
+                      isActive
+                        ? 'bg-[#fff0f2] text-rausch border border-[#ffd1da] shadow-xs font-bold'
+                        : 'bg-white text-ink/80 hover:text-ink border border-hairline-soft'
+                    }`}
+                  >
+                    <span>{cat}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
+
 
         {/* Gallery Grid (Scrollable with Responsive Layout) */}
         <div className="flex-grow overflow-y-auto p-3 sm:p-5 bg-white">

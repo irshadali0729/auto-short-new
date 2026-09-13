@@ -274,17 +274,42 @@ async function compileVideoInBackground(
 
     const clipPaths: string[] = [];
 
+async function resolveSceneAsset(
+  assetPathOrUrl: string,
+  imageLibraryDir: string,
+  tempDir: string,
+  tempPrefix: string,
+): Promise<string> {
+  if (!assetPathOrUrl) return "";
+
+  if (assetPathOrUrl.startsWith("http://") || assetPathOrUrl.startsWith("https://")) {
+    const isVideo = /\.(mp4|webm|mov)(\?.*)?$/i.test(assetPathOrUrl);
+    const ext = isVideo ? ".mp4" : ".jpg";
+    const tempFilePath = path.join(tempDir, `${tempPrefix}${ext}`);
+
+    console.log(`[generate-video] Downloading temporary remote asset for compile: ${assetPathOrUrl}`);
+    const res = await fetch(assetPathOrUrl);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch remote asset: ${res.statusText}`);
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    fs.writeFileSync(tempFilePath, buffer);
+    return tempFilePath;
+  }
+
+  const localPath = path.join(imageLibraryDir, assetPathOrUrl);
+  if (!fs.existsSync(localPath)) {
+    throw new Error(`Image asset "${assetPathOrUrl}" not found in image library.`);
+  }
+  return localPath;
+}
+
     for (let i = 0; i < adjustedScenes.length; i++) {
       const scene = adjustedScenes[i];
       const imageFilename = scene.image;
       const duration = scene.duration;
 
-      const inputImagePath = path.join(imageLibraryDir, imageFilename);
-      if (!fs.existsSync(inputImagePath)) {
-        throw new Error(
-          `Image asset "${imageFilename}" not found in image library.`,
-        );
-      }
+      const inputImagePath = await resolveSceneAsset(imageFilename, imageLibraryDir, tempDir, `remote_scene_${i}`);
 
       const clipOutputPath = path.join(tempDir, `clip_${i}.mp4`);
       clipPaths.push(clipOutputPath);
@@ -392,12 +417,15 @@ async function compileVideoInBackground(
         }
       }
 
-      const isVideoAsset = /\.(mp4|webm|mov)$/i.test(imageFilename);
+      const isVideoAsset = /\.(mp4|webm|mov)(\?.*)?$/i.test(imageFilename);
 
       const isSplitScreenScene = Boolean(scene.isSplitScreen && scene.hostAsset);
       const hostFilename = scene.hostAsset || "";
-      const inputHostPath = isSplitScreenScene ? path.join(imageLibraryDir, hostFilename) : "";
-      const hasValidHostFile = isSplitScreenScene && fs.existsSync(inputHostPath);
+      const inputHostPath = isSplitScreenScene
+        ? await resolveSceneAsset(hostFilename, imageLibraryDir, tempDir, `remote_host_${i}`)
+        : "";
+      const hasValidHostFile = isSplitScreenScene && Boolean(inputHostPath && fs.existsSync(inputHostPath));
+
 
       let filterGraph = "";
       let overlayBaseInputIdx = 1;

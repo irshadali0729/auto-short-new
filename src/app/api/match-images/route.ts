@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { getHostVideos, pickRandomHostVideo } from "@/app/utils/host-library";
+import { getCachedLibrary, invalidateLibraryCache } from "@/app/utils/library-cache";
 
 interface GraphicBeat {
   prefixText?: string;
@@ -46,6 +47,7 @@ interface MediaSettingsPayload {
     pexels?: boolean;
     local?: boolean;
   };
+  saveOnlineMediaToDisk?: boolean;
   mediaType?: "only_videos" | "only_images" | "both";
   useRelatableVisualSearch?: boolean;
   aspectRatio?: "9:16" | "16:9";
@@ -126,30 +128,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const libraryPath = path.join(process.cwd(), "image-library");
     const pexelsApiKey = process.env.PEXELS_API_KEY || "";
     const unsplashKey = process.env.UNSPLASH_ACCESS_KEY || "";
     const pixabayApiKey = process.env.PIXABAY_API_KEY || "";
+    const saveOnlineMediaToDisk = mediaSettings.saveOnlineMediaToDisk !== false;
 
-    if (!fs.existsSync(libraryPath)) {
-      fs.mkdirSync(libraryPath, { recursive: true });
-    }
-
-    const allFiles = fs.readdirSync(libraryPath);
-    const supportedExtensions = [
-      ".jpg",
-      ".jpeg",
-      ".png",
-      ".webp",
-      ".gif",
-      ".mp4",
-      ".webm",
-      ".mov",
-    ];
-    const availableAssets = allFiles.filter((file) => {
-      const ext = path.extname(file).toLowerCase();
-      return supportedExtensions.includes(ext);
-    });
+    // Use fast In-Memory Cache (0ms) indexing all categorized subfolders
+    const cachedItems = getCachedLibrary();
+    const availableAssets = cachedItems.map((item) => item.relativePath);
 
     const mediaFilter = mediaSettings.mediaType || "both";
     const allowPexels =
@@ -163,6 +149,7 @@ export async function POST(request: Request) {
       !mediaSettings.sources || mediaSettings.sources.local !== false;
 
     const isRelatableMode = mediaSettings.useRelatableVisualSearch !== false;
+
     const targetRatio: "9:16" | "16:9" = mediaSettings.aspectRatio || "9:16";
 
     const isHostEnabled = Boolean(mediaSettings.enableVideoHost);
@@ -278,6 +265,7 @@ export async function POST(request: Request) {
             usedUnsplashIds,
             usedPixabayPhotoIds,
             usedPixabayVideoIds,
+            saveOnlineMediaToDisk,
           );
           if (chosenAsset) {
             matchedTier = "visual";
@@ -304,6 +292,7 @@ export async function POST(request: Request) {
             usedUnsplashIds,
             usedPixabayPhotoIds,
             usedPixabayVideoIds,
+            saveOnlineMediaToDisk,
           );
           if (chosenAsset) {
             matchedTier = "fallback";
@@ -330,6 +319,7 @@ export async function POST(request: Request) {
             usedUnsplashIds,
             usedPixabayPhotoIds,
             usedPixabayVideoIds,
+            saveOnlineMediaToDisk,
           );
           if (chosenAsset) {
             matchedTier = "mood";
@@ -337,7 +327,7 @@ export async function POST(request: Request) {
           }
         }
 
-        // Tier 4: Smart tokenized search against local image library
+        // Tier 4: Smart tokenized search against local image library (with subfolder category matching)
         if (!chosenAsset && allowLocal) {
           const localMatch = matchSmartLocalAssets(
             availableAssets,
@@ -392,17 +382,69 @@ export async function POST(request: Request) {
         usedAssets.add(chosenAsset);
       } else {
         // ==========================================
-        // LEGACY SINGLE-KEYWORD MATCHING IMPLEMENTATION
+        // LEGACY KEYWORD MATCHING
         // ==========================================
-        if (!kw) {
-          const fallback = getFallbackAsset(availableAssets, usedAssets, preferVideo);
+        let localMatches = allowLocal
+          ? matchLocalAssets(
+              availableAssets,
+              kw,
+              usedAssets,
+              preferVideo,
+              mediaFilter === "only_videos",
+            )
+          : [];
+
+        if (localMatches.length > 0) {
+          const selected = localMatches[0];
+          const chosenHost = isSplitScreenScene
+            ? pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath
+            : undefined;
+          if (chosenHost) {
+            lastHostAsset = chosenHost;
+          }
+
+          matchedScenes.push({
+            keyword,
+            duration,
+            image: selected,
+            isFallback: false,
+            isSplitScreen: isSplitScreenScene,
+            hostAsset: chosenHost,
+            stockAsset: isSplitScreenScene ? selected : undefined,
+            matchedTier: "local",
+            matchedQuery: isSplitScreenScene ? `${kw} (Split Screen)` : kw,
+            emoji: scene.emoji,
+            graphics: Array.isArray(graphics) ? graphics : undefined,
+            captions: Array.isArray(captions) ? captions : undefined,
+            duaInfo: scene.duaInfo,
+          });
+          usedAssets.add(selected);
+          continue;
+        }
+
+        if (!allowPexels && !allowUnsplash && !allowPixabay) {
+          const fallback = getFallbackAsset(
+            availableAssets,
+            usedAssets,
+            preferVideo,
+          );
+          const chosenHost = isSplitScreenScene
+            ? pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath
+            : undefined;
+          if (chosenHost) {
+            lastHostAsset = chosenHost;
+          }
+
           matchedScenes.push({
             keyword,
             duration,
             image: fallback,
             isFallback: true,
+            isSplitScreen: isSplitScreenScene,
+            hostAsset: chosenHost,
+            stockAsset: isSplitScreenScene ? fallback : undefined,
             matchedTier: "legacy",
-            matchedQuery: "Fallback",
+            matchedQuery: isSplitScreenScene ? "Fallback (Split Screen)" : "Fallback",
             emoji: scene.emoji,
             graphics: Array.isArray(graphics) ? graphics : undefined,
             captions: Array.isArray(captions) ? captions : undefined,
@@ -426,6 +468,7 @@ export async function POST(request: Request) {
             usedPixabayVideoIds,
             false,
             targetRatio,
+            saveOnlineMediaToDisk,
           );
         } else {
           foundAsset = await fetchPhotoFromProviders(
@@ -441,6 +484,7 @@ export async function POST(request: Request) {
             usedPixabayPhotoIds,
             false,
             targetRatio,
+            saveOnlineMediaToDisk,
           );
         }
 
@@ -460,6 +504,7 @@ export async function POST(request: Request) {
               usedPixabayPhotoIds,
               false,
               targetRatio,
+              saveOnlineMediaToDisk,
             );
           } else {
             foundAsset = await fetchVideoFromProviders(
@@ -472,6 +517,7 @@ export async function POST(request: Request) {
               usedPixabayVideoIds,
               false,
               targetRatio,
+              saveOnlineMediaToDisk,
             );
           }
         }
@@ -504,40 +550,7 @@ export async function POST(request: Request) {
           continue;
         }
 
-        // 3. Try matching local assets
-        if (allowLocal) {
-          const localMatches = matchLocalAssets(
-            availableAssets,
-            kw,
-            usedAssets,
-            preferVideo,
-            mediaFilter === "only_videos",
-          );
-
-          if (localMatches.length > 0) {
-            const chosen =
-              localMatches[Math.floor(Math.random() * localMatches.length)];
-            matchedScenes.push({
-              keyword,
-              duration,
-              image: chosen,
-              isFallback: false,
-              isSplitScreen: isSplitScreenScene,
-              hostAsset: chosenHost,
-              stockAsset: isSplitScreenScene ? chosen : undefined,
-              matchedTier: "legacy",
-              matchedQuery: isSplitScreenScene ? `${kw} (Split Screen)` : kw,
-              emoji: scene.emoji,
-              graphics: Array.isArray(graphics) ? graphics : undefined,
-              captions: Array.isArray(captions) ? captions : undefined,
-              duaInfo: scene.duaInfo,
-            });
-            usedAssets.add(chosen);
-            continue;
-          }
-        }
-
-        // 4. Fallback to random unused local asset
+        // 3. Fallback to random asset
         const fallback = getFallbackAsset(
           availableAssets,
           usedAssets,
@@ -592,6 +605,7 @@ async function fetchMediaForQuery(
   usedUnsplashIds: Set<string>,
   usedPixabayPhotoIds: Set<number>,
   usedPixabayVideoIds: Set<number>,
+  saveOnlineMediaToDisk: boolean = true,
 ): Promise<string | null> {
   const q = query.trim();
   if (!q) return null;
@@ -609,6 +623,7 @@ async function fetchMediaForQuery(
       usedPixabayVideoIds,
       isRelatableMode,
       targetRatio,
+      saveOnlineMediaToDisk,
     );
   } else {
     foundAsset = await fetchPhotoFromProviders(
@@ -624,6 +639,7 @@ async function fetchMediaForQuery(
       usedPixabayPhotoIds,
       isRelatableMode,
       targetRatio,
+      saveOnlineMediaToDisk,
     );
   }
 
@@ -642,6 +658,7 @@ async function fetchMediaForQuery(
         usedPixabayPhotoIds,
         isRelatableMode,
         targetRatio,
+        saveOnlineMediaToDisk,
       );
     } else {
       foundAsset = await fetchVideoFromProviders(
@@ -654,6 +671,7 @@ async function fetchMediaForQuery(
         usedPixabayVideoIds,
         isRelatableMode,
         targetRatio,
+        saveOnlineMediaToDisk,
       );
     }
   }
@@ -671,6 +689,7 @@ async function fetchVideoFromProviders(
   usedPixabayVideoIds: Set<number>,
   isRelatableMode: boolean = false,
   targetRatio: "9:16" | "16:9" = "9:16",
+  saveOnlineMediaToDisk: boolean = true,
 ): Promise<string | null> {
   const videoProviders: Array<"pexels_video" | "pixabay_video"> = [];
   if (pexelsApiKey && allowPexels) videoProviders.push("pexels_video");
@@ -686,6 +705,7 @@ async function fetchVideoFromProviders(
         usedPexelsVideoIds,
         isRelatableMode,
         targetRatio,
+        saveOnlineMediaToDisk,
       );
       if (vid) return vid;
     } else if (provider === "pixabay_video") {
@@ -695,6 +715,7 @@ async function fetchVideoFromProviders(
         usedPixabayVideoIds,
         isRelatableMode,
         targetRatio,
+        saveOnlineMediaToDisk,
       );
       if (vid) return vid;
     }
@@ -716,6 +737,7 @@ async function fetchPhotoFromProviders(
   usedPixabayPhotoIds: Set<number>,
   isRelatableMode: boolean = false,
   targetRatio: "9:16" | "16:9" = "9:16",
+  saveOnlineMediaToDisk: boolean = true,
 ): Promise<string | null> {
   const photoProviders: Array<"pexels_photo" | "unsplash_photo" | "pixabay_photo"> = [];
   if (pexelsApiKey && allowPexels) photoProviders.push("pexels_photo");
@@ -732,6 +754,7 @@ async function fetchPhotoFromProviders(
         usedPexelsPhotoIds,
         isRelatableMode,
         targetRatio,
+        saveOnlineMediaToDisk,
       );
       if (photo) return photo;
     } else if (provider === "unsplash_photo") {
@@ -741,6 +764,7 @@ async function fetchPhotoFromProviders(
         usedUnsplashIds,
         isRelatableMode,
         targetRatio,
+        saveOnlineMediaToDisk,
       );
       if (photo) return photo;
     } else if (provider === "pixabay_photo") {
@@ -750,6 +774,7 @@ async function fetchPhotoFromProviders(
         usedPixabayPhotoIds,
         isRelatableMode,
         targetRatio,
+        saveOnlineMediaToDisk,
       );
       if (photo) return photo;
     }
@@ -801,6 +826,23 @@ function matchLocalAssets(
   return matches;
 }
 
+const CATEGORY_SYNONYMS: Record<string, string[]> = {
+  woman: ["girl", "hijab", "female", "sister", "women"],
+  women: ["girl", "hijab", "female", "sister", "woman"],
+  girl: ["woman", "hijab", "female", "sister", "women"],
+  hijab: ["girl", "woman", "women", "sister"],
+  man: ["brother", "male", "guy", "men"],
+  men: ["brother", "male", "guy", "man"],
+  boy: ["man", "brother", "male", "men"],
+  dua: ["supplication", "prayer", "praying", "hands"],
+  masjid: ["mosque", "minaret", "dome"],
+  mosque: ["masjid", "minaret", "dome"],
+  quran: ["book", "arabic", "scripture", "surah", "ayah"],
+  makkah: ["kaaba", "mecca", "pilgrim", "hajj", "umrah"],
+  mecca: ["kaaba", "makkah", "pilgrim", "hajj", "umrah"],
+  couple: ["husband", "wife", "marriage", "family"],
+};
+
 function matchSmartLocalAssets(
   availableAssets: string[],
   queries: string[],
@@ -825,7 +867,7 @@ function matchSmartLocalAssets(
     "video", "photo", "image", "dark", "soft", "high", "cinematic", "real"
   ]);
 
-  const allTokens = queries.flatMap((q) =>
+  const rawTokens = queries.flatMap((q) =>
     q
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, " ")
@@ -833,7 +875,17 @@ function matchSmartLocalAssets(
       .filter((w) => w.length > 2 && !stopWords.has(w))
   );
 
-  if (allTokens.length === 0) return null;
+  if (rawTokens.length === 0) return null;
+
+  // Expand with category synonyms
+  const allTokens = new Set<string>(rawTokens);
+  for (const token of rawTokens) {
+    if (CATEGORY_SYNONYMS[token]) {
+      for (const syn of CATEGORY_SYNONYMS[token]) {
+        allTokens.add(syn);
+      }
+    }
+  }
 
   let bestScore = 0;
   let bestMatches: string[] = [];
@@ -903,6 +955,7 @@ async function getPexelsVideo(
   usedPexelsVideoIds: Set<number>,
   isRelatableMode: boolean = false,
   targetRatio: "9:16" | "16:9" = "9:16",
+  saveOnlineMediaToDisk: boolean = true,
 ): Promise<string | null> {
   try {
     const searchQuery = resolveSearchQuery(query, isRelatableMode);
@@ -965,6 +1018,10 @@ async function getPexelsVideo(
 
     if (!bestFile || !bestFile.link) return null;
 
+    if (!saveOnlineMediaToDisk) {
+      return bestFile.link;
+    }
+
     const videoId = chosenVideo.id;
     const ratioSuffix = targetRatio === "16:9" ? "16x9" : "9x16";
     const filename = `pexels_video_${videoId}_${ratioSuffix}.mp4`;
@@ -977,6 +1034,7 @@ async function getPexelsVideo(
         fs.mkdirSync(libraryPath, { recursive: true });
       }
       await downloadMedia(bestFile.link, destPath);
+      invalidateLibraryCache();
     }
 
     return filename;
@@ -992,6 +1050,7 @@ async function getPexelsPhoto(
   usedPexelsIds: Set<number>,
   isRelatableMode: boolean = false,
   targetRatio: "9:16" | "16:9" = "9:16",
+  saveOnlineMediaToDisk: boolean = true,
 ): Promise<string | null> {
   try {
     const searchQuery = resolveSearchQuery(query, isRelatableMode);
@@ -1038,6 +1097,10 @@ async function getPexelsPhoto(
           chosenPhoto.src.original;
     if (!imageUrl) return null;
 
+    if (!saveOnlineMediaToDisk) {
+      return imageUrl;
+    }
+
     const altText = chosenPhoto.alt || "";
     const slugifiedAlt = altText
       .toLowerCase()
@@ -1058,6 +1121,7 @@ async function getPexelsPhoto(
         fs.mkdirSync(libraryPath, { recursive: true });
       }
       await downloadMedia(imageUrl, destPath);
+      invalidateLibraryCache();
     }
 
     return filename;
@@ -1073,6 +1137,7 @@ async function getUnsplashPhoto(
   usedUnsplashIds: Set<string>,
   isRelatableMode: boolean = false,
   targetRatio: "9:16" | "16:9" = "9:16",
+  saveOnlineMediaToDisk: boolean = true,
 ): Promise<string | null> {
   try {
     const searchQuery = resolveSearchQuery(query, isRelatableMode);
@@ -1117,6 +1182,10 @@ async function getUnsplashPhoto(
       : chosen.urls?.regular || chosen.urls?.small;
     if (!imageUrl) return null;
 
+    if (!saveOnlineMediaToDisk) {
+      return imageUrl;
+    }
+
     const altText = chosen.alt_description || chosen.description || "";
     const slugifiedAlt = altText
       .toLowerCase()
@@ -1137,6 +1206,7 @@ async function getUnsplashPhoto(
         fs.mkdirSync(libraryPath, { recursive: true });
       }
       await downloadMedia(imageUrl, destPath);
+      invalidateLibraryCache();
     }
 
     return filename;
@@ -1152,6 +1222,7 @@ async function getPixabayVideo(
   usedPixabayVideoIds: Set<number>,
   isRelatableMode: boolean = false,
   targetRatio: "9:16" | "16:9" = "9:16",
+  saveOnlineMediaToDisk: boolean = true,
 ): Promise<string | null> {
   if (!apiKey) return null;
   try {
@@ -1187,6 +1258,10 @@ async function getPixabayVideo(
 
     if (!videoUrl) return null;
 
+    if (!saveOnlineMediaToDisk) {
+      return videoUrl;
+    }
+
     const ratioSuffix = targetRatio === "16:9" ? "16x9" : "9x16";
     const filename = `pixabay_video_${chosen.id}_${ratioSuffix}.mp4`;
     const libraryPath = path.join(process.cwd(), "image-library");
@@ -1198,6 +1273,7 @@ async function getPixabayVideo(
         fs.mkdirSync(libraryPath, { recursive: true });
       }
       await downloadMedia(videoUrl, destPath);
+      invalidateLibraryCache();
     }
 
     return filename;
@@ -1213,6 +1289,7 @@ async function getPixabayPhoto(
   usedPixabayPhotoIds: Set<number>,
   isRelatableMode: boolean = false,
   targetRatio: "9:16" | "16:9" = "9:16",
+  saveOnlineMediaToDisk: boolean = true,
 ): Promise<string | null> {
   if (!apiKey) return null;
   try {
@@ -1241,6 +1318,10 @@ async function getPixabayPhoto(
     const imageUrl = chosen.largeImageURL || chosen.webformatURL;
     if (!imageUrl) return null;
 
+    if (!saveOnlineMediaToDisk) {
+      return imageUrl;
+    }
+
     const ratioSuffix = targetRatio === "16:9" ? "16x9" : "9x16";
     const filename = `pixabay_photo_${chosen.id}_${ratioSuffix}.jpg`;
     const libraryPath = path.join(process.cwd(), "image-library");
@@ -1252,6 +1333,7 @@ async function getPixabayPhoto(
         fs.mkdirSync(libraryPath, { recursive: true });
       }
       await downloadMedia(imageUrl, destPath);
+      invalidateLibraryCache();
     }
 
     return filename;

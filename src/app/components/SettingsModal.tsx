@@ -37,6 +37,7 @@ export interface MediaSettings {
     pexels: boolean;
     local: boolean;
   };
+  saveOnlineMediaToDisk?: boolean;
   mediaType: MediaTypeFilter;
   textOverlayMode: TextOverlayMode;
   enableGraphicMotion?: boolean;
@@ -59,6 +60,7 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
     pexels: true,
     local: true,
   },
+  saveOnlineMediaToDisk: true,
   mediaType: "both",
   textOverlayMode: "captions",
   enableGraphicMotion: false,
@@ -73,6 +75,7 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   enableVideoHost: true,
   videoHostType: "women_host",
 };
+
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -134,6 +137,8 @@ export default function SettingsModal({
     useState<DuaCardThemeOption>(
       settings?.duaCardTheme || DEFAULT_MEDIA_SETTINGS.duaCardTheme || "cream",
     );
+  const [draftSaveOnlineMediaToDisk, setDraftSaveOnlineMediaToDisk] =
+    useState<boolean>(settings?.saveOnlineMediaToDisk !== false);
   const [draftEnableVideoHost, setDraftEnableVideoHost] = useState<boolean>(
     settings?.enableVideoHost !== false,
   );
@@ -153,6 +158,7 @@ export default function SettingsModal({
         ? { ...DEFAULT_MEDIA_SETTINGS.sources, ...settings.sources }
         : DEFAULT_MEDIA_SETTINGS.sources;
       setDraftSources(currentSources);
+      setDraftSaveOnlineMediaToDisk(settings?.saveOnlineMediaToDisk !== false);
       setDraftMediaType(
         settings?.mediaType || DEFAULT_MEDIA_SETTINGS.mediaType,
       );
@@ -240,6 +246,7 @@ export default function SettingsModal({
 
     onSave({
       sources: draftSources || DEFAULT_MEDIA_SETTINGS.sources,
+      saveOnlineMediaToDisk: draftSaveOnlineMediaToDisk !== false,
       mediaType: draftMediaType || DEFAULT_MEDIA_SETTINGS.mediaType,
       textOverlayMode:
         draftTextOverlayMode || DEFAULT_MEDIA_SETTINGS.textOverlayMode,
@@ -266,6 +273,7 @@ export default function SettingsModal({
 
   const handleResetDefaults = () => {
     setDraftSources(DEFAULT_MEDIA_SETTINGS.sources);
+    setDraftSaveOnlineMediaToDisk(DEFAULT_MEDIA_SETTINGS.saveOnlineMediaToDisk !== false);
     setDraftMediaType(DEFAULT_MEDIA_SETTINGS.mediaType);
     setDraftTextOverlayMode(DEFAULT_MEDIA_SETTINGS.textOverlayMode);
     setDraftZoomSpeed(DEFAULT_MEDIA_SETTINGS.zoomSpeed);
@@ -284,6 +292,7 @@ export default function SettingsModal({
     setDraftVideoHostType(DEFAULT_MEDIA_SETTINGS.videoHostType || "women_host");
     setValidationError(null);
   };
+
 
   const emojiStyleOptions = [
     {
@@ -594,7 +603,65 @@ export default function SettingsModal({
                 );
               })}
             </div>
+
+            {/* Storage Option: Save Online Media to Local Disk */}
+            <div className="pt-2">
+              <label
+                htmlFor="save-online-media-toggle"
+                className={`relative flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                  draftSaveOnlineMediaToDisk
+                    ? "bg-[#fff8f9] border-rausch shadow-airbnb"
+                    : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
+                }`}
+              >
+                <div className="pt-0.5 shrink-0">
+                  <input
+                    type="checkbox"
+                    id="save-online-media-toggle"
+                    checked={draftSaveOnlineMediaToDisk}
+                    onChange={(e) => setDraftSaveOnlineMediaToDisk(e.target.checked)}
+                    className="sr-only"
+                    aria-checked={draftSaveOnlineMediaToDisk}
+                  />
+                  <div
+                    className={`w-11 h-6 rounded-full transition-colors flex items-center p-0.5 ${
+                      draftSaveOnlineMediaToDisk ? "bg-rausch" : "bg-zinc-300"
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${
+                        draftSaveOnlineMediaToDisk ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex-grow min-w-0">
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                    <span className="text-sm font-bold text-ink flex items-center gap-1.5">
+                      <HardDrive className={`w-4 h-4 ${draftSaveOnlineMediaToDisk ? "text-rausch" : "text-muted"}`} />
+                      Save Online Stock Media to Local Library
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                        draftSaveOnlineMediaToDisk
+                          ? "bg-[#fff0f2] text-rausch border border-[#ffd1da]"
+                          : "bg-surface-soft text-muted border border-hairline"
+                      }`}
+                    >
+                      {draftSaveOnlineMediaToDisk ? "Saved to Disk" : "Direct Stream"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted leading-relaxed">
+                    {draftSaveOnlineMediaToDisk
+                      ? "Automatically downloads and saves matched Pexels, Pixabay, & Unsplash clips into image-library/ for permanent offline reuse."
+                      : "Streams and compiles videos using direct remote URLs without saving permanent files to your local image-library/ folder."}
+                  </p>
+                </div>
+              </label>
+            </div>
           </fieldset>
+
 
           {/* Section: AI Visual Search & Matching Engine (Toggle Flag) */}
           <fieldset className="space-y-3">
