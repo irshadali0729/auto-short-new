@@ -15,13 +15,17 @@ import {
   Sliders,
   Settings,
   MessageSquareText,
-  Type
+  Type,
+  BookOpen,
+  Edit3
 } from 'lucide-react';
 import SettingsModal, { 
   MediaSettings, 
   DEFAULT_MEDIA_SETTINGS 
 } from '@/app/components/SettingsModal';
 import ReplaceImageModal from '@/app/components/ReplaceImageModal';
+import DuaEditModal from '@/app/components/DuaEditModal';
+import { DuaInfo } from '@/app/utils/dua-card-svg';
 
 interface GraphicBeat {
   prefixText?: string;
@@ -61,6 +65,7 @@ interface Scene {
   emoji?: string;
   graphics?: GraphicBeat[];
   captions?: CaptionSlice[];
+  duaInfo?: DuaInfo;
 }
 
 
@@ -114,6 +119,28 @@ export default function Home() {
   const [allLibraryImages, setAllLibraryImages] = useState<string[]>([]);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Dua Edit Modal state
+  const [editingDuaSceneIdx, setEditingDuaSceneIdx] = useState<number | null>(null);
+  const [isDuaModalOpen, setIsDuaModalOpen] = useState(false);
+
+  const handleOpenDuaEditor = (sceneIdx: number) => {
+    setEditingDuaSceneIdx(sceneIdx);
+    setIsDuaModalOpen(true);
+  };
+
+  const handleSaveDua = (sceneIndex: number, updatedDua: DuaInfo | undefined) => {
+    setScenes((prev) => {
+      const updated = [...prev];
+      if (updated[sceneIndex]) {
+        updated[sceneIndex] = {
+          ...updated[sceneIndex],
+          duaInfo: updatedDua,
+        };
+      }
+      return updated;
+    });
+  };
 
   // Quick Emoji Picker state
   const [activeEmojiPickerIdx, setActiveEmojiPickerIdx] = useState<number | null>(null);
@@ -382,6 +409,8 @@ export default function Home() {
           aspectRatio: mediaSettings.aspectRatio || '9:16',
           enableEmojiCaptions: mediaSettings.enableEmojiCaptions !== false,
           emojiStyle: mediaSettings.emojiStyle || 'fluent',
+          enableDuaOverlay: mediaSettings.enableDuaOverlay !== false,
+          duaCardTheme: mediaSettings.duaCardTheme || 'cream',
         }),
       });
 
@@ -957,11 +986,40 @@ export default function Home() {
                                 </div>
                               </div>
                             ) : null
+                          ) : null}
+
+                          {/* Spiritual Dua Card Highlight if present */}
+                          {scene.duaInfo?.isDua ? (
+                            <div className="mt-2.5 p-2.5 rounded-xl border border-[#E2D3B3] bg-[#FAF6ED] flex flex-col gap-1.5 shadow-xs">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8C682A] flex items-center gap-1">
+                                  <BookOpen className="w-3 h-3 text-[#8C682A]" />
+                                  🤲 Dua Card Overlay
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDuaEditor(idx)}
+                                  className="text-[10px] font-bold text-rausch hover:underline flex items-center gap-0.5"
+                                >
+                                  <Edit3 className="w-2.5 h-2.5" /> Edit / Preview
+                                </button>
+                              </div>
+                              <div className="text-xs font-bold text-[#1E293B] leading-tight line-clamp-2">
+                                {scene.duaInfo.hindi}
+                              </div>
+                              <div className="text-xs font-semibold text-[#064E3B] text-right dir-rtl leading-snug line-clamp-2 font-arabic">
+                                {scene.duaInfo.arabic}
+                              </div>
+                            </div>
                           ) : (
-                            <div className="mt-2.5 pt-2 border-t border-hairline-soft">
-                              <span className="text-[10px] text-muted italic">
-                                Text overlays disabled in settings (clean video)
-                              </span>
+                            <div className="mt-1 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDuaEditor(idx)}
+                                className="text-[10px] font-semibold text-muted hover:text-rausch transition-colors flex items-center gap-1"
+                              >
+                                <BookOpen className="w-2.5 h-2.5" /> + Add Dua Card
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1117,6 +1175,21 @@ export default function Home() {
           onClose={() => setIsSettingsOpen(false)}
           settings={mediaSettings}
           onSave={handleSaveSettings}
+        />
+
+        {/* Islamic Dua Card Editor & Live Preview Modal */}
+        <DuaEditModal
+          isOpen={isDuaModalOpen}
+          onClose={() => {
+            setIsDuaModalOpen(false);
+            setEditingDuaSceneIdx(null);
+          }}
+          sceneIndex={editingDuaSceneIdx}
+          sceneKeyword={editingDuaSceneIdx !== null && scenes[editingDuaSceneIdx] ? scenes[editingDuaSceneIdx].keyword : undefined}
+          initialDua={editingDuaSceneIdx !== null && scenes[editingDuaSceneIdx] ? scenes[editingDuaSceneIdx].duaInfo : undefined}
+          cardTheme={mediaSettings.duaCardTheme || 'cream'}
+          aspectRatio={mediaSettings.aspectRatio || '9:16'}
+          onSaveDua={handleSaveDua}
         />
       </main>
     </div>

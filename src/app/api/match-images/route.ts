@@ -26,8 +26,16 @@ interface SceneInput {
   visualQuery?: string;
   fallbackQuery?: string;
   moodQuery?: string;
+  emoji?: string;
   graphics?: GraphicBeat[];
   captions?: CaptionSlice[];
+  duaInfo?: {
+    isDua: boolean;
+    hindi: string;
+    arabic: string;
+    title?: string;
+    reference?: string;
+  };
 }
 
 interface MediaSettingsPayload {
@@ -164,8 +172,16 @@ export async function POST(request: Request) {
       moodQuery?: string;
       matchedTier?: "visual" | "fallback" | "mood" | "local" | "random" | "legacy";
       matchedQuery?: string;
+      emoji?: string;
       graphics?: GraphicBeat[];
       captions?: CaptionSlice[];
+      duaInfo?: {
+        isDua: boolean;
+        hindi: string;
+        arabic: string;
+        title?: string;
+        reference?: string;
+      };
     }> = [];
 
     const usedAssets = new Set<string>();
@@ -318,8 +334,10 @@ export async function POST(request: Request) {
           moodQuery,
           matchedTier,
           matchedQuery,
+          emoji: scene.emoji,
           graphics: Array.isArray(graphics) ? graphics : undefined,
           captions: Array.isArray(captions) ? captions : undefined,
+          duaInfo: scene.duaInfo,
         });
         usedAssets.add(chosenAsset);
       } else {
@@ -335,8 +353,10 @@ export async function POST(request: Request) {
             isFallback: true,
             matchedTier: "legacy",
             matchedQuery: "Fallback",
+            emoji: scene.emoji,
             graphics: Array.isArray(graphics) ? graphics : undefined,
             captions: Array.isArray(captions) ? captions : undefined,
+            duaInfo: scene.duaInfo,
           });
           usedAssets.add(fallback);
           continue;
@@ -415,8 +435,10 @@ export async function POST(request: Request) {
             isFallback: false,
             matchedTier: "legacy",
             matchedQuery: kw,
+            emoji: scene.emoji,
             graphics: Array.isArray(graphics) ? graphics : undefined,
             captions: Array.isArray(captions) ? captions : undefined,
+            duaInfo: scene.duaInfo,
           });
           usedAssets.add(foundAsset);
           continue;
@@ -442,8 +464,10 @@ export async function POST(request: Request) {
               isFallback: false,
               matchedTier: "legacy",
               matchedQuery: kw,
+              emoji: scene.emoji,
               graphics: Array.isArray(graphics) ? graphics : undefined,
               captions: Array.isArray(captions) ? captions : undefined,
+              duaInfo: scene.duaInfo,
             });
             usedAssets.add(chosen);
             continue;
@@ -463,8 +487,10 @@ export async function POST(request: Request) {
           isFallback: true,
           matchedTier: "legacy",
           matchedQuery: "Fallback",
+          emoji: scene.emoji,
           graphics: Array.isArray(graphics) ? graphics : undefined,
           captions: Array.isArray(captions) ? captions : undefined,
+          duaInfo: scene.duaInfo,
         });
         usedAssets.add(fallback);
       }

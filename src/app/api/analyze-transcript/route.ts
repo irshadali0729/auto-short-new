@@ -201,6 +201,14 @@ function alignScenesToSegments(
   });
 }
 
+export interface DuaInfo {
+  isDua: boolean;
+  hindi: string;
+  arabic: string;
+  title?: string;
+  reference?: string;
+}
+
 interface GroqScene {
   keyword: string;
   duration: number;
@@ -213,6 +221,7 @@ interface GroqScene {
   tags?: string[];
   caption?: string;
   captions?: CaptionSlice[];
+  duaInfo?: DuaInfo;
 }
 
 function extractAndParseScenes(rawContent: string): GroqScene[] {
@@ -346,6 +355,16 @@ CRITICAL TIMELINE SYNCHRONIZATION RULES:
       : "* Total duration of all scenes combined should ideally be between 15 to 45 seconds."
 }
 
+* DUA / ZIKR DETECTION & CORRECTION RULE:
+  - If the input transcript contains, recites, or references any Quranic Dua, Hadith Dua, Zikr, or Kalimah (even if transcribed phonetically or with errors, e.g. "ला इलाहा इल्लल्लाहु वाहदू ला शरी मुल्क हमला कुल श कदीर", "हसबुनल्लाहु व निअमल वकील", "अस्तग़फ़िरुल्लाह", "सुब्हानअल्लाह", etc.):
+  - You MUST identify the scene(s) where the Dua is recited or spoken.
+  - On that scene, include a "duaInfo" object:
+    * "isDua" (boolean): true
+    * "hindi" (string): The 100% correct, verified Hindi (Devanagari) pronunciation of the Dua (e.g. "ला इलाहा इल्लल्लाहु वह्दहू ला शरी-क लहू, लहुल-मुल्कु व लहुल-हम्दु, व हुवा 'अला कुल्लि शैइन क़दीर").
+    * "arabic" (string): The authentic, complete Arabic text with full Tashkeel / Harakat (e.g. "لَا إِلٰهَ إِلَّا اللهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ، وَهُوَ عَلَىٰ كُلِّ شَيْءٍ قَدِيرٌ").
+    * "title" (string, optional): Short spiritual title (e.g. "हिफ़ाज़त की दुआ / Protection Dua").
+    * "reference" (string, optional): Authentic Hadith / Quran source (e.g. "Tirmidhi / Abu Dawud").
+
 Example output:
 {
   "scenes": [
@@ -403,6 +422,16 @@ CRITICAL VISUAL METAPHOR & STOCK SEARCH RULES:
     * Time / Urgency / Delay -> "⏳"
     * Fire / Punishment -> "🔥"
     * Light / Mercy / Noor -> "✨"
+
+* DUA / ZIKR DETECTION & CORRECTION RULE:
+  - If the input transcript contains, recites, or references any Quranic Dua, Hadith Dua, Zikr, or Kalimah (even if transcribed phonetically or with errors, e.g. "ला इलाहा इल्लल्लाहु वाहदू ला शरी मुल्क हमला कुल श कदीर", "हसबुनल्लाहु व निअमल वकील", "अस्तग़फ़िरुल्लाह", "सुब्हानअल्लाह", etc.):
+  - You MUST identify the scene(s) where the speaker recites or discusses the Dua.
+  - On that scene, include a "duaInfo" object:
+    * "isDua" (boolean): true
+    * "hindi" (string): The 100% correct, verified Hindi (Devanagari) pronunciation of the Dua (e.g. "ला इलाहा इल्लल्लाहु वह्दहू ला शरी-क लहू, लहुल-मुल्कु व लहुल-हम्दु, व हुवा 'अला कुल्लि शैइन क़दीर").
+    * "arabic" (string): The authentic, complete Arabic text with full Tashkeel / Harakat (e.g. "لَا إِلٰهَ إِلَّا اللهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ، وَهُوَ عَلَىٰ كُلِّ شَيْءٍ قَدِيرٌ").
+    * "title" (string, optional): Short spiritual title (e.g. "हिफ़ाज़त की दुआ / Protection Dua").
+    * "reference" (string, optional): Authentic Hadith / Quran source (e.g. "Tirmidhi / Abu Dawud").
 
 General Rules:
 * Return valid JSON only without markdown or code fences.
@@ -575,6 +604,16 @@ export async function POST(request: Request) {
       tags: Array.isArray(scene.tags) ? scene.tags : undefined,
       caption: scene.caption ? String(scene.caption) : undefined,
       graphics: Array.isArray(scene.graphics) ? scene.graphics : undefined,
+      duaInfo:
+        scene.duaInfo && typeof scene.duaInfo === "object" && scene.duaInfo.isDua
+          ? {
+              isDua: true,
+              hindi: String(scene.duaInfo.hindi || "").trim(),
+              arabic: String(scene.duaInfo.arabic || "").trim(),
+              title: scene.duaInfo.title ? String(scene.duaInfo.title).trim() : undefined,
+              reference: scene.duaInfo.reference ? String(scene.duaInfo.reference).trim() : undefined,
+            }
+          : undefined,
     }));
 
     if (hasSegments) {

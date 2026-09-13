@@ -17,7 +17,8 @@ import {
   Type,
   Smartphone,
   Monitor,
-  Smile
+  Smile,
+  BookOpen
 } from 'lucide-react';
 
 export type MediaSourceKey = 'unsplash' | 'pixabay' | 'pexels' | 'local';
@@ -25,6 +26,7 @@ export type MediaTypeFilter = 'only_videos' | 'only_images' | 'both';
 export type TextOverlayMode = 'none' | 'captions' | 'graphics';
 export type VideoAspectRatio = '9:16' | '16:9';
 export type EmojiStyleOption = 'fluent' | 'apple' | 'twitter';
+export type DuaCardThemeOption = 'cream' | 'light_grey' | 'white';
 
 export interface MediaSettings {
   sources: {
@@ -42,6 +44,8 @@ export interface MediaSettings {
   aspectRatio: VideoAspectRatio;
   enableEmojiCaptions?: boolean;
   emojiStyle?: EmojiStyleOption;
+  enableDuaOverlay?: boolean;
+  duaCardTheme?: DuaCardThemeOption;
 }
 
 export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
@@ -60,6 +64,8 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   aspectRatio: '9:16',
   enableEmojiCaptions: true,
   emojiStyle: 'fluent',
+  enableDuaOverlay: true,
+  duaCardTheme: 'cream',
 };
 
 interface SettingsModalProps {
@@ -105,6 +111,12 @@ export default function SettingsModal({
   const [draftEmojiStyle, setDraftEmojiStyle] = useState<EmojiStyleOption>(
     settings.emojiStyle || DEFAULT_MEDIA_SETTINGS.emojiStyle || 'fluent'
   );
+  const [draftEnableDuaOverlay, setDraftEnableDuaOverlay] = useState<boolean>(
+    settings.enableDuaOverlay !== false
+  );
+  const [draftDuaCardTheme, setDraftDuaCardTheme] = useState<DuaCardThemeOption>(
+    settings.duaCardTheme || DEFAULT_MEDIA_SETTINGS.duaCardTheme || 'cream'
+  );
   const [validationError, setValidationError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
@@ -125,6 +137,8 @@ export default function SettingsModal({
       setDraftAspectRatio(settings.aspectRatio || DEFAULT_MEDIA_SETTINGS.aspectRatio);
       setDraftEnableEmojiCaptions(settings.enableEmojiCaptions !== false);
       setDraftEmojiStyle(settings.emojiStyle || DEFAULT_MEDIA_SETTINGS.emojiStyle || 'fluent');
+      setDraftEnableDuaOverlay(settings.enableDuaOverlay !== false);
+      setDraftDuaCardTheme(settings.duaCardTheme || DEFAULT_MEDIA_SETTINGS.duaCardTheme || 'cream');
       setValidationError(null);
       // Focus management
       setTimeout(() => closeBtnRef.current?.focus(), 50);
@@ -181,6 +195,8 @@ export default function SettingsModal({
       aspectRatio: draftAspectRatio,
       enableEmojiCaptions: draftEnableEmojiCaptions,
       emojiStyle: draftEmojiStyle,
+      enableDuaOverlay: draftEnableDuaOverlay,
+      duaCardTheme: draftDuaCardTheme,
     });
     onClose();
   };
@@ -195,6 +211,8 @@ export default function SettingsModal({
     setDraftAspectRatio(DEFAULT_MEDIA_SETTINGS.aspectRatio);
     setDraftEnableEmojiCaptions(DEFAULT_MEDIA_SETTINGS.enableEmojiCaptions !== false);
     setDraftEmojiStyle(DEFAULT_MEDIA_SETTINGS.emojiStyle || 'fluent');
+    setDraftEnableDuaOverlay(DEFAULT_MEDIA_SETTINGS.enableDuaOverlay !== false);
+    setDraftDuaCardTheme(DEFAULT_MEDIA_SETTINGS.duaCardTheme || 'cream');
     setValidationError(null);
   };
 
@@ -219,6 +237,33 @@ export default function SettingsModal({
       tagline: 'Clean 2D Twemoji vector illustrations',
       badge: 'Minimal',
       preview: '🤲',
+    },
+  ];
+
+  const duaThemeOptions = [
+    {
+      id: 'cream' as DuaCardThemeOption,
+      label: 'Cream & Warm Ivory',
+      tagline: 'Warm ivory parchment with soft gold accents and emerald script',
+      badge: 'Recommended',
+      colorPreview: '#FAF6ED',
+      borderPreview: '#E2D3B3',
+    },
+    {
+      id: 'white' as DuaCardThemeOption,
+      label: 'Pure White & Gold',
+      tagline: 'Pristine white card with crisp high-contrast calligraphy',
+      badge: 'Minimal Luxe',
+      colorPreview: '#FFFFFF',
+      borderPreview: '#E5E7EB',
+    },
+    {
+      id: 'light_grey' as DuaCardThemeOption,
+      label: 'Light Grey & Slate',
+      tagline: 'Subtle slate soft background with deep navy Arabic accents',
+      badge: 'Modern',
+      colorPreview: '#F4F6F8',
+      borderPreview: '#CBD5E1',
     },
   ];
 
@@ -834,6 +879,107 @@ export default function SettingsModal({
                       >
                         <div className="flex items-center justify-between gap-1 mb-1.5">
                           <span className="text-xl">{opt.preview}</span>
+                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                            isSelected
+                              ? 'bg-rausch text-white'
+                              : 'bg-surface-soft text-muted'
+                          }`}>
+                            {opt.badge}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-ink block leading-tight">
+                            {opt.label}
+                          </span>
+                          <span className="text-[10px] text-muted block mt-0.5 leading-tight">
+                            {opt.tagline}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </fieldset>
+
+          {/* Section: Spiritual Highlights & Dua Overlays */}
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-rausch" />
+              Spiritual Highlights & Dua Overlays
+            </legend>
+
+            <p className="text-xs text-muted">
+              Detect Quranic & Hadith Duas in the transcript, auto-correct Hindi and Arabic text using AI, and render a dedicated Islamic prayer card overlay.
+            </p>
+
+            {/* Toggle Card */}
+            <label className={`flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+              draftEnableDuaOverlay
+                ? 'bg-[#fff8f9] border-rausch shadow-airbnb'
+                : 'bg-white border-hairline hover:border-border-strong hover:bg-surface-soft'
+            }`}>
+              <input
+                type="checkbox"
+                checked={draftEnableDuaOverlay}
+                onChange={(e) => setDraftEnableDuaOverlay(e.target.checked)}
+                className="sr-only"
+              />
+              <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
+                draftEnableDuaOverlay
+                  ? 'border-rausch bg-rausch text-white'
+                  : 'border-hairline bg-white'
+              }`}>
+                {draftEnableDuaOverlay && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+              </div>
+              <div className="flex-grow min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <span className="text-sm font-bold text-ink">
+                    Enable Dua Detection & Card Overlay
+                  </span>
+                  <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
+                    draftEnableDuaOverlay
+                      ? 'bg-[#fff0f2] text-rausch border-[#ffd1da]'
+                      : 'bg-surface-soft text-muted border-hairline-soft'
+                  }`}>
+                    {draftEnableDuaOverlay ? 'Active' : 'Disabled'}
+                  </span>
+                </div>
+                <p className="text-xs text-muted leading-tight">
+                  When a Dua is spoken, replaces standard subtitles with a refined prayer card in Hindi and Arabic with Tashkeel.
+                </p>
+              </div>
+            </label>
+
+            {/* Dua Card Theme Selection */}
+            {draftEnableDuaOverlay && (
+              <div className="pt-1">
+                <span className="text-xs font-bold text-ink block mb-2">
+                  Dua Card Color Aesthetics
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {duaThemeOptions.map((opt) => {
+                    const isSelected = draftDuaCardTheme === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setDraftDuaCardTheme(opt.id)}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-[#fff0f2] border-rausch shadow-sm'
+                            : 'bg-white border-hairline hover:bg-surface-soft hover:border-border-strong'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-2">
+                          <div
+                            className="w-5 h-5 rounded-md border shadow-inner"
+                            style={{
+                              backgroundColor: opt.colorPreview,
+                              borderColor: opt.borderPreview,
+                            }}
+                          />
                           <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
                             isSelected
                               ? 'bg-rausch text-white'

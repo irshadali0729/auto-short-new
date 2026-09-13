@@ -12,6 +12,11 @@ import {
   CaptionSlice,
   renderCaptionOverlayPng,
 } from "@/app/utils/caption-renderer";
+import {
+  DuaInfo,
+  DuaCardTheme,
+  renderDuaOverlayPng,
+} from "@/app/utils/dua-renderer";
 
 const ffmpegPath = ffmpegInstaller.path;
 
@@ -23,6 +28,7 @@ interface Scene {
   emoji?: string;
   graphics?: GraphicBeat[];
   captions?: CaptionSlice[];
+  duaInfo?: DuaInfo;
 }
 
 interface ProgressData {
@@ -156,6 +162,8 @@ export async function POST(request: Request) {
       aspectRatio,
       enableEmojiCaptions,
       emojiStyle,
+      enableDuaOverlay,
+      duaCardTheme,
     } = await request.json();
 
     if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
@@ -202,6 +210,8 @@ export async function POST(request: Request) {
       targetRatio,
       enableEmojiCaptions !== false,
       emojiStyle || "fluent",
+      enableDuaOverlay !== false,
+      duaCardTheme || "cream",
     ).catch((err) => {
       console.error("Background compilation crash:", err);
       progressMap.set(runId, {
@@ -229,6 +239,8 @@ async function compileVideoInBackground(
   targetRatio: "9:16" | "16:9" = "9:16",
   enableEmojiCaptions: boolean = true,
   emojiStyle: "fluent" | "apple" | "twitter" = "fluent",
+  enableDuaOverlay: boolean = true,
+  duaCardTheme: DuaCardTheme = "cream",
 ) {
   let tempDir = "";
   try {
@@ -289,8 +301,34 @@ async function compileVideoInBackground(
       const overlayPngList: Array<{ path: string; start: number; end: number }> = [];
       const captionPngList: Array<{ path: string; start: number; end: number }> = [];
 
-      // Mutually exclusive: only render captions OR graphic motion, never both
-      if (textOverlayMode === "captions") {
+      const isDuaScene =
+        enableDuaOverlay &&
+        scene.duaInfo &&
+        typeof scene.duaInfo === "object" &&
+        scene.duaInfo.isDua &&
+        Boolean(scene.duaInfo.hindi || scene.duaInfo.arabic);
+
+      if (isDuaScene) {
+        const duaOverlayPath = path.join(tempDir, `dua_card_${i}.png`);
+        try {
+          await renderDuaOverlayPng(
+            scene.duaInfo!,
+            duaOverlayPath,
+            targetWidth,
+            targetHeight,
+            duaCardTheme,
+          );
+          if (fs.existsSync(duaOverlayPath)) {
+            captionPngList.push({
+              path: duaOverlayPath,
+              start: 0,
+              end: duration,
+            });
+          }
+        } catch (duaErr) {
+          console.warn(`Failed to render dua overlay for scene ${i}:`, duaErr);
+        }
+      } else if (textOverlayMode === "captions") {
         const sceneCaptions =
           Array.isArray(scene.captions) && scene.captions.length > 0
             ? scene.captions
