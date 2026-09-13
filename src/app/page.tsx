@@ -17,7 +17,9 @@ import {
   MessageSquareText,
   Type,
   BookOpen,
-  Edit3
+  Edit3,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import SettingsModal, { 
   MediaSettings, 
@@ -123,6 +125,32 @@ export default function Home() {
   // Dua Edit Modal state
   const [editingDuaSceneIdx, setEditingDuaSceneIdx] = useState<number | null>(null);
   const [isDuaModalOpen, setIsDuaModalOpen] = useState(false);
+
+  // Accordion expansion state for scene overlays (captions / graphics / dua)
+  const [expandedCaptions, setExpandedCaptions] = useState<Record<number, boolean>>({});
+  const [expandedGraphics, setExpandedGraphics] = useState<Record<number, boolean>>({});
+  const [expandedDua, setExpandedDua] = useState<Record<number, boolean>>({});
+
+  const toggleCaptionsAccordion = (sceneIdx: number) => {
+    setExpandedCaptions((prev) => ({
+      ...prev,
+      [sceneIdx]: prev[sceneIdx] === undefined ? false : !prev[sceneIdx],
+    }));
+  };
+
+  const toggleGraphicsAccordion = (sceneIdx: number) => {
+    setExpandedGraphics((prev) => ({
+      ...prev,
+      [sceneIdx]: prev[sceneIdx] === undefined ? false : !prev[sceneIdx],
+    }));
+  };
+
+  const toggleDuaAccordion = (sceneIdx: number) => {
+    setExpandedDua((prev) => ({
+      ...prev,
+      [sceneIdx]: prev[sceneIdx] === undefined ? false : !prev[sceneIdx],
+    }));
+  };
 
   const handleOpenDuaEditor = (sceneIdx: number) => {
     setEditingDuaSceneIdx(sceneIdx);
@@ -939,79 +967,171 @@ export default function Home() {
 
                           {/* Overlay Section based on mutually exclusive textOverlayMode */}
                           {mediaSettings.textOverlayMode === 'captions' ? (
-                            scene.captions && scene.captions.length > 0 ? (
-                              <div className="mt-2.5 pt-2 border-t border-hairline-soft flex flex-col gap-1">
-                                <span className="text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 text-emerald-700">
-                                  <MessageSquareText className="w-2.5 h-2.5" />
-                                  Spoken Captions (Synced)
-                                </span>
-                                <div className="flex flex-col gap-1">
-                                  {scene.captions.map((c, cIdx) => {
-                                    const absStart = sceneStart + c.start;
-                                    return (
-                                      <div key={cIdx} className="px-2.5 py-1.5 rounded-lg bg-surface-soft border border-hairline text-[11px] font-medium text-ink flex items-center justify-between gap-2 shadow-sm">
-                                        <span className="truncate italic">“{c.text}”</span>
-                                        <span className="shrink-0 text-[10px] text-muted tabular-nums ml-1">
-                                          +{c.start.toFixed(1)}s <span className="text-muted">(at {absStart.toFixed(1)}s)</span>
+                            scene.captions && scene.captions.length > 0 ? (() => {
+                              const isCaptionsOpen = expandedCaptions[idx] !== undefined ? expandedCaptions[idx] : false;
+                              return (
+                                <div className="mt-2.5 pt-2 border-t border-hairline-soft flex flex-col gap-1.5">
+                                  {/* Accordion Header */}
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleCaptionsAccordion(idx)}
+                                    className="w-full flex items-center justify-between p-1 rounded-md hover:bg-emerald-50/80 text-[9px] font-bold uppercase tracking-wider text-emerald-700 transition-all cursor-pointer select-none"
+                                  >
+                                    <span className="flex items-center gap-1.5">
+                                      <MessageSquareText className="w-3 h-3 text-emerald-700" />
+                                      <span>Spoken Captions (Synced)</span>
+                                      <span className="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[8px] font-extrabold border border-emerald-200">
+                                        {scene.captions.length}
+                                      </span>
+                                    </span>
+                                    <span className="flex items-center gap-1 text-[9px] text-emerald-600 font-semibold">
+                                      <span>{isCaptionsOpen ? 'Hide' : 'Show All'}</span>
+                                      <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isCaptionsOpen ? 'rotate-180' : ''}`} />
+                                    </span>
+                                  </button>
+
+                                  {/* Accordion Body */}
+                                  {isCaptionsOpen ? (
+                                    <div className="flex flex-col gap-1 animate-in fade-in duration-150">
+                                      {scene.captions.map((c, cIdx) => {
+                                        const absStart = sceneStart + c.start;
+                                        return (
+                                          <div key={cIdx} className="px-2.5 py-1.5 rounded-lg bg-surface-soft border border-hairline text-[11px] font-medium text-ink flex items-center justify-between gap-2 shadow-xs">
+                                            <span className="truncate italic">“{c.text}”</span>
+                                            <span className="shrink-0 text-[10px] text-muted tabular-nums ml-1">
+                                              +{c.start.toFixed(1)}s <span className="text-muted">(at {absStart.toFixed(1)}s)</span>
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    /* Collapsed compact 1-line teaser */
+                                    <div
+                                      onClick={() => toggleCaptionsAccordion(idx)}
+                                      className="px-2.5 py-1.5 rounded-lg bg-surface-soft/80 border border-hairline text-[11px] font-medium text-ink flex items-center justify-between gap-2 shadow-xs cursor-pointer hover:bg-surface-soft transition-colors"
+                                    >
+                                      <span className="truncate italic text-muted">
+                                        “{scene.captions[0]?.text || '...'}”
+                                      </span>
+                                      {scene.captions.length > 1 && (
+                                        <span className="shrink-0 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                          +{scene.captions.length - 1} more
                                         </span>
-                                      </div>
-                                    );
-                                  })}
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                              </div>
-                            ) : null
+                              );
+                            })() : null
                           ) : mediaSettings.textOverlayMode === 'graphics' ? (
-                            scene.graphics && scene.graphics.length > 0 ? (
-                              <div className="mt-2.5 pt-2 border-t border-hairline-soft flex flex-col gap-1">
-                                <span className="text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 text-rausch">
-                                  <Sparkles className="w-2.5 h-2.5" />
-                                  Kinetic Graphic
-                                </span>
-                                <div className="flex flex-col gap-1">
-                                  {scene.graphics.map((g, gIdx) => {
-                                    const absStart = sceneStart + g.start;
-                                    return (
-                                      <div key={gIdx} className="px-2.5 py-1.5 rounded-lg bg-[#fff8f9] border border-[#ffd1da] text-[11px] font-semibold text-ink flex items-center justify-between gap-1.5 shadow-sm">
-                                        <div className="flex items-center gap-1 truncate">
-                                          {g.prefixText && <span className="text-muted font-normal">{g.prefixText}</span>}
-                                          <span className="text-rausch font-bold uppercase bg-[#fff0f2] px-1 rounded">{g.heroWord}</span>
-                                          {g.suffixText && <span className="text-muted font-normal">{g.suffixText}</span>}
-                                        </div>
-                                        <span className="shrink-0 text-[10px] text-muted font-medium tabular-nums ml-1">
-                                          +{g.start.toFixed(1)}s <span className="text-muted">(at {absStart.toFixed(1)}s)</span>
+                            scene.graphics && scene.graphics.length > 0 ? (() => {
+                              const isGraphicsOpen = expandedGraphics[idx] !== undefined ? expandedGraphics[idx] : false;
+                              return (
+                                <div className="mt-2.5 pt-2 border-t border-hairline-soft flex flex-col gap-1.5">
+                                  {/* Accordion Header */}
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleGraphicsAccordion(idx)}
+                                    className="w-full flex items-center justify-between p-1 rounded-md hover:bg-[#fff0f2] text-[9px] font-bold uppercase tracking-wider text-rausch transition-all cursor-pointer select-none"
+                                  >
+                                    <span className="flex items-center gap-1.5">
+                                      <Sparkles className="w-3 h-3 text-rausch" />
+                                      <span>Kinetic Graphics</span>
+                                      <span className="px-1.5 py-0.2 rounded bg-[#fff0f2] text-rausch text-[8px] font-extrabold border border-[#ffd1da]">
+                                        {scene.graphics.length}
+                                      </span>
+                                    </span>
+                                    <span className="flex items-center gap-1 text-[9px] text-rausch font-semibold">
+                                      <span>{isGraphicsOpen ? 'Hide' : 'Show All'}</span>
+                                      <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isGraphicsOpen ? 'rotate-180' : ''}`} />
+                                    </span>
+                                  </button>
+
+                                  {/* Accordion Body */}
+                                  {isGraphicsOpen ? (
+                                    <div className="flex flex-col gap-1 animate-in fade-in duration-150">
+                                      {scene.graphics.map((g, gIdx) => {
+                                        const absStart = sceneStart + g.start;
+                                        return (
+                                          <div key={gIdx} className="px-2.5 py-1.5 rounded-lg bg-[#fff8f9] border border-[#ffd1da] text-[11px] font-semibold text-ink flex items-center justify-between gap-1.5 shadow-xs">
+                                            <div className="flex items-center gap-1 truncate">
+                                              {g.prefixText && <span className="text-muted font-normal">{g.prefixText}</span>}
+                                              <span className="text-rausch font-bold uppercase bg-[#fff0f2] px-1 rounded">{g.heroWord}</span>
+                                              {g.suffixText && <span className="text-muted font-normal">{g.suffixText}</span>}
+                                            </div>
+                                            <span className="shrink-0 text-[10px] text-muted font-medium tabular-nums ml-1">
+                                              +{g.start.toFixed(1)}s <span className="text-muted">(at {absStart.toFixed(1)}s)</span>
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    /* Collapsed compact 1-line teaser */
+                                    <div
+                                      onClick={() => toggleGraphicsAccordion(idx)}
+                                      className="px-2.5 py-1.5 rounded-lg bg-[#fff8f9]/70 border border-[#ffd1da] text-[11px] font-semibold text-ink flex items-center justify-between gap-1.5 shadow-xs cursor-pointer hover:bg-[#fff8f9] transition-colors"
+                                    >
+                                      <span className="text-rausch font-bold uppercase bg-[#fff0f2] px-1 rounded truncate">
+                                        {scene.graphics[0]?.heroWord || 'FOCUS'}
+                                      </span>
+                                      {scene.graphics.length > 1 && (
+                                        <span className="shrink-0 text-[9px] font-bold text-rausch bg-white px-1.5 py-0.5 rounded border border-[#ffd1da]">
+                                          +{scene.graphics.length - 1} more
                                         </span>
-                                      </div>
-                                    );
-                                  })}
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                              </div>
-                            ) : null
+                              );
+                            })() : null
                           ) : null}
 
-                          {/* Spiritual Dua Card Highlight if present */}
-                          {scene.duaInfo?.isDua ? (
-                            <div className="mt-2.5 p-2.5 rounded-xl border border-[#E2D3B3] bg-[#FAF6ED] flex flex-col gap-1.5 shadow-xs">
-                              <div className="flex items-center justify-between gap-1">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8C682A] flex items-center gap-1">
-                                  <BookOpen className="w-3 h-3 text-[#8C682A]" />
-                                  🤲 Dua Card Overlay
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenDuaEditor(idx)}
-                                  className="text-[10px] font-bold text-rausch hover:underline flex items-center gap-0.5"
-                                >
-                                  <Edit3 className="w-2.5 h-2.5" /> Edit / Preview
-                                </button>
+                          {/* Spiritual Dua Card Highlight if present (with Accordion) */}
+                          {scene.duaInfo?.isDua ? (() => {
+                            const isDuaOpen = expandedDua[idx] !== undefined ? expandedDua[idx] : true;
+                            return (
+                              <div className="mt-2.5 p-2.5 rounded-xl border border-[#E2D3B3] bg-[#FAF6ED] flex flex-col gap-1.5 shadow-xs">
+                                <div className="flex items-center justify-between gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleDuaAccordion(idx)}
+                                    className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8C682A] hover:opacity-80 transition-opacity cursor-pointer select-none"
+                                  >
+                                    <BookOpen className="w-3 h-3 text-[#8C682A]" />
+                                    <span>🤲 Dua Card</span>
+                                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isDuaOpen ? 'rotate-180' : ''}`} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenDuaEditor(idx)}
+                                    className="text-[10px] font-bold text-rausch hover:underline flex items-center gap-0.5"
+                                  >
+                                    <Edit3 className="w-2.5 h-2.5" /> Edit / Preview
+                                  </button>
+                                </div>
+
+                                {isDuaOpen ? (
+                                  <div className="flex flex-col gap-1 animate-in fade-in duration-150">
+                                    <div className="text-xs font-bold text-[#1E293B] leading-tight line-clamp-2">
+                                      {scene.duaInfo.hindi}
+                                    </div>
+                                    <div className="text-xs font-semibold text-[#064E3B] text-right dir-rtl leading-snug line-clamp-2 font-arabic">
+                                      {scene.duaInfo.arabic}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div
+                                    onClick={() => toggleDuaAccordion(idx)}
+                                    className="text-[11px] font-medium text-[#1E293B]/70 truncate italic cursor-pointer"
+                                  >
+                                    {scene.duaInfo.hindi}
+                                  </div>
+                                )}
                               </div>
-                              <div className="text-xs font-bold text-[#1E293B] leading-tight line-clamp-2">
-                                {scene.duaInfo.hindi}
-                              </div>
-                              <div className="text-xs font-semibold text-[#064E3B] text-right dir-rtl leading-snug line-clamp-2 font-arabic">
-                                {scene.duaInfo.arabic}
-                              </div>
-                            </div>
-                          ) : (
+                            );
+                          })() : (
                             <div className="mt-1 flex justify-end">
                               <button
                                 type="button"
