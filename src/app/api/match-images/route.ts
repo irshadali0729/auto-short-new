@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { getHostVideos, pickRandomHostVideo } from "@/app/utils/host-library";
 
 interface GraphicBeat {
   prefixText?: string;
@@ -48,6 +49,8 @@ interface MediaSettingsPayload {
   mediaType?: "only_videos" | "only_images" | "both";
   useRelatableVisualSearch?: boolean;
   aspectRatio?: "9:16" | "16:9";
+  enableVideoHost?: boolean;
+  videoHostType?: string;
 }
 
 function shuffleArray<T>(array: T[]): T[] {
@@ -162,11 +165,21 @@ export async function POST(request: Request) {
     const isRelatableMode = mediaSettings.useRelatableVisualSearch !== false;
     const targetRatio: "9:16" | "16:9" = mediaSettings.aspectRatio || "9:16";
 
+    const isHostEnabled = Boolean(mediaSettings.enableVideoHost);
+    const hostType = mediaSettings.videoHostType || "women_host";
+    const availableHostVideos = isHostEnabled ? getHostVideos(hostType) : [];
+    const hasHostVideos = availableHostVideos.length > 0;
+    let lastHostAsset: string | undefined = undefined;
+
     const matchedScenes: Array<{
       keyword: string;
       duration: number;
       image: string;
       isFallback: boolean;
+      isHostScene?: boolean;
+      isSplitScreen?: boolean;
+      hostAsset?: string;
+      stockAsset?: string;
       visualQuery?: string;
       fallbackQuery?: string;
       moodQuery?: string;
@@ -195,6 +208,33 @@ export async function POST(request: Request) {
       const scene: SceneInput = scenes[sceneIdx];
       const { keyword, duration, graphics, captions, visualQuery, fallbackQuery, moodQuery } = scene;
       const kw = keyword ? keyword.trim() : "";
+
+      const isScene1Host = isHostEnabled && hasHostVideos && sceneIdx === 0;
+      const isSplitScreenScene = isHostEnabled && hasHostVideos && sceneIdx > 0 && sceneIdx % 4 === 3;
+
+      // Handle Scene 1 Full-Screen Host Presenter Hook directly
+      if (isScene1Host) {
+        const chosenHost = pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath;
+        lastHostAsset = chosenHost;
+        matchedScenes.push({
+          keyword,
+          duration,
+          image: chosenHost,
+          isFallback: false,
+          isHostScene: true,
+          hostAsset: chosenHost,
+          visualQuery,
+          fallbackQuery,
+          moodQuery,
+          matchedTier: "local",
+          matchedQuery: "AI Video Host Presenter (Intro Hook)",
+          emoji: scene.emoji,
+          graphics: Array.isArray(graphics) ? graphics : undefined,
+          captions: Array.isArray(captions) ? captions : undefined,
+          duaInfo: scene.duaInfo,
+        });
+        continue;
+      }
 
       // Determine preference for this scene: video vs image
       let preferVideo = false;
@@ -324,16 +364,26 @@ export async function POST(request: Request) {
           matchedQuery = "Fallback Asset";
         }
 
+        const chosenHost = isSplitScreenScene
+          ? pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath
+          : undefined;
+        if (chosenHost) {
+          lastHostAsset = chosenHost;
+        }
+
         matchedScenes.push({
           keyword,
           duration,
           image: chosenAsset,
           isFallback: matchedTier === "random",
+          isSplitScreen: isSplitScreenScene,
+          hostAsset: chosenHost,
+          stockAsset: isSplitScreenScene ? chosenAsset : undefined,
           visualQuery,
           fallbackQuery,
           moodQuery,
           matchedTier,
-          matchedQuery,
+          matchedQuery: isSplitScreenScene ? `${matchedQuery} (Split Screen)` : matchedQuery,
           emoji: scene.emoji,
           graphics: Array.isArray(graphics) ? graphics : undefined,
           captions: Array.isArray(captions) ? captions : undefined,
@@ -426,6 +476,13 @@ export async function POST(request: Request) {
           }
         }
 
+        const chosenHost = isSplitScreenScene
+          ? pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath
+          : undefined;
+        if (chosenHost) {
+          lastHostAsset = chosenHost;
+        }
+
         // If remote provider found asset, record and continue
         if (foundAsset) {
           matchedScenes.push({
@@ -433,8 +490,11 @@ export async function POST(request: Request) {
             duration,
             image: foundAsset,
             isFallback: false,
+            isSplitScreen: isSplitScreenScene,
+            hostAsset: chosenHost,
+            stockAsset: isSplitScreenScene ? foundAsset : undefined,
             matchedTier: "legacy",
-            matchedQuery: kw,
+            matchedQuery: isSplitScreenScene ? `${kw} (Split Screen)` : kw,
             emoji: scene.emoji,
             graphics: Array.isArray(graphics) ? graphics : undefined,
             captions: Array.isArray(captions) ? captions : undefined,
@@ -462,8 +522,11 @@ export async function POST(request: Request) {
               duration,
               image: chosen,
               isFallback: false,
+              isSplitScreen: isSplitScreenScene,
+              hostAsset: chosenHost,
+              stockAsset: isSplitScreenScene ? chosen : undefined,
               matchedTier: "legacy",
-              matchedQuery: kw,
+              matchedQuery: isSplitScreenScene ? `${kw} (Split Screen)` : kw,
               emoji: scene.emoji,
               graphics: Array.isArray(graphics) ? graphics : undefined,
               captions: Array.isArray(captions) ? captions : undefined,
@@ -485,8 +548,11 @@ export async function POST(request: Request) {
           duration,
           image: fallback,
           isFallback: true,
+          isSplitScreen: isSplitScreenScene,
+          hostAsset: chosenHost,
+          stockAsset: isSplitScreenScene ? fallback : undefined,
           matchedTier: "legacy",
-          matchedQuery: "Fallback",
+          matchedQuery: isSplitScreenScene ? "Fallback (Split Screen)" : "Fallback",
           emoji: scene.emoji,
           graphics: Array.isArray(graphics) ? graphics : undefined,
           captions: Array.isArray(captions) ? captions : undefined,

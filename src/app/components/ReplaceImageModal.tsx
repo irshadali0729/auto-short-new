@@ -16,6 +16,7 @@ import {
   RotateCcw,
   CheckCircle2,
 } from 'lucide-react';
+import { getMediaUrl } from '@/app/utils/media-url';
 
 export interface ReplaceImageModalProps {
   isOpen: boolean;
@@ -32,15 +33,21 @@ type SourceFilter = 'all' | 'pexels' | 'pixabay' | 'unsplash' | 'local';
 
 export function parseMediaMetadata(filename: string) {
   const isVideo = /\.(mp4|webm|mov)$/i.test(filename);
-  const lastDot = filename.lastIndexOf('.');
-  const ext = lastDot !== -1 ? filename.slice(lastDot).toLowerCase() : '';
-  const nameWithoutExt = lastDot !== -1 ? filename.slice(0, lastDot) : filename;
+  const cleanPath = filename.replace(/\\/g, '/');
+  const baseFilename = cleanPath.split('/').pop() || cleanPath;
+  const lastDot = baseFilename.lastIndexOf('.');
+  const ext = lastDot !== -1 ? baseFilename.slice(lastDot).toLowerCase() : '';
+  const nameWithoutExt = lastDot !== -1 ? baseFilename.slice(0, lastDot) : baseFilename;
 
-  let source: 'Pexels' | 'Pixabay' | 'Unsplash' | 'Local' = 'Local';
+  let source: 'Pexels' | 'Pixabay' | 'Unsplash' | 'Host' | 'Local' = 'Local';
   let sourceKey: SourceFilter = 'local';
   let cleanName = nameWithoutExt;
 
-  if (/^pexels[_-]/i.test(cleanName)) {
+  if (cleanPath.startsWith('host/')) {
+    source = 'Host';
+    sourceKey = 'local';
+    cleanName = nameWithoutExt.replace(/^(women-girl-gesture|gesture|host)[_-]?/i, 'Host Gesture ');
+  } else if (/^pexels[_-]/i.test(cleanName)) {
     source = 'Pexels';
     sourceKey = 'pexels';
     cleanName = cleanName.replace(/^pexels[_-]\d*[_-]?/i, '');
@@ -62,6 +69,7 @@ export function parseMediaMetadata(filename: string) {
 
   return { isVideo, source, sourceKey, formattedTitle, ext };
 }
+
 
 export default function ReplaceImageModal({
   isOpen,
@@ -373,7 +381,7 @@ export default function ReplaceImageModal({
                       {item.isVideo ? (
                         <>
                           <video
-                            src={`/api/images/${encodeURIComponent(item.filename)}`}
+                            src={getMediaUrl(item.filename)}
                             muted
                             loop
                             playsInline
@@ -409,7 +417,7 @@ export default function ReplaceImageModal({
                       ) : (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
-                          src={`/api/images/${encodeURIComponent(item.filename)}`}
+                          src={getMediaUrl(item.filename)}
                           alt={item.formattedTitle || item.filename}
                           loading="lazy"
                           decoding="async"

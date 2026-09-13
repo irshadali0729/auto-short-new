@@ -25,6 +25,10 @@ interface Scene {
   duration: number;
   image: string;
   isFallback: boolean;
+  isHostScene?: boolean;
+  isSplitScreen?: boolean;
+  hostAsset?: string;
+  stockAsset?: string;
   emoji?: string;
   graphics?: GraphicBeat[];
   captions?: CaptionSlice[];
@@ -390,8 +394,60 @@ async function compileVideoInBackground(
 
       const isVideoAsset = /\.(mp4|webm|mov)$/i.test(imageFilename);
 
+      const isSplitScreenScene = Boolean(scene.isSplitScreen && scene.hostAsset);
+      const hostFilename = scene.hostAsset || "";
+      const inputHostPath = isSplitScreenScene ? path.join(imageLibraryDir, hostFilename) : "";
+      const hasValidHostFile = isSplitScreenScene && fs.existsSync(inputHostPath);
+
       let filterGraph = "";
-      if (isVideoAsset) {
+      let overlayBaseInputIdx = 1;
+
+      if (hasValidHostFile) {
+        overlayBaseInputIdx = 2; // Input 0: Host Video, Input 1: Stock Media
+        const isStockVideo = /\.(mp4|webm|mov)$/i.test(imageFilename);
+
+        if (targetRatio === "16:9") {
+          // Landscape: Left/Right 50/50 Split
+          const halfWidth = Math.floor(targetWidth / 2);
+          const dividerX = halfWidth - 2;
+
+          let stockChain = "";
+          if (isStockVideo) {
+            stockChain = `[1:v]scale=${halfWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${halfWidth}:${targetHeight},setpts=PTS-STARTPTS[right];`;
+          } else {
+            stockChain =
+              `[1:v]scale=${halfWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${halfWidth}:${targetHeight}[r_still];` +
+              `[r_still]zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':d=1:s=${halfWidth}x${targetHeight}:fps=30[right];`;
+          }
+
+          filterGraph =
+            `[0:v]scale=${halfWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${halfWidth}:${targetHeight},setpts=PTS-STARTPTS[left];` +
+            stockChain +
+            `[left][right]hstack=inputs=2[split_raw];` +
+            `[split_raw]drawbox=x=${dividerX}:y=0:w=4:h=${targetHeight}:color=white@0.35:t=fill[zoomed];` +
+            `[zoomed]drawgrid=width=100:height=100:thickness=1:color=white@0.04[grid];`;
+        } else {
+          // Vertical (9:16): Top/Bottom 50/50 Split
+          const halfHeight = Math.floor(targetHeight / 2);
+          const dividerY = halfHeight - 2;
+
+          let stockChain = "";
+          if (isStockVideo) {
+            stockChain = `[1:v]scale=${targetWidth}:${halfHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${halfHeight},setpts=PTS-STARTPTS[bottom];`;
+          } else {
+            stockChain =
+              `[1:v]scale=${targetWidth}:${halfHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${halfHeight}[b_still];` +
+              `[b_still]zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':d=1:s=${targetWidth}x${halfHeight}:fps=30[bottom];`;
+          }
+
+          filterGraph =
+            `[0:v]scale=${targetWidth}:${halfHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${halfHeight},setpts=PTS-STARTPTS[top];` +
+            stockChain +
+            `[top][bottom]vstack=inputs=2[split_raw];` +
+            `[split_raw]drawbox=x=0:y=${dividerY}:w=${targetWidth}:h=4:color=white@0.35:t=fill[zoomed];` +
+            `[zoomed]drawgrid=width=100:height=100:thickness=1:color=white@0.04[grid];`;
+        }
+      } else if (isVideoAsset) {
         filterGraph =
           `[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${targetHeight},boxblur=20:5,setpts=PTS-STARTPTS[bg];` +
           `[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,setpts=PTS-STARTPTS[fg_scaled];` +
@@ -411,7 +467,7 @@ async function compileVideoInBackground(
       // Mutually exclusive overlay composition into FFmpeg filter graph
       if (textOverlayMode === "captions" && captionPngList.length > 0) {
         captionPngList.forEach((ov, idx) => {
-          const inputIdx = 1 + idx;
+          const inputIdx = overlayBaseInputIdx + idx;
           const nextLabel = `v_cap_${idx}`;
           const fadedLabel = `faded_cap_${idx}`;
           const st = ov.start.toFixed(2);
@@ -428,7 +484,7 @@ async function compileVideoInBackground(
       } else if (textOverlayMode === "graphics") {
         if (overlayPngList.length > 0) {
           overlayPngList.forEach((ov, idx) => {
-            const inputIdx = 1 + idx;
+            const inputIdx = overlayBaseInputIdx + idx;
             const nextLabel = `v_ov_${idx}`;
             const fadedLabel = `faded_ov_${idx}`;
             const st = ov.start.toFixed(2);
@@ -466,7 +522,16 @@ async function compileVideoInBackground(
       }
 
       const ffmpegArgs = ["-y"];
-      if (isVideoAsset) {
+      if (hasValidHostFile) {
+        // Input 0: Host video clip
+        ffmpegArgs.push("-stream_loop", "-1", "-i", inputHostPath);
+        // Input 1: Stock media (video or still photo)
+        if (/\.(mp4|webm|mov)$/i.test(imageFilename)) {
+          ffmpegArgs.push("-stream_loop", "-1", "-i", inputImagePath);
+        } else {
+          ffmpegArgs.push("-loop", "1", "-i", inputImagePath);
+        }
+      } else if (isVideoAsset) {
         ffmpegArgs.push("-stream_loop", "-1", "-i", inputImagePath);
       } else {
         ffmpegArgs.push("-loop", "1", "-i", inputImagePath);

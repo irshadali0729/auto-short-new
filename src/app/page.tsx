@@ -28,6 +28,7 @@ import SettingsModal, {
 import ReplaceImageModal from '@/app/components/ReplaceImageModal';
 import DuaEditModal from '@/app/components/DuaEditModal';
 import { DuaInfo } from '@/app/utils/dua-card-svg';
+import { getMediaUrl, isVideoAsset } from '@/app/utils/media-url';
 
 interface GraphicBeat {
   prefixText?: string;
@@ -59,6 +60,10 @@ interface Scene {
   duration: number;
   image: string;
   isFallback: boolean;
+  isHostScene?: boolean;
+  isSplitScreen?: boolean;
+  hostAsset?: string;
+  stockAsset?: string;
   visualQuery?: string;
   fallbackQuery?: string;
   moodQuery?: string;
@@ -439,6 +444,8 @@ export default function Home() {
           emojiStyle: mediaSettings.emojiStyle || 'fluent',
           enableDuaOverlay: mediaSettings.enableDuaOverlay !== false,
           duaCardTheme: mediaSettings.duaCardTheme || 'cream',
+          enableVideoHost: mediaSettings.enableVideoHost !== false,
+          videoHostType: mediaSettings.videoHostType || 'women_host',
         }),
       });
 
@@ -542,7 +549,7 @@ export default function Home() {
           <Settings className="w-3.5 h-3.5 text-rausch" />
           <span>Settings</span>
           <span className="px-1.5 py-0.5 rounded-full bg-[#fff0f2] text-rausch text-[10px] font-bold border border-[#ffd1da]">
-            {Object.values(mediaSettings.sources).filter(Boolean).length} Sources
+            {Object.values(mediaSettings?.sources || DEFAULT_MEDIA_SETTINGS.sources).filter(Boolean).length} Sources
           </span>
         </button>
       </nav>
@@ -560,11 +567,11 @@ export default function Home() {
           <div className="mt-4 inline-flex flex-wrap items-center justify-center gap-2 px-4 py-1.5 rounded-full bg-surface-soft border border-hairline-soft text-xs text-muted shadow-sm">
             <Sliders className="w-3.5 h-3.5 text-rausch" />
             <span className="font-medium text-ink">Filter:</span>
-            <span className="font-bold text-ink capitalize">{mediaSettings.mediaType.replace(/_/g, ' ')}</span>
+            <span className="font-bold text-ink capitalize">{(mediaSettings?.mediaType || 'both').replace(/_/g, ' ')}</span>
             <span className="text-hairline">•</span>
             <span className="font-medium text-ink">Sources:</span>
             <span className="font-bold text-ink">
-              {Object.entries(mediaSettings.sources)
+              {Object.entries(mediaSettings?.sources || DEFAULT_MEDIA_SETTINGS.sources)
                 .filter(([_, enabled]) => enabled)
                 .map(([name]) => name.charAt(0).toUpperCase() + name.slice(1))
                 .join(', ')}
@@ -572,11 +579,16 @@ export default function Home() {
             <span className="text-hairline">•</span>
             <span className="font-medium text-ink">Overlay:</span>
             <span className="font-bold text-rausch capitalize">
-              {mediaSettings.textOverlayMode === 'graphics'
+              {mediaSettings?.textOverlayMode === 'graphics'
                 ? 'Graphic Motion'
-                : mediaSettings.textOverlayMode === 'none'
+                : mediaSettings?.textOverlayMode === 'none'
                   ? 'None'
                   : 'Captions'}
+            </span>
+            <span className="text-hairline">•</span>
+            <span className="font-medium text-ink">Host:</span>
+            <span className={`font-bold ${mediaSettings.enableVideoHost !== false ? 'text-emerald-700' : 'text-muted'}`}>
+              {mediaSettings.enableVideoHost !== false ? 'Active' : 'Off'}
             </span>
             <span className="text-hairline">•</span>
             <span className="font-medium text-ink">Zoom:</span>
@@ -823,11 +835,53 @@ export default function Home() {
                     return (
                     <div key={idx} className="rounded-2xl border border-hairline bg-white overflow-hidden flex flex-col relative group hover:shadow-airbnb hover:border-border-strong transition-all">
                       
-                      {/* Scene Media Preview (Video or Image) */}
+                      {/* Scene Media Preview (Video or Image or Dual Split Screen) */}
                       <div className="relative h-44 bg-surface-soft flex items-center justify-center overflow-hidden">
-                        {/\.(mp4|webm|mov)$/i.test(scene.image) ? (
+                        {scene.isSplitScreen && scene.hostAsset ? (
+                          /* Dual Split-Screen Preview (Top: Host Video, Bottom: Stock Media) */
+                          <div className="w-full h-full flex flex-col relative">
+                            <div className="h-1/2 w-full relative overflow-hidden bg-black/40 border-b border-white/40">
+                              <video
+                                src={getMediaUrl(scene.hostAsset)}
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                className="w-full h-full object-cover"
+                              />
+                              <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-bold bg-black/60 text-white backdrop-blur-xs">
+                                Host Top
+                              </span>
+                            </div>
+                            <div className="h-1/2 w-full relative overflow-hidden bg-black/40">
+                              {isVideoAsset(scene.image) ? (
+                                <video
+                                  src={getMediaUrl(scene.image)}
+                                  autoPlay
+                                  loop
+                                  muted
+                                  playsInline
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                /* eslint-disable-next-line @next/next/no-img-element */
+                                <img
+                                  src={getMediaUrl(scene.image)}
+                                  alt={scene.keyword}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).style.opacity = '0.3';
+                                  }}
+                                />
+                              )}
+                              <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-bold bg-black/60 text-white backdrop-blur-xs">
+                                Stock Bottom
+                              </span>
+                            </div>
+                          </div>
+                        ) : isVideoAsset(scene.image) ? (
                           <video
-                            src={`/api/images/${encodeURIComponent(scene.image)}`}
+                            src={getMediaUrl(scene.image)}
                             autoPlay
                             loop
                             muted
@@ -837,29 +891,37 @@ export default function Home() {
                         ) : (
                           /* eslint-disable-next-line @next/next/no-img-element */
                           <img
-                            src={`/api/images/${encodeURIComponent(scene.image)}`}
+                            src={getMediaUrl(scene.image)}
                             alt={scene.keyword}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                             onError={(e) => {
-                              (e.target as HTMLElement).style.display = 'none';
+                              (e.target as HTMLElement).style.opacity = '0.3';
                             }}
                           />
                         )}
 
                         {/* Guest Favorite-Style Floating Badges (Top Left) */}
                         <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5 z-10">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-white text-ink border border-hairline-soft shadow-sm backdrop-blur-md">
                               Scene {idx + 1}
                             </span>
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-900/80 text-white shadow-sm border border-white/20 backdrop-blur-md">
                               {mediaSettings.aspectRatio === '16:9' ? '16:9' : '9:16'}
                             </span>
-                            {/\.(mp4|webm|mov)$/i.test(scene.image) && (
+                            {scene.isHostScene ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-700 text-white shadow-sm flex items-center gap-1">
+                                🎙️ Host Hook
+                              </span>
+                            ) : scene.isSplitScreen ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-600 text-white shadow-sm flex items-center gap-1">
+                                ⚡ Split Screen
+                              </span>
+                            ) : /\.(mp4|webm|mov)$/i.test(scene.image) ? (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rausch text-white shadow-sm flex items-center gap-1">
                                 <Film className="w-2.5 h-2.5" /> Video
                               </span>
-                            )}
+                            ) : null}
                           </div>
                           
                           {scene.isFallback ? (
