@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Groq } from "groq-sdk";
+import { resolveEmojiForText } from "@/app/utils/emoji-resolver";
 
 export interface GraphicBeat {
   prefixText?: string;
@@ -24,6 +25,7 @@ export interface CaptionSlice {
   text: string;
   start: number;
   end: number;
+  emoji?: string;
 }
 
 function buildGraphicBeats(
@@ -179,10 +181,13 @@ function alignScenesToSegments(
           accurateDuration,
           Math.max(relStart + 0.5, segments[s].end - sceneStartTime),
         );
+        const sliceEmoji =
+          resolveEmojiForText(segments[s].text) || scene.emoji;
         sceneCaptions.push({
           text: segments[s].text,
           start: Number(relStart.toFixed(2)),
           end: Number(relEnd.toFixed(2)),
+          emoji: sliceEmoji,
         });
       }
     }
@@ -203,6 +208,7 @@ interface GroqScene {
   visualQuery?: string;
   fallbackQuery?: string;
   moodQuery?: string;
+  emoji?: string;
   graphics?: GraphicBeat[];
   tags?: string[];
   caption?: string;
@@ -303,6 +309,7 @@ Rules:
 * Return a JSON object with a single key "scenes" which contains an array of objects.
 * Each scene object must have:
   - "keyword" (string): Simple visual keyword (max 2 words).
+  - "emoji" (string): A single high-impact emotional/spiritual emoji (e.g. "🤲", "💔", "✨", "⏳", "🔥", "⚠️", "💰").
   - "duration" (number): Scene duration in seconds.
   - "prompt" (string): A detailed text-to-image prompt. It must describe a clean, beautiful scene in "cinematic anime style" reflecting the transcript beat, and end with the exact words: "vertical 9:16 aspect ratio, soft lighting, highly detailed, 1k".
   - "tags" (array of strings): 3-5 short visual keywords or synonyms (order by relevance). These will be used to expand image search queries (e.g., ["muslim_woman", "hijab", "prayer"]).
@@ -344,6 +351,7 @@ Example output:
   "scenes": [
     { 
       "keyword": "muslim_husband", 
+      "emoji": "🤲",
       "duration": 5, 
       "tags": ["muslim_husband","smile","flower"],
       "caption": "A smiling Muslim husband holding a flower in soft morning light.",
@@ -383,6 +391,18 @@ CRITICAL VISUAL METAPHOR & STOCK SEARCH RULES:
 * "fallbackQuery" (string): Secondary concrete physical alternative shot (3-5 words in English) if the primary shot is unavailable (e.g., "ancient mosque architecture dome", "desert sand dunes cinematic sunset").
 * "moodQuery" (string): Universal atmospheric backup shot (3-5 words in English) matching the emotional weight (e.g., "dramatic storm clouds sunset sky", "sun rays through clouds golden hour").
 * "keyword" (string): Concise 1-3 word human-readable topic label in English for the UI storyboard badge (e.g., "Broken Trust", "Sincere Prayer", "Divine Mercy").
+* "emoji" (string): A single high-impact emotional or spiritual emoji for this scene.
+  - CRITICAL DIVERSITY RULE: Do NOT repeat the same emoji across scenes! Every scene MUST have a different, specific emoji matching its unique action:
+    * Holy Name / Zikr / Tasbih -> "📿" or "🔑"
+    * Asking / Dua / Supplication -> "🤲"
+    * Acceptance / Divine Gift / Atta / Reward -> "🎁"
+    * Love / Beloved / Pyari / Sweetness -> "❤️"
+    * Wonder / Praise / SubhanAllah -> "💫"
+    * Heartbreak / Pain / Dil dukhana -> "💔"
+    * Warning / Solemn Oath -> "⚠️"
+    * Time / Urgency / Delay -> "⏳"
+    * Fire / Punishment -> "🔥"
+    * Light / Mercy / Noor -> "✨"
 
 General Rules:
 * Return valid JSON only without markdown or code fences.
@@ -393,6 +413,7 @@ General Rules:
   - "visualQuery" (string): 3-6 words concrete camera shot in English.
   - "fallbackQuery" (string): 3-5 words secondary camera shot in English.
   - "moodQuery" (string): 3-5 words atmospheric backup shot in English.
+  - "emoji" (string): Single high-impact 3D-style emoji (e.g., "💔", "🤲", "🔥", "⏳", "⚠️", "✨", "💰", "💡", "🥀", "😢", "🕌", "👑").
   - "duration" (number): Scene duration in seconds.
   - "prompt" (string): A detailed text-to-image prompt in "cinematic anime style", ending with: "vertical 9:16 aspect ratio, soft lighting, highly detailed, 1k".
   - "tags" (array of strings): 3-5 visual keywords.
@@ -422,7 +443,7 @@ CRITICAL TIMELINE SYNCHRONIZATION RULES:
 - The "duration" of each scene MUST match the exact duration of the segments it covers (e.g., if Scene 1 covers 0.00s to 4.90s, duration is 4.90).
 - For graphic beats, set "start" and "end" relative to that scene's start time matching when the heroWord is spoken in the segment.`
     : targetLength
-      ? `* The total duration of all scenes combined must be exactly ${targetLength} seconds. Adjust the duration of individual scenes so they sum up to exactly ${targetLength}.`
+      ? `* The total duration of all scenes combined must be exactly ${targetLength} seconds. Adjust the duration of individual scenes (which must be numbers) so they sum up to exactly ${targetLength}.`
       : "* Total duration of all scenes combined should ideally be between 15 to 45 seconds."
 }
 
@@ -434,6 +455,7 @@ Example output:
       "visualQuery": "thoughtful lonely man dark cinematic lighting",
       "fallbackQuery": "man walking alone desert dunes sunset",
       "moodQuery": "dramatic storm clouds sunset sky",
+      "emoji": "💔",
       "duration": 5,
       "tags": ["lonely_man", "cinematic", "shadows"],
       "caption": "A solitary thoughtful man seated in moody dramatic lighting reflecting in silence.",
@@ -612,7 +634,10 @@ export async function POST(request: Request) {
       }
     }
 
-    finalScenes = finalScenes.map((scene) => {
+    const usedSceneEmojis = new Set<string>();
+    const diverseFallbacks = ["🤲", "📿", "🎁", "❤️", "💫", "✨", "💡", "⏳", "🕊️", "📖"];
+
+    finalScenes = finalScenes.map((scene, sIdx) => {
       const duration = Number(scene.duration) || 6;
       const graphics: GraphicBeat[] =
         Array.isArray(scene.graphics) && scene.graphics.length > 0
@@ -644,21 +669,64 @@ export async function POST(request: Request) {
             })
           : buildGraphicBeats(transcript, duration, hasSegments ? segments : undefined);
 
+      const sceneSpokenText =
+        (scene.captions || []).map((c) => c.text).join(" ") ||
+        scene.caption ||
+        scene.keyword ||
+        "";
+
+      // 1. Try Groq's assigned emoji if unique
+      let sceneEmoji = scene.emoji?.trim() || "";
+      if (sceneEmoji && usedSceneEmojis.has(sceneEmoji)) {
+        sceneEmoji = ""; // avoid repeating identical emojis across scenes
+      }
+
+      // 2. Resolve from actual spoken text (Hindi/Urdu/English) of this scene
+      if (!sceneEmoji) {
+        const textMatch = resolveEmojiForText(sceneSpokenText);
+        if (textMatch && !usedSceneEmojis.has(textMatch)) {
+          sceneEmoji = textMatch;
+        } else if (textMatch && !sceneEmoji) {
+          sceneEmoji = textMatch;
+        }
+      }
+
+      // 3. Resolve from keyword or visual query
+      if (!sceneEmoji) {
+        const kwMatch = resolveEmojiForText(`${scene.keyword || ""} ${scene.visualQuery || ""}`);
+        if (kwMatch && !usedSceneEmojis.has(kwMatch)) {
+          sceneEmoji = kwMatch;
+        }
+      }
+
+      // 4. If still none or repeated, pick next distinct fallback
+      if (!sceneEmoji) {
+        const unusedFallback = diverseFallbacks.find((e) => !usedSceneEmojis.has(e));
+        sceneEmoji = unusedFallback || diverseFallbacks[sIdx % diverseFallbacks.length];
+      }
+
+      usedSceneEmojis.add(sceneEmoji);
+
       const captions: CaptionSlice[] =
         Array.isArray(scene.captions) && scene.captions.length > 0
-          ? scene.captions
+          ? scene.captions.map((c) => ({
+              ...c,
+              emoji: c.emoji || resolveEmojiForText(c.text) || sceneEmoji,
+            }))
           : scene.caption || scene.keyword
             ? [
                 {
                   text: scene.caption || scene.keyword,
                   start: 0.0,
                   end: duration,
+                  emoji: sceneEmoji,
                 },
               ]
             : [];
 
       return {
         ...scene,
+        emoji: sceneEmoji,
         graphics,
         captions: captions.length > 0 ? captions : undefined,
       };

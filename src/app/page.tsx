@@ -45,6 +45,7 @@ export interface CaptionSlice {
   text: string;
   start: number;
   end: number;
+  emoji?: string;
 }
 
 interface Scene {
@@ -57,6 +58,7 @@ interface Scene {
   moodQuery?: string;
   matchedTier?: "visual" | "fallback" | "mood" | "local" | "random" | "legacy";
   matchedQuery?: string;
+  emoji?: string;
   graphics?: GraphicBeat[];
   captions?: CaptionSlice[];
 }
@@ -112,6 +114,21 @@ export default function Home() {
   const [allLibraryImages, setAllLibraryImages] = useState<string[]>([]);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Quick Emoji Picker state
+  const [activeEmojiPickerIdx, setActiveEmojiPickerIdx] = useState<number | null>(null);
+  const QUICK_EMOJIS = ['💔', '🤲', '🔥', '⏳', '⚠️', '✨', '💰', '💡', '🥀', '😢', '🕌', '👑', '🕊️', '📖', '⚖️', '❤️'];
+
+  const handleSelectSceneEmoji = (sceneIdx: number, emoji: string) => {
+    setScenes((prev) => {
+      const updated = [...prev];
+      if (updated[sceneIdx]) {
+        updated[sceneIdx] = { ...updated[sceneIdx], emoji };
+      }
+      return updated;
+    });
+    setActiveEmojiPickerIdx(null);
+  };
 
   // Load all images from the library on load for manual overriding
   useEffect(() => {
@@ -363,6 +380,8 @@ export default function Home() {
           enableGraphicMotion: mediaSettings.textOverlayMode === 'graphics',
           enableCaptions: mediaSettings.textOverlayMode === 'captions',
           aspectRatio: mediaSettings.aspectRatio || '9:16',
+          enableEmojiCaptions: mediaSettings.enableEmojiCaptions !== false,
+          emojiStyle: mediaSettings.emojiStyle || 'fluent',
         }),
       });
 
@@ -820,11 +839,56 @@ export default function Home() {
                             <span className="text-[10px] tracking-wider uppercase font-bold text-muted block">
                               {mediaSettings.useRelatableVisualSearch !== false ? "Scene Concept" : "Keyword Match"}
                             </span>
-                            {scene.matchedTier && scene.matchedTier !== "legacy" && scene.matchedTier !== "random" && (
-                              <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                {scene.matchedTier} match
-                              </span>
-                            )}
+                            <div className="flex items-center gap-1.5 relative">
+                              {/* Interactive 3D Emoji Chip */}
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveEmojiPickerIdx(activeEmojiPickerIdx === idx ? null : idx)}
+                                  title="Click to customize scene 3D emoji"
+                                  className="px-2 py-0.5 rounded-full text-xs bg-[#fff0f2] border border-[#ffd1da] hover:border-rausch text-ink flex items-center gap-1 font-bold transition-all shadow-xs active:scale-95"
+                                >
+                                  <span className="text-sm leading-none">{scene.emoji || '✨'}</span>
+                                  <span className="text-[9px] uppercase font-bold text-rausch">Emoji</span>
+                                </button>
+
+                                {/* Quick Emoji Popover */}
+                                {activeEmojiPickerIdx === idx && (
+                                  <div className="absolute right-0 top-full mt-1.5 z-30 p-2.5 rounded-xl bg-white border border-hairline shadow-airbnb w-52 flex flex-col gap-1.5">
+                                    <div className="flex items-center justify-between border-b border-hairline-soft pb-1">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-ink">Choose 3D Emoji</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveEmojiPickerIdx(null)}
+                                        className="text-xs text-muted hover:text-ink font-bold px-1"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                    <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+                                      {QUICK_EMOJIS.map((em) => (
+                                        <button
+                                          key={em}
+                                          type="button"
+                                          onClick={() => handleSelectSceneEmoji(idx, em)}
+                                          className={`h-9 rounded-lg text-lg flex items-center justify-center transition-all hover:scale-125 ${
+                                            scene.emoji === em ? 'bg-[#fff0f2] border border-rausch' : 'hover:bg-surface-soft'
+                                          }`}
+                                        >
+                                          {em}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {scene.matchedTier && scene.matchedTier !== "legacy" && scene.matchedTier !== "random" && (
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                  {scene.matchedTier} match
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <span className="text-sm font-bold text-ink truncate block capitalize">
                             {scene.keyword || 'Random Scene'}

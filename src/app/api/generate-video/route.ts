@@ -20,6 +20,7 @@ interface Scene {
   duration: number;
   image: string;
   isFallback: boolean;
+  emoji?: string;
   graphics?: GraphicBeat[];
   captions?: CaptionSlice[];
 }
@@ -153,6 +154,8 @@ export async function POST(request: Request) {
       enableGraphicMotion,
       enableCaptions,
       aspectRatio,
+      enableEmojiCaptions,
+      emojiStyle,
     } = await request.json();
 
     if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
@@ -197,6 +200,8 @@ export async function POST(request: Request) {
       transitionDurationSec,
       resolvedMode,
       targetRatio,
+      enableEmojiCaptions !== false,
+      emojiStyle || "fluent",
     ).catch((err) => {
       console.error("Background compilation crash:", err);
       progressMap.set(runId, {
@@ -222,6 +227,8 @@ async function compileVideoInBackground(
   transitionDuration: number,
   textOverlayMode: "none" | "captions" | "graphics" = "captions",
   targetRatio: "9:16" | "16:9" = "9:16",
+  enableEmojiCaptions: boolean = true,
+  emojiStyle: "fluent" | "apple" | "twitter" = "fluent",
 ) {
   let tempDir = "";
   try {
@@ -295,8 +302,18 @@ async function compileVideoInBackground(
           if (!capText) continue;
 
           const overlayPath = path.join(tempDir, `caption_${i}_${c}.png`);
+          const sliceEmoji = enableEmojiCaptions
+            ? cap.emoji || scene.emoji
+            : undefined;
           try {
-            await renderCaptionOverlayPng(capText, overlayPath, targetWidth, targetHeight);
+            await renderCaptionOverlayPng(
+              capText,
+              overlayPath,
+              targetWidth,
+              targetHeight,
+              sliceEmoji,
+              emojiStyle,
+            );
             if (fs.existsSync(overlayPath)) {
               captionPngList.push({
                 path: overlayPath,

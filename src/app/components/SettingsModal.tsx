@@ -16,13 +16,15 @@ import {
   MessageSquareText,
   Type,
   Smartphone,
-  Monitor
+  Monitor,
+  Smile
 } from 'lucide-react';
 
 export type MediaSourceKey = 'unsplash' | 'pixabay' | 'pexels' | 'local';
 export type MediaTypeFilter = 'only_videos' | 'only_images' | 'both';
 export type TextOverlayMode = 'none' | 'captions' | 'graphics';
 export type VideoAspectRatio = '9:16' | '16:9';
+export type EmojiStyleOption = 'fluent' | 'apple' | 'twitter';
 
 export interface MediaSettings {
   sources: {
@@ -38,6 +40,8 @@ export interface MediaSettings {
   transitionDuration: number;
   useRelatableVisualSearch?: boolean;
   aspectRatio: VideoAspectRatio;
+  enableEmojiCaptions?: boolean;
+  emojiStyle?: EmojiStyleOption;
 }
 
 export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
@@ -54,6 +58,8 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   transitionDuration: 0.3,
   useRelatableVisualSearch: true,
   aspectRatio: '9:16',
+  enableEmojiCaptions: true,
+  emojiStyle: 'fluent',
 };
 
 interface SettingsModalProps {
@@ -93,6 +99,12 @@ export default function SettingsModal({
   const [draftAspectRatio, setDraftAspectRatio] = useState<VideoAspectRatio>(
     settings.aspectRatio || DEFAULT_MEDIA_SETTINGS.aspectRatio
   );
+  const [draftEnableEmojiCaptions, setDraftEnableEmojiCaptions] = useState<boolean>(
+    settings.enableEmojiCaptions !== false
+  );
+  const [draftEmojiStyle, setDraftEmojiStyle] = useState<EmojiStyleOption>(
+    settings.emojiStyle || DEFAULT_MEDIA_SETTINGS.emojiStyle || 'fluent'
+  );
   const [validationError, setValidationError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
@@ -111,6 +123,8 @@ export default function SettingsModal({
       );
       setDraftRelatableVisualSearch(settings.useRelatableVisualSearch !== false);
       setDraftAspectRatio(settings.aspectRatio || DEFAULT_MEDIA_SETTINGS.aspectRatio);
+      setDraftEnableEmojiCaptions(settings.enableEmojiCaptions !== false);
+      setDraftEmojiStyle(settings.emojiStyle || DEFAULT_MEDIA_SETTINGS.emojiStyle || 'fluent');
       setValidationError(null);
       // Focus management
       setTimeout(() => closeBtnRef.current?.focus(), 50);
@@ -165,6 +179,8 @@ export default function SettingsModal({
       transitionDuration: draftTransitionDuration,
       useRelatableVisualSearch: draftRelatableVisualSearch,
       aspectRatio: draftAspectRatio,
+      enableEmojiCaptions: draftEnableEmojiCaptions,
+      emojiStyle: draftEmojiStyle,
     });
     onClose();
   };
@@ -177,8 +193,34 @@ export default function SettingsModal({
     setDraftTransitionDuration(DEFAULT_MEDIA_SETTINGS.transitionDuration);
     setDraftRelatableVisualSearch(DEFAULT_MEDIA_SETTINGS.useRelatableVisualSearch !== false);
     setDraftAspectRatio(DEFAULT_MEDIA_SETTINGS.aspectRatio);
+    setDraftEnableEmojiCaptions(DEFAULT_MEDIA_SETTINGS.enableEmojiCaptions !== false);
+    setDraftEmojiStyle(DEFAULT_MEDIA_SETTINGS.emojiStyle || 'fluent');
     setValidationError(null);
   };
+
+  const emojiStyleOptions = [
+    {
+      id: 'fluent' as EmojiStyleOption,
+      label: '3D Fluent Style',
+      tagline: 'Glossy 3D emojis (Submagic & CapCut viral style)',
+      badge: 'Recommended',
+      preview: '💔',
+    },
+    {
+      id: 'apple' as EmojiStyleOption,
+      label: 'Apple iOS Style',
+      tagline: 'High-definition Apple style emoji aesthetics',
+      badge: 'Classic',
+      preview: '✨',
+    },
+    {
+      id: 'twitter' as EmojiStyleOption,
+      label: 'Flat Vector Style',
+      tagline: 'Clean 2D Twemoji vector illustrations',
+      badge: 'Minimal',
+      preview: '🤲',
+    },
+  ];
 
   const sourceCards = [
     {
@@ -719,6 +761,101 @@ export default function SettingsModal({
                 );
               })}
             </div>
+          </fieldset>
+
+          {/* Section: Viral Captions & 3D Emojis */}
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+              <Smile className="w-4 h-4 text-rausch" />
+              Viral Captions & 3D Emojis
+            </legend>
+
+            <p className="text-xs text-muted">
+              Display high-impact 3D emojis positioned gracefully above subtitle captions to maximize viewer retention and emotional resonance.
+            </p>
+
+            {/* Toggle Card */}
+            <label className={`flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+              draftEnableEmojiCaptions
+                ? 'bg-[#fff8f9] border-rausch shadow-airbnb'
+                : 'bg-white border-hairline hover:border-border-strong hover:bg-surface-soft'
+            }`}>
+              <input
+                type="checkbox"
+                checked={draftEnableEmojiCaptions}
+                onChange={(e) => setDraftEnableEmojiCaptions(e.target.checked)}
+                className="sr-only"
+              />
+              <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
+                draftEnableEmojiCaptions
+                  ? 'border-rausch bg-rausch text-white'
+                  : 'border-hairline bg-white'
+              }`}>
+                {draftEnableEmojiCaptions && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+              </div>
+              <div className="flex-grow min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <span className="text-sm font-bold text-ink">
+                    Enable 3D Emoji Overlays in Captions
+                  </span>
+                  <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
+                    draftEnableEmojiCaptions
+                      ? 'bg-[#fff0f2] text-rausch border-[#ffd1da]'
+                      : 'bg-surface-soft text-muted border-hairline-soft'
+                  }`}>
+                    {draftEnableEmojiCaptions ? 'Active' : 'Disabled'}
+                  </span>
+                </div>
+                <p className="text-xs text-muted leading-tight">
+                  Automatically pairs scenes and subtitles with relevant emotional 3D emojis (e.g., 💔, 🤲, ⏳, 🔥, ✨).
+                </p>
+              </div>
+            </label>
+
+            {/* Emoji Style Selection */}
+            {draftEnableEmojiCaptions && (
+              <div className="pt-1">
+                <span className="text-xs font-bold text-ink block mb-2">
+                  Emoji Rendering Aesthetics
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {emojiStyleOptions.map((opt) => {
+                    const isSelected = draftEmojiStyle === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setDraftEmojiStyle(opt.id)}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-[#fff0f2] border-rausch shadow-sm'
+                            : 'bg-white border-hairline hover:bg-surface-soft hover:border-border-strong'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1.5">
+                          <span className="text-xl">{opt.preview}</span>
+                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                            isSelected
+                              ? 'bg-rausch text-white'
+                              : 'bg-surface-soft text-muted'
+                          }`}>
+                            {opt.badge}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-ink block leading-tight">
+                            {opt.label}
+                          </span>
+                          <span className="text-[10px] text-muted block mt-0.5 leading-tight">
+                            {opt.tagline}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </fieldset>
 
           {/* Section 4: Camera & Transition Dynamics */}

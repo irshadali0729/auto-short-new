@@ -1,11 +1,13 @@
 import fs from "fs";
 import path from "path";
 import sharp from "sharp";
+import { EmojiStyle, resolveEmojiDataUri } from "@/app/utils/emoji-resolver";
 
 export interface CaptionSlice {
   text: string;
   start: number;
   end: number;
+  emoji?: string;
 }
 
 function escapeXml(unsafe: string): string {
@@ -44,6 +46,7 @@ export function generateCaptionSvg(
   captionText: string,
   targetWidth: number = 1080,
   targetHeight: number = 1920,
+  emojiDataUri?: string | null,
 ): string {
   const isLandscape = targetWidth > targetHeight;
   const maxChars = isLandscape ? 52 : 34;
@@ -64,6 +67,11 @@ export function generateCaptionSvg(
   const pillX = centerX - pillWidth / 2;
   const pillY = baseY - fontSize + (fontSize === 54 ? 2 : -2) - 16;
 
+  // 3D Emoji positioning (centered above or overlapping the top of the pill)
+  const emojiSize = isLandscape ? 68 : 82;
+  const emojiX = centerX - emojiSize / 2;
+  const emojiY = pillY - emojiSize * 0.68;
+
   const textTspans = lines
     .map((line, idx) => {
       const yPos = baseY + idx * lineHeight;
@@ -79,6 +87,9 @@ export function generateCaptionSvg(
       </filter>
       <filter id="captionShadow" x="-20%" y="-20%" width="140%" height="140%">
         <feDropShadow dx="2" dy="3" stdDeviation="2" flood-color="#000000" flood-opacity="0.9" />
+      </filter>
+      <filter id="emojiShadow" x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#000000" flood-opacity="0.85" />
       </filter>
     </defs>
 
@@ -113,6 +124,13 @@ export function generateCaptionSvg(
     >
       ${textTspans}
     </text>
+
+    <!-- 3D Emoji Badge Overlap -->
+    ${
+      emojiDataUri
+        ? `<image href="${emojiDataUri}" x="${emojiX}" y="${emojiY}" width="${emojiSize}" height="${emojiSize}" filter="url(#emojiShadow)" />`
+        : ""
+    }
   </svg>
   `.trim();
 }
@@ -122,8 +140,25 @@ export async function renderCaptionOverlayPng(
   outputPath: string,
   targetWidth: number = 1080,
   targetHeight: number = 1920,
+  emoji?: string,
+  emojiStyle: EmojiStyle = "fluent",
 ): Promise<string> {
-  const svgString = generateCaptionSvg(captionText, targetWidth, targetHeight);
+  let emojiDataUri: string | null = null;
+  if (emoji) {
+    try {
+      emojiDataUri = await resolveEmojiDataUri(emoji, emojiStyle);
+    } catch (err) {
+      console.warn("Failed to resolve emoji data URI:", err);
+    }
+  }
+
+  const svgString = generateCaptionSvg(
+    captionText,
+    targetWidth,
+    targetHeight,
+    emojiDataUri,
+  );
+
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
