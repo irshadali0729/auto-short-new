@@ -1,4 +1,12 @@
-export type DuaCardTheme = "cream" | "light_grey" | "white";
+export type DuaCardTheme =
+  | "cream"
+  | "white"
+  | "light_grey"
+  | "emerald_dark"
+  | "midnight_gold";
+
+export type DuaCardPosition = "top" | "center" | "bottom";
+export type DuaCardStyle = "classic" | "minimal_glass" | "floating_pill" | "full_banner";
 
 export interface DuaInfo {
   isDua: boolean;
@@ -6,6 +14,9 @@ export interface DuaInfo {
   arabic: string;
   title?: string;
   reference?: string;
+  theme?: DuaCardTheme;
+  position?: DuaCardPosition;
+  cardStyle?: DuaCardStyle;
 }
 
 function escapeXml(unsafe: string): string {
@@ -49,9 +60,12 @@ export function generateDuaCardSvg(
   dua: DuaInfo,
   targetWidth: number = 1080,
   targetHeight: number = 1920,
-  theme: DuaCardTheme = "cream",
+  themeOverride?: DuaCardTheme,
 ): string {
   const isLandscape = targetWidth > targetHeight;
+  const activeTheme: DuaCardTheme = dua.theme || themeOverride || "cream";
+  const activePosition: DuaCardPosition = dua.position || "center";
+  const activeStyle: DuaCardStyle = dua.cardStyle || "classic";
 
   // Color palette per theme
   let cardBg = "#FAF6ED"; // Warm ivory / Cream
@@ -60,21 +74,13 @@ export function generateDuaCardSvg(
   let cardHeaderBorder = "#D4BE92";
   let cardBadgeText = "#8C682A";
   let dividerColor = "#D4BE92";
-  let hindiColor = "#1E293B"; // Deep slate / Charcoal for maximum legibility
+  let hindiColor = "#1E293B"; // Deep slate / Charcoal
   let arabicColor = "#064E3B"; // Rich Islamic deep emerald
   let referenceColor = "#64748B"; // Muted slate
+  let bgScrimOpacity = 0.45;
+  let isDarkTheme = false;
 
-  if (theme === "light_grey") {
-    cardBg = "#F4F6F8";
-    cardBorder = "#D1D5DB";
-    cardHeaderBg = "#E5E7EB";
-    cardHeaderBorder = "#CBD5E1";
-    cardBadgeText = "#374151";
-    dividerColor = "#CBD5E1";
-    hindiColor = "#111827";
-    arabicColor = "#1E3A8A"; // Deep royal navy
-    referenceColor = "#6B7280";
-  } else if (theme === "white") {
+  if (activeTheme === "white") {
     cardBg = "#FFFFFF";
     cardBorder = "#E5E7EB";
     cardHeaderBg = "#F9FAFB";
@@ -84,10 +90,49 @@ export function generateDuaCardSvg(
     hindiColor = "#111827";
     arabicColor = "#047857"; // Emerald green
     referenceColor = "#6B7280";
+  } else if (activeTheme === "light_grey") {
+    cardBg = "#F4F6F8";
+    cardBorder = "#CBD5E1";
+    cardHeaderBg = "#E2E8F0";
+    cardHeaderBorder = "#CBD5E1";
+    cardBadgeText = "#1E293B";
+    dividerColor = "#CBD5E1";
+    hindiColor = "#0F172A";
+    arabicColor = "#1E3A8A"; // Deep royal navy
+    referenceColor = "#64748B";
+  } else if (activeTheme === "emerald_dark") {
+    isDarkTheme = true;
+    cardBg = "#06281E"; // Deep Islamic forest emerald
+    cardBorder = "#D4AF37"; // Shimmering gold
+    cardHeaderBg = "#0B3D2E";
+    cardHeaderBorder = "#E5C158";
+    cardBadgeText = "#FDE68A";
+    dividerColor = "#D4AF37";
+    hindiColor = "#F8FAFC"; // Crisp pure white
+    arabicColor = "#FCD34D"; // Glowing gold Arabic
+    referenceColor = "#94A3B8";
+    bgScrimOpacity = 0.6;
+  } else if (activeTheme === "midnight_gold") {
+    isDarkTheme = true;
+    cardBg = "#0F1117"; // Ultra-dark obsidian
+    cardBorder = "#F59E0B"; // Bright gold hairline
+    cardHeaderBg = "#1E2230";
+    cardHeaderBorder = "#FBBF24";
+    cardBadgeText = "#FDE68A";
+    dividerColor = "#F59E0B";
+    hindiColor = "#FFFFFF";
+    arabicColor = "#FBBF24"; // Bright amber gold
+    referenceColor = "#9CA3AF";
+    bgScrimOpacity = 0.65;
   }
 
-  const maxCharsHindi = isLandscape ? 48 : 30;
-  const maxCharsArabic = isLandscape ? 44 : 26;
+  // Adjust bg for minimal_glass style
+  if (activeStyle === "minimal_glass") {
+    cardBg = isDarkTheme ? "rgba(15, 23, 42, 0.82)" : "rgba(255, 255, 255, 0.88)";
+  }
+
+  const maxCharsHindi = isLandscape ? 48 : (activeStyle === "full_banner" ? 34 : 30);
+  const maxCharsArabic = isLandscape ? 44 : (activeStyle === "full_banner" ? 30 : 26);
 
   const hindiLines = wrapLines(dua.hindi || "", maxCharsHindi).slice(0, 4);
   const arabicLines = wrapLines(dua.arabic || "", maxCharsArabic).slice(0, 4);
@@ -98,16 +143,22 @@ export function generateDuaCardSvg(
   const hindiFontSize = hindiLines.length > 2 ? (isLandscape ? 34 : 38) : (isLandscape ? 38 : 44);
   const arabicFontSize = arabicLines.length > 2 ? (isLandscape ? 42 : 48) : (isLandscape ? 48 : 56);
 
-  // Card dimensions & positioning (Centered on screen with safe margins)
-  const cardWidth = isLandscape ? Math.min(targetWidth - 240, 1100) : Math.min(targetWidth - 90, 990);
-  const cardX = (targetWidth - cardWidth) / 2;
+  // Card dimensions
+  let cardWidth = isLandscape ? Math.min(targetWidth - 240, 1100) : Math.min(targetWidth - 90, 990);
+  let cardX = (targetWidth - cardWidth) / 2;
+  let cardRadius = activeStyle === "floating_pill" ? 40 : activeStyle === "full_banner" ? 0 : 28;
+
+  if (activeStyle === "full_banner") {
+    cardWidth = targetWidth;
+    cardX = 0;
+  }
 
   const headerHeight = isLandscape ? 64 : 74;
   const hindiBlockHeight = hindiLines.length * hindiLineHeight;
   const dividerHeight = 36;
   const arabicBlockHeight = arabicLines.length * arabicLineHeight;
   const footerHeight = dua.reference ? (isLandscape ? 40 : 48) : 20;
-  const paddingY = isLandscape ? 36 : 46;
+  const paddingY = isLandscape ? 34 : 44;
 
   const contentHeight =
     headerHeight +
@@ -117,8 +168,15 @@ export function generateDuaCardSvg(
     footerHeight +
     paddingY * 2;
 
-  const cardHeight = Math.min(targetHeight - 120, Math.max(isLandscape ? 480 : 620, contentHeight));
-  const cardY = (targetHeight - cardHeight) / 2;
+  const cardHeight = Math.min(targetHeight - 140, Math.max(isLandscape ? 460 : 600, contentHeight));
+
+  // Vertical positioning
+  let cardY = (targetHeight - cardHeight) / 2; // default center
+  if (activePosition === "top") {
+    cardY = isLandscape ? 50 : 160;
+  } else if (activePosition === "bottom") {
+    cardY = targetHeight - cardHeight - (isLandscape ? 60 : 180);
+  }
 
   const centerX = targetWidth / 2;
 
@@ -139,7 +197,7 @@ export function generateDuaCardSvg(
 
   // Divider positioning
   const dividerY = hindiStartY + hindiBlockHeight + 10;
-  const dividerWidth = cardWidth - (isLandscape ? 180 : 140);
+  const dividerWidth = Math.min(cardWidth - (isLandscape ? 180 : 140), 750);
   const dividerX = centerX - dividerWidth / 2;
 
   // Arabic text positioning (Below Hindi)
@@ -155,16 +213,16 @@ export function generateDuaCardSvg(
   const referenceY = arabicStartY + arabicBlockHeight + (isLandscape ? 24 : 32);
 
   return `
-  <svg width="${targetWidth}" height="${targetHeight}" viewBox="0 0 ${targetWidth} ${targetHeight}" xmlns="http://www.w3.org/2000/svg">
+  <svg width="100%" height="100%" viewBox="0 0 ${targetWidth} ${targetHeight}" preserveAspectRatio="xMidYMid meet" style="display: block; max-width: 100%; height: auto;" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <!-- Premium Multi-layer Drop Shadow for Dua Card -->
       <filter id="duaCardShadow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="16" stdDeviation="28" flood-color="#000000" flood-opacity="0.60" />
-        <feDropShadow dx="0" dy="4" stdDeviation="10" flood-color="#000000" flood-opacity="0.35" />
+        <feDropShadow dx="0" dy="16" stdDeviation="28" flood-color="#000000" flood-opacity="0.65" />
+        <feDropShadow dx="0" dy="4" stdDeviation="10" flood-color="#000000" flood-opacity="0.40" />
       </filter>
 
       <filter id="badgeShadow" x="-15%" y="-15%" width="130%" height="130%">
-        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.12" />
+        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.18" />
       </filter>
 
       <linearGradient id="goldFiligree" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -175,7 +233,7 @@ export function generateDuaCardSvg(
     </defs>
 
     <!-- Ambient Dimming Scrim Background behind Dua Card for Focus -->
-    <rect width="${targetWidth}" height="${targetHeight}" fill="#000000" fill-opacity="0.45" />
+    <rect width="${targetWidth}" height="${targetHeight}" fill="#000000" fill-opacity="${bgScrimOpacity}" />
 
     <!-- Main Dua Card Container -->
     <g filter="url(#duaCardShadow)">
@@ -184,25 +242,31 @@ export function generateDuaCardSvg(
         y="${cardY}"
         width="${cardWidth}"
         height="${cardHeight}"
-        rx="28"
-        ry="28"
+        rx="${cardRadius}"
+        ry="${cardRadius}"
         fill="${cardBg}"
         stroke="${cardBorder}"
-        stroke-width="3"
+        stroke-width="${activeStyle === 'full_banner' ? '0' : '3'}"
       />
+      ${
+        activeStyle === "classic" || activeStyle === "floating_pill"
+          ? `
       <!-- Inner hairline accent border for luxurious Islamic aesthetic -->
       <rect
         x="${cardX + 8}"
         y="${cardY + 8}"
         width="${cardWidth - 16}"
         height="${cardHeight - 16}"
-        rx="22"
-        ry="22"
+        rx="${Math.max(12, cardRadius - 6)}"
+        ry="${Math.max(12, cardRadius - 6)}"
         fill="none"
         stroke="${cardBorder}"
         stroke-width="1"
         stroke-opacity="0.6"
       />
+      `
+          : ""
+      }
     </g>
 
     <!-- Top Spiritual Badge / Header -->

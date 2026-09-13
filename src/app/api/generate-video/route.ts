@@ -345,7 +345,7 @@ async function resolveSceneAsset(
             duaOverlayPath,
             targetWidth,
             targetHeight,
-            duaCardTheme,
+            scene.duaInfo?.theme || duaCardTheme,
           );
           if (fs.existsSync(duaOverlayPath)) {
             captionPngList.push({
