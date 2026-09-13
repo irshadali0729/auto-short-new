@@ -606,8 +606,16 @@ export default function SettingsModal({
 
             {/* Storage Option: Save Online Media to Local Disk */}
             <div className="pt-2">
-              <label
-                htmlFor="save-online-media-toggle"
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setDraftSaveOnlineMediaToDisk((prev) => !prev)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setDraftSaveOnlineMediaToDisk((prev) => !prev);
+                  }
+                }}
                 className={`relative flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
                   draftSaveOnlineMediaToDisk
                     ? "bg-[#fff8f9] border-rausch shadow-airbnb"
@@ -615,14 +623,6 @@ export default function SettingsModal({
                 }`}
               >
                 <div className="pt-0.5 shrink-0">
-                  <input
-                    type="checkbox"
-                    id="save-online-media-toggle"
-                    checked={draftSaveOnlineMediaToDisk}
-                    onChange={(e) => setDraftSaveOnlineMediaToDisk(e.target.checked)}
-                    className="sr-only"
-                    aria-checked={draftSaveOnlineMediaToDisk}
-                  />
                   <div
                     className={`w-11 h-6 rounded-full transition-colors flex items-center p-0.5 ${
                       draftSaveOnlineMediaToDisk ? "bg-rausch" : "bg-zinc-300"
@@ -658,7 +658,7 @@ export default function SettingsModal({
                       : "Streams and compiles videos using direct remote URLs without saving permanent files to your local image-library/ folder."}
                   </p>
                 </div>
-              </label>
+              </div>
             </div>
           </fieldset>
 
@@ -676,8 +676,16 @@ export default function SettingsModal({
               matching.
             </p>
 
-            <label
-              htmlFor="relatable-visual-search-toggle"
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setDraftRelatableVisualSearch((prev) => !prev)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setDraftRelatableVisualSearch((prev) => !prev);
+                }
+              }}
               className={`relative flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
                 draftRelatableVisualSearch
                   ? "bg-[#fff8f9] border-rausch shadow-airbnb"
@@ -685,15 +693,6 @@ export default function SettingsModal({
               }`}
             >
               <div className="pt-0.5 shrink-0">
-                <input
-                  type="checkbox"
-                  id="relatable-visual-search-toggle"
-                  checked={draftRelatableVisualSearch}
-                  onChange={(e) =>
-                    setDraftRelatableVisualSearch(e.target.checked)
-                  }
-                  className="sr-only"
-                />
                 <div
                   className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
                     draftRelatableVisualSearch
@@ -752,7 +751,7 @@ export default function SettingsModal({
                   </span>
                 </div>
               </div>
-            </label>
+            </div>
           </fieldset>
 
           {/* Section: Video Canvas & Aspect Ratio */}
@@ -1021,19 +1020,22 @@ export default function SettingsModal({
             </p>
 
             {/* Toggle Card */}
-            <label
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setDraftEnableEmojiCaptions((prev) => !prev)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setDraftEnableEmojiCaptions((prev) => !prev);
+                }
+              }}
               className={`flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
                 draftEnableEmojiCaptions
                   ? "bg-[#fff8f9] border-rausch shadow-airbnb"
                   : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
               }`}
             >
-              <input
-                type="checkbox"
-                checked={draftEnableEmojiCaptions}
-                onChange={(e) => setDraftEnableEmojiCaptions(e.target.checked)}
-                className="sr-only"
-              />
               <div
                 className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
                   draftEnableEmojiCaptions
@@ -1065,54 +1067,59 @@ export default function SettingsModal({
                   emotional 3D emojis (e.g., 💔, 🤲, ⏳, 🔥, ✨).
                 </p>
               </div>
-            </label>
+            </div>
 
             {/* Emoji Style Selection */}
-            {draftEnableEmojiCaptions && (
-              <div className="pt-1">
-                <span className="text-xs font-bold text-ink block mb-2">
-                  Emoji Rendering Aesthetics
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  {emojiStyleOptions.map((opt) => {
-                    const isSelected = draftEmojiStyle === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setDraftEmojiStyle(opt.id)}
-                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
-                          isSelected
-                            ? "bg-[#fff0f2] border-rausch shadow-sm"
-                            : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1 mb-1.5">
-                          <span className="text-xl">{opt.preview}</span>
-                          <span
-                            className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                              isSelected
-                                ? "bg-rausch text-white"
-                                : "bg-surface-soft text-muted"
-                            }`}
-                          >
-                            {opt.badge}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-xs font-bold text-ink block leading-tight">
-                            {opt.label}
-                          </span>
-                          <span className="text-[10px] text-muted block mt-0.5 leading-tight">
-                            {opt.tagline}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+            <div
+              className={`pt-1 transition-opacity ${
+                draftEnableEmojiCaptions
+                  ? "opacity-100"
+                  : "opacity-40 pointer-events-none"
+              }`}
+            >
+              <span className="text-xs font-bold text-ink block mb-2">
+                Emoji Rendering Aesthetics
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {emojiStyleOptions.map((opt) => {
+                  const isSelected = draftEmojiStyle === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      disabled={!draftEnableEmojiCaptions}
+                      onClick={() => setDraftEmojiStyle(opt.id)}
+                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                        isSelected && draftEnableEmojiCaptions
+                          ? "bg-[#fff0f2] border-rausch shadow-sm"
+                          : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-1.5">
+                        <span className="text-xl">{opt.preview}</span>
+                        <span
+                          className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                            isSelected && draftEnableEmojiCaptions
+                              ? "bg-rausch text-white"
+                              : "bg-surface-soft text-muted"
+                          }`}
+                        >
+                          {opt.badge}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-ink block leading-tight">
+                          {opt.label}
+                        </span>
+                        <span className="text-[10px] text-muted block mt-0.5 leading-tight">
+                          {opt.tagline}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-            )}
+            </div>
           </fieldset>
 
           {/* Section: Spiritual Highlights & Dua Overlays */}
@@ -1129,19 +1136,22 @@ export default function SettingsModal({
             </p>
 
             {/* Toggle Card */}
-            <label
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setDraftEnableDuaOverlay((prev) => !prev)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setDraftEnableDuaOverlay((prev) => !prev);
+                }
+              }}
               className={`flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
                 draftEnableDuaOverlay
                   ? "bg-[#fff8f9] border-rausch shadow-airbnb"
                   : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
               }`}
             >
-              <input
-                type="checkbox"
-                checked={draftEnableDuaOverlay}
-                onChange={(e) => setDraftEnableDuaOverlay(e.target.checked)}
-                className="sr-only"
-              />
               <div
                 className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
                   draftEnableDuaOverlay
@@ -1173,60 +1183,65 @@ export default function SettingsModal({
                   refined prayer card in Hindi and Arabic with Tashkeel.
                 </p>
               </div>
-            </label>
+            </div>
 
             {/* Dua Card Theme Selection */}
-            {draftEnableDuaOverlay && (
-              <div className="pt-1">
-                <span className="text-xs font-bold text-ink block mb-2">
-                  Dua Card Color Aesthetics
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  {duaThemeOptions.map((opt) => {
-                    const isSelected = draftDuaCardTheme === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setDraftDuaCardTheme(opt.id)}
-                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
-                          isSelected
-                            ? "bg-[#fff0f2] border-rausch shadow-sm"
-                            : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1 mb-2">
-                          <div
-                            className="w-5 h-5 rounded-md border shadow-inner"
-                            style={{
-                              backgroundColor: opt.colorPreview,
-                              borderColor: opt.borderPreview,
-                            }}
-                          />
-                          <span
-                            className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                              isSelected
-                                ? "bg-rausch text-white"
-                                : "bg-surface-soft text-muted"
-                            }`}
-                          >
-                            {opt.badge}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-xs font-bold text-ink block leading-tight">
-                            {opt.label}
-                          </span>
-                          <span className="text-[10px] text-muted block mt-0.5 leading-tight">
-                            {opt.tagline}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+            <div
+              className={`pt-1 transition-opacity ${
+                draftEnableDuaOverlay
+                  ? "opacity-100"
+                  : "opacity-40 pointer-events-none"
+              }`}
+            >
+              <span className="text-xs font-bold text-ink block mb-2">
+                Dua Card Color Aesthetics
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {duaThemeOptions.map((opt) => {
+                  const isSelected = draftDuaCardTheme === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      disabled={!draftEnableDuaOverlay}
+                      onClick={() => setDraftDuaCardTheme(opt.id)}
+                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                        isSelected && draftEnableDuaOverlay
+                          ? "bg-[#fff0f2] border-rausch shadow-sm"
+                          : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-2">
+                        <div
+                          className="w-5 h-5 rounded-md border shadow-inner"
+                          style={{
+                            backgroundColor: opt.colorPreview,
+                            borderColor: opt.borderPreview,
+                          }}
+                        />
+                        <span
+                          className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                            isSelected && draftEnableDuaOverlay
+                              ? "bg-rausch text-white"
+                              : "bg-surface-soft text-muted"
+                          }`}
+                        >
+                          {opt.badge}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-ink block leading-tight">
+                          {opt.label}
+                        </span>
+                        <span className="text-[10px] text-muted block mt-0.5 leading-tight">
+                          {opt.tagline}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-            )}
+            </div>
           </fieldset>
 
           {/* Section: AI Video Host Presenter & Split-Screen */}
@@ -1242,89 +1257,100 @@ export default function SettingsModal({
               and Scene 4 renders a dynamic 50/50 split screen.
             </p>
 
-            {/* Toggle Card */}
-            <label
-              className={`flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+            {/* Toggle Card Container */}
+            <div
+              className={`p-4 rounded-xl border transition-all ${
                 draftEnableVideoHost
                   ? "bg-[#fff8f9] border-rausch shadow-airbnb"
-                  : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
+                  : "bg-white border-hairline"
               }`}
             >
-              <input
-                type="checkbox"
-                checked={draftEnableVideoHost}
-                onChange={(e) => setDraftEnableVideoHost(e.target.checked)}
-                className="sr-only"
-              />
+              {/* Interactive Header Row */}
               <div
-                className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
-                  draftEnableVideoHost
-                    ? "border-rausch bg-rausch text-white"
-                    : "border-hairline bg-white"
+                role="button"
+                tabIndex={0}
+                onClick={() => setDraftEnableVideoHost((prev) => !prev)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setDraftEnableVideoHost((prev) => !prev);
+                  }
+                }}
+                className="flex items-start gap-3.5 cursor-pointer select-none"
+              >
+                <div
+                  className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
+                    draftEnableVideoHost
+                      ? "border-rausch bg-rausch text-white"
+                      : "border-hairline bg-white"
+                  }`}
+                >
+                  {draftEnableVideoHost && (
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  )}
+                </div>
+                <div className="flex-grow min-w-0">
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <span className="text-sm font-bold text-ink flex items-center gap-1.5">
+                      Enable Video Host & Split-Screen Storytelling
+                    </span>
+                    <span
+                      className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
+                        draftEnableVideoHost
+                          ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
+                          : "bg-surface-soft text-muted border-hairline-soft"
+                      }`}
+                    >
+                      {draftEnableVideoHost ? "Active" : "Disabled"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted leading-tight">
+                    Automatically chooses gesture explanation videos from{" "}
+                    <code className="text-[11px] font-mono bg-surface-soft px-1 rounded">
+                      image-library/host/women_host
+                    </code>{" "}
+                    and schedules full-screen and split-screen scenes.
+                  </p>
+                </div>
+              </div>
+
+              {/* 3-Scene Cadence Preview (Safely separated from toggle row) */}
+              <div
+                className={`mt-3 pt-3 border-t border-hairline-soft grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] transition-opacity ${
+                  draftEnableVideoHost ? "opacity-100" : "opacity-40"
                 }`}
               >
-                {draftEnableVideoHost && (
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
-                )}
-              </div>
-              <div className="flex-grow min-w-0">
-                <div className="flex items-center justify-between gap-2 mb-0.5">
-                  <span className="text-sm font-bold text-ink flex items-center gap-1.5">
-                    Enable Video Host & Split-Screen Storytelling
+                <div className="p-2.5 rounded-lg bg-white border border-hairline flex flex-col gap-1 shadow-xs">
+                  <span className="font-bold text-ink flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rausch" />
+                    Scene 1: Hook
                   </span>
-                  <span
-                    className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
-                      draftEnableVideoHost
-                        ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
-                        : "bg-surface-soft text-muted border-hairline-soft"
-                    }`}
-                  >
-                    {draftEnableVideoHost ? "Active" : "Disabled"}
+                  <span className="text-[10px] text-muted leading-tight">
+                    Full-screen host gesture explaining topic
                   </span>
                 </div>
-                <p className="text-xs text-muted leading-tight">
-                  Automatically chooses gesture explanation videos from{" "}
-                  <code className="text-[11px] font-mono bg-surface-soft px-1 rounded">
-                    image-library/host/women_host
-                  </code>{" "}
-                  and schedules full-screen and split-screen scenes.
-                </p>
 
-                {draftEnableVideoHost && (
-                  <div className="mt-3 pt-3 border-t border-hairline-soft grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-                    <div className="p-2 rounded-lg bg-white border border-hairline flex flex-col gap-1">
-                      <span className="font-bold text-ink flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rausch" />
-                        Scene 1: Hook
-                      </span>
-                      <span className="text-[10px] text-muted">
-                        Full-screen host gesture explaining topic
-                      </span>
-                    </div>
+                <div className="p-2.5 rounded-lg bg-white border border-hairline flex flex-col gap-1 shadow-xs">
+                  <span className="font-bold text-ink flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                    Scene 2 & 3: Stock
+                  </span>
+                  <span className="text-[10px] text-muted leading-tight">
+                    Full-screen cinematic footage or photos
+                  </span>
+                </div>
 
-                    <div className="p-2 rounded-lg bg-white border border-hairline flex flex-col gap-1">
-                      <span className="font-bold text-ink flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                        Scene 2 & 3: Stock
-                      </span>
-                      <span className="text-[10px] text-muted">
-                        Full-screen cinematic footage or photos
-                      </span>
-                    </div>
-
-                    <div className="p-2 rounded-lg bg-white border border-hairline flex flex-col gap-1">
-                      <span className="font-bold text-ink flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                        Scene 4: Split-Screen
-                      </span>
-                      <span className="text-[10px] text-muted">
-                        Top 50% Host clip + Bottom 50% Stock
-                      </span>
-                    </div>
-                  </div>
-                )}
+                <div className="p-2.5 rounded-lg bg-white border border-hairline flex flex-col gap-1 shadow-xs">
+                  <span className="font-bold text-ink flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    Scene 4: Split-Screen
+                  </span>
+                  <span className="text-[10px] text-muted leading-tight">
+                    Top 50% Host clip + Bottom 50% Stock
+                  </span>
+                </div>
               </div>
-            </label>
+            </div>
           </fieldset>
 
           {/* Section 4: Camera & Transition Dynamics */}
