@@ -25,7 +25,9 @@ import SettingsModal, {
 } from '@/app/components/SettingsModal';
 import ReplaceImageModal from '@/app/components/ReplaceImageModal';
 import DuaEditModal from '@/app/components/DuaEditModal';
+import SceneLivePreviewPlayer from '@/app/components/SceneLivePreviewPlayer';
 import { DuaInfo } from '@/app/utils/dua-card-svg';
+import { CaptionPosition } from '@/app/utils/caption-renderer';
 import { getMediaUrl, isVideoAsset } from '@/app/utils/media-url';
 
 interface GraphicBeat {
@@ -124,6 +126,10 @@ export default function Home() {
   const [allLibraryImages, setAllLibraryImages] = useState<string[]>([]);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Active Storyboard Scene Preview state
+  const [activePreviewSceneIndex, setActivePreviewSceneIndex] = useState<number>(0);
+  const [activeRightPanelTab, setActiveRightPanelTab] = useState<'preview' | 'compiled'>('preview');
 
   // Dua Edit Modal state
   const [editingDuaSceneIdx, setEditingDuaSceneIdx] = useState<number | null>(null);
@@ -324,6 +330,8 @@ export default function Home() {
       }
 
       setScenes(matchData.matches);
+      setActivePreviewSceneIndex(0);
+      setActiveRightPanelTab('preview');
 
       // Check if any matched images are fallback matches
       const fallbackCount = matchData.matches.filter((s: Scene) => s.isFallback).length;
@@ -451,6 +459,7 @@ export default function Home() {
               setErrorMessage(progData.error);
             } else if (progData.videoPath) {
               setVideoUrl(progData.videoPath);
+              setActiveRightPanelTab('compiled');
             } else {
               setErrorMessage('Video generation completed, but output path was not returned.');
             }
@@ -792,8 +801,17 @@ export default function Home() {
                   {scenes.map((scene, idx) => {
                     const sceneStart = scenes.slice(0, idx).reduce((acc, s) => acc + s.duration, 0);
                     const sceneEnd = sceneStart + scene.duration;
+                    const isCurrentPreview = activePreviewSceneIndex === idx;
                     return (
-                      <div key={idx} className="rounded-2xl border border-hairline bg-white overflow-hidden flex flex-col relative group hover:shadow-airbnb hover:border-border-strong transition-all">
+                      <div
+                        key={idx}
+                        onClick={() => setActivePreviewSceneIndex(idx)}
+                        className={`rounded-2xl border bg-white overflow-hidden flex flex-col relative group hover:shadow-airbnb hover:border-border-strong transition-all cursor-pointer ${
+                          isCurrentPreview
+                            ? 'border-rausch ring-2 ring-rausch/30 shadow-md'
+                            : 'border-hairline'
+                        }`}
+                      >
 
                         {/* Scene Media Preview (Video or Image or Dual Split Screen) */}
                         <div className="relative h-44 bg-surface-soft flex items-center justify-center overflow-hidden">
@@ -901,6 +919,19 @@ export default function Home() {
                                 Local
                               </span>
                             ) : null}
+                          </div>
+
+                          {/* Top Right Preview Status / Trigger */}
+                          <div className="absolute top-2.5 right-2.5 z-10">
+                            {isCurrentPreview ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rausch text-white shadow-sm flex items-center gap-1 animate-fadeIn">
+                                ● Previewing
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/60 hover:bg-black/85 text-white backdrop-blur-md border border-white/20 shadow-sm transition-all opacity-0 group-hover:opacity-100 flex items-center gap-1">
+                                👁️ Preview
+                              </span>
+                            )}
                           </div>
 
                           {/* Duration Pill (Bottom Right) */}
@@ -1118,8 +1149,22 @@ export default function Home() {
               </section>
             )}
 
-            {/* Empty Video Preview State */}
-            {!videoUrl && !isGenerating && (
+            {/* Storyboard Live Preview Player (When scenes exist and not compiling, and either no final video yet or preview tab is active) */}
+            {scenes.length > 0 && !isGenerating && (!videoUrl || activeRightPanelTab === 'preview') && (
+              <SceneLivePreviewPlayer
+                scenes={scenes}
+                activeSceneIndex={activePreviewSceneIndex}
+                onSelectScene={setActivePreviewSceneIndex}
+                mediaSettings={mediaSettings}
+                onChangeCaptionPosition={(pos) => handleSaveSettings({ ...mediaSettings, captionPosition: pos })}
+                onOpenDuaEditor={handleOpenDuaEditor}
+                onGenerateVideo={handleGenerateVideo}
+                isGenerating={isGenerating}
+              />
+            )}
+
+            {/* Empty Video Preview State (When no scenes analyzed yet) */}
+            {scenes.length === 0 && !videoUrl && !isGenerating && (
               <section className="rounded-2xl border border-dashed border-hairline p-8 text-center flex flex-col items-center justify-center h-[480px] bg-surface-soft/40 shadow-sm">
                 <div className="w-16 h-16 rounded-full bg-white border border-hairline flex items-center justify-center mb-4 shadow-airbnb">
                   <Play className="w-6 h-6 text-muted" />
@@ -1135,17 +1180,26 @@ export default function Home() {
               </section>
             )}
 
-            {/* Video Preview and Action Panel */}
-            {videoUrl && !isGenerating && (
+            {/* Compiled Video Preview and Action Panel (When video is generated and compiled tab is active) */}
+            {videoUrl && !isGenerating && activeRightPanelTab === 'compiled' && (
               <section className="airbnb-card p-6 shadow-airbnb border border-hairline bg-white flex flex-col items-center">
                 <div className="w-full flex items-center justify-between mb-5">
                   <h2 className="text-lg font-bold text-ink flex items-center gap-2">
                     <Play className="w-4 h-4 text-rausch" />
-                    Preview & Download
+                    Compiled Video
                   </h2>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rausch/10 text-rausch border border-rausch/20">
-                    {mediaSettings.aspectRatio || '9:16'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveRightPanelTab('preview')}
+                      className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-surface-soft text-ink hover:bg-hairline-soft transition-all border border-hairline cursor-pointer"
+                    >
+                      📱 Storyboard Preview
+                    </button>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rausch/10 text-rausch border border-rausch/20">
+                      {mediaSettings.aspectRatio || '9:16'}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Responsive Video Screen */}
@@ -1180,6 +1234,20 @@ export default function Home() {
                   </a>
                 </div>
               </section>
+            )}
+
+            {/* Quick Switcher back to compiled video if in preview tab */}
+            {videoUrl && !isGenerating && activeRightPanelTab === 'preview' && (
+              <div className="w-full p-3 rounded-xl bg-surface-soft border border-hairline flex items-center justify-between gap-2 text-xs">
+                <span className="font-semibold text-ink">🎬 Final video has been compiled.</span>
+                <button
+                  type="button"
+                  onClick={() => setActiveRightPanelTab('compiled')}
+                  className="px-3 py-1.5 rounded-lg bg-rausch text-white font-bold hover:bg-rausch-active transition-all shadow-xs cursor-pointer"
+                >
+                  View Final Video
+                </button>
+              </div>
             )}
 
           </div>
