@@ -201,7 +201,7 @@ export async function POST(request: Request) {
 
       // Handle Scene 1 Full-Screen Host Presenter Hook directly
       if (isScene1Host) {
-        const chosenHost = pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath;
+        const chosenHost: string = pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath;
         lastHostAsset = chosenHost;
         matchedScenes.push({
           keyword,
@@ -354,7 +354,7 @@ export async function POST(request: Request) {
           matchedQuery = "Fallback Asset";
         }
 
-        const chosenHost = isSplitScreenScene
+        const chosenHost: string | undefined = isSplitScreenScene
           ? pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath
           : undefined;
         if (chosenHost) {
@@ -396,7 +396,7 @@ export async function POST(request: Request) {
 
         if (localMatches.length > 0) {
           const selected = localMatches[0];
-          const chosenHost = isSplitScreenScene
+          const chosenHost: string | undefined = isSplitScreenScene
             ? pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath
             : undefined;
           if (chosenHost) {
@@ -522,7 +522,7 @@ export async function POST(request: Request) {
           }
         }
 
-        const chosenHost = isSplitScreenScene
+        const chosenHost: string | undefined = isSplitScreenScene
           ? pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath
           : undefined;
         if (chosenHost) {

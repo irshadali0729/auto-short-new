@@ -26,6 +26,7 @@ import {
 export type MediaSourceKey = "unsplash" | "pixabay" | "pexels" | "local";
 export type MediaTypeFilter = "only_videos" | "only_images" | "both";
 export type TextOverlayMode = "none" | "captions" | "graphics";
+export type CaptionPosition = "top" | "middle" | "bottom";
 export type VideoAspectRatio = "9:16" | "16:9";
 export type EmojiStyleOption = "fluent" | "apple" | "twitter";
 export type DuaCardThemeOption = "cream" | "light_grey" | "white";
@@ -40,6 +41,7 @@ export interface MediaSettings {
   saveOnlineMediaToDisk?: boolean;
   mediaType: MediaTypeFilter;
   textOverlayMode: TextOverlayMode;
+  captionPosition?: CaptionPosition;
   enableGraphicMotion?: boolean;
   zoomSpeed: number;
   transitionDuration: number;
@@ -63,6 +65,7 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   saveOnlineMediaToDisk: true,
   mediaType: "both",
   textOverlayMode: "captions",
+  captionPosition: "bottom",
   enableGraphicMotion: false,
   zoomSpeed: 1.0,
   transitionDuration: 0.3,
@@ -108,6 +111,12 @@ export default function SettingsModal({
   const [draftTextOverlayMode, setDraftTextOverlayMode] =
     useState<TextOverlayMode>(
       resolveOverlayMode(settings || DEFAULT_MEDIA_SETTINGS),
+    );
+  const [draftCaptionPosition, setDraftCaptionPosition] =
+    useState<CaptionPosition>(
+      settings?.captionPosition ||
+        DEFAULT_MEDIA_SETTINGS.captionPosition ||
+        "bottom",
     );
   const [draftZoomSpeed, setDraftZoomSpeed] = useState<number>(
     typeof settings?.zoomSpeed === "number"
@@ -164,6 +173,11 @@ export default function SettingsModal({
       );
       setDraftTextOverlayMode(
         resolveOverlayMode(settings || DEFAULT_MEDIA_SETTINGS),
+      );
+      setDraftCaptionPosition(
+        settings?.captionPosition ||
+          DEFAULT_MEDIA_SETTINGS.captionPosition ||
+          "bottom",
       );
       setDraftZoomSpeed(
         typeof settings?.zoomSpeed === "number"
@@ -250,6 +264,8 @@ export default function SettingsModal({
       mediaType: draftMediaType || DEFAULT_MEDIA_SETTINGS.mediaType,
       textOverlayMode:
         draftTextOverlayMode || DEFAULT_MEDIA_SETTINGS.textOverlayMode,
+      captionPosition:
+        draftCaptionPosition || DEFAULT_MEDIA_SETTINGS.captionPosition || "bottom",
       enableGraphicMotion: draftTextOverlayMode === "graphics",
       zoomSpeed:
         typeof draftZoomSpeed === "number"
@@ -276,6 +292,7 @@ export default function SettingsModal({
     setDraftSaveOnlineMediaToDisk(DEFAULT_MEDIA_SETTINGS.saveOnlineMediaToDisk !== false);
     setDraftMediaType(DEFAULT_MEDIA_SETTINGS.mediaType);
     setDraftTextOverlayMode(DEFAULT_MEDIA_SETTINGS.textOverlayMode);
+    setDraftCaptionPosition(DEFAULT_MEDIA_SETTINGS.captionPosition || "bottom");
     setDraftZoomSpeed(DEFAULT_MEDIA_SETTINGS.zoomSpeed);
     setDraftTransitionDuration(DEFAULT_MEDIA_SETTINGS.transitionDuration);
     setDraftRelatableVisualSearch(
@@ -292,6 +309,36 @@ export default function SettingsModal({
     setDraftVideoHostType(DEFAULT_MEDIA_SETTINGS.videoHostType || "women_host");
     setValidationError(null);
   };
+
+  const captionPositionOptions: {
+    id: CaptionPosition;
+    label: string;
+    tagline: string;
+    badge: string;
+    desc: string;
+  }[] = [
+    {
+      id: "top",
+      label: "Top (Upper Third)",
+      tagline: "Positioned near header",
+      badge: "Header Safe",
+      desc: "Keeps the lower screen clean for platform UI buttons and creator handles.",
+    },
+    {
+      id: "middle",
+      label: "Middle (Center Screen)",
+      tagline: "Dead-center viewport",
+      badge: "Kinetic Punch",
+      desc: "Maximum visual attention for high-impact spoken words and quotes.",
+    },
+    {
+      id: "bottom",
+      label: "Bottom (Lower Third)",
+      tagline: "Standard subtitle zone",
+      badge: "Default",
+      desc: "Classic subtitle position with natural, non-obtrusive reading flow.",
+    },
+  ];
 
 
   const emojiStyleOptions = [
@@ -1113,6 +1160,84 @@ export default function SettingsModal({
                         </span>
                         <span className="text-[10px] text-muted block mt-0.5 leading-tight">
                           {opt.tagline}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Caption Vertical Position Selection */}
+            <div className="pt-3 border-t border-hairline-soft mt-3">
+              <span className="text-xs font-bold text-ink block mb-1">
+                Caption Screen Position
+              </span>
+              <p className="text-[11px] text-muted mb-2.5">
+                Choose where spoken subtitles appear on the video canvas (Top, Middle, or Bottom).
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {captionPositionOptions.map((opt) => {
+                  const isSelected = draftCaptionPosition === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setDraftCaptionPosition(opt.id)}
+                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                        isSelected
+                          ? "bg-[#fff0f2] border-rausch shadow-sm"
+                          : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-2">
+                        {/* Mini Phone Frame Diagram */}
+                        <div className="w-6 h-8 rounded border border-hairline bg-surface-soft flex flex-col justify-between p-0.5 shrink-0">
+                          <div
+                            className={`h-1.5 w-full rounded-[2px] transition-colors ${
+                              opt.id === "top"
+                                ? isSelected
+                                  ? "bg-rausch"
+                                  : "bg-ink"
+                                : "bg-hairline"
+                            }`}
+                          />
+                          <div
+                            className={`h-1.5 w-full rounded-[2px] transition-colors ${
+                              opt.id === "middle"
+                                ? isSelected
+                                  ? "bg-rausch"
+                                  : "bg-ink"
+                                : "bg-hairline"
+                            }`}
+                          />
+                          <div
+                            className={`h-1.5 w-full rounded-[2px] transition-colors ${
+                              opt.id === "bottom"
+                                ? isSelected
+                                  ? "bg-rausch"
+                                  : "bg-ink"
+                                : "bg-hairline"
+                            }`}
+                          />
+                        </div>
+
+                        <span
+                          className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                            isSelected
+                              ? "bg-rausch text-white"
+                              : "bg-surface-soft text-muted"
+                          }`}
+                        >
+                          {opt.badge}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-ink block leading-tight">
+                          {opt.label}
+                        </span>
+                        <span className="text-[10px] text-muted block mt-0.5 leading-tight">
+                          {opt.desc}
                         </span>
                       </div>
                     </button>

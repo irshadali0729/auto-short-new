@@ -42,11 +42,14 @@ function wrapText(text: string, maxCharsPerLine: number = 34): string[] {
   return lines.slice(0, 3);
 }
 
+export type CaptionPosition = "top" | "middle" | "bottom";
+
 export function generateCaptionSvg(
   captionText: string,
   targetWidth: number = 1080,
   targetHeight: number = 1920,
   emojiDataUri?: string | null,
+  captionPosition: CaptionPosition = "bottom",
 ): string {
   const isLandscape = targetWidth > targetHeight;
   const maxChars = isLandscape ? 52 : 34;
@@ -55,8 +58,16 @@ export function generateCaptionSvg(
   const lineHeight = isLandscape ? 60 : 68;
   const fontSize = lineCount > 2 ? (isLandscape ? 40 : 44) : lineCount === 2 ? (isLandscape ? 46 : 50) : (isLandscape ? 50 : 54);
 
-  // Position in lower third, safely above bottom controls/metadata
-  const targetBaseRatio = isLandscape ? 0.82 : 0.77;
+  // Position based on captionPosition: top, middle (center screen), or bottom (lower third)
+  let targetBaseRatio: number;
+  if (captionPosition === "top") {
+    targetBaseRatio = isLandscape ? 0.22 : 0.18;
+  } else if (captionPosition === "middle") {
+    targetBaseRatio = 0.50;
+  } else {
+    // "bottom" (default)
+    targetBaseRatio = isLandscape ? 0.82 : 0.77;
+  }
   const baseY = Math.round(targetHeight * targetBaseRatio) - (lineCount - 1) * (lineHeight / 2);
   const centerX = targetWidth / 2;
 
@@ -142,6 +153,7 @@ export async function renderCaptionOverlayPng(
   targetHeight: number = 1920,
   emoji?: string,
   emojiStyle: EmojiStyle = "fluent",
+  captionPosition: CaptionPosition = "bottom",
 ): Promise<string> {
   let emojiDataUri: string | null = null;
   if (emoji) {
@@ -157,6 +169,7 @@ export async function renderCaptionOverlayPng(
     targetWidth,
     targetHeight,
     emojiDataUri,
+    captionPosition,
   );
 
   const dir = path.dirname(outputPath);

@@ -10,6 +10,7 @@ import {
 } from "@/app/utils/graphics-renderer";
 import {
   CaptionSlice,
+  CaptionPosition,
   renderCaptionOverlayPng,
 } from "@/app/utils/caption-renderer";
 import {
@@ -161,6 +162,7 @@ export async function POST(request: Request) {
       zoomSpeed,
       transitionDuration,
       textOverlayMode,
+      captionPosition,
       enableGraphicMotion,
       enableCaptions,
       aspectRatio,
@@ -188,6 +190,10 @@ export async function POST(request: Request) {
     const transitionDurationSec =
       typeof transitionDuration === "number" ? transitionDuration : 0.3;
     const targetRatio: "9:16" | "16:9" = aspectRatio === "16:9" ? "16:9" : "9:16";
+    const resolvedCaptionPosition: CaptionPosition =
+      captionPosition === "top" || captionPosition === "middle" || captionPosition === "bottom"
+        ? captionPosition
+        : "bottom";
 
     // Mutually exclusive text overlay mode
     const resolvedMode: "none" | "captions" | "graphics" =
@@ -216,6 +222,7 @@ export async function POST(request: Request) {
       emojiStyle || "fluent",
       enableDuaOverlay !== false,
       duaCardTheme || "cream",
+      resolvedCaptionPosition,
     ).catch((err) => {
       console.error("Background compilation crash:", err);
       progressMap.set(runId, {
@@ -245,6 +252,7 @@ async function compileVideoInBackground(
   emojiStyle: "fluent" | "apple" | "twitter" = "fluent",
   enableDuaOverlay: boolean = true,
   duaCardTheme: DuaCardTheme = "cream",
+  captionPosition: CaptionPosition = "bottom",
 ) {
   let tempDir = "";
   try {
@@ -380,6 +388,7 @@ async function resolveSceneAsset(
               targetHeight,
               sliceEmoji,
               emojiStyle,
+              captionPosition,
             );
             if (fs.existsSync(overlayPath)) {
               captionPngList.push({

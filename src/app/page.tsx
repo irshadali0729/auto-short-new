@@ -437,6 +437,7 @@ export default function Home() {
           zoomSpeed: mediaSettings.zoomSpeed ?? 1.0,
           transitionDuration: mediaSettings.transitionDuration ?? 0.3,
           textOverlayMode: mediaSettings.textOverlayMode || (mediaSettings.enableGraphicMotion ? 'graphics' : 'captions'),
+          captionPosition: mediaSettings.captionPosition || 'bottom',
           enableGraphicMotion: mediaSettings.textOverlayMode === 'graphics',
           enableCaptions: mediaSettings.textOverlayMode === 'captions',
           aspectRatio: mediaSettings.aspectRatio || '9:16',
@@ -583,7 +584,7 @@ export default function Home() {
                 ? 'Graphic Motion'
                 : mediaSettings?.textOverlayMode === 'none'
                   ? 'None'
-                  : 'Captions'}
+                  : `Captions (${mediaSettings?.captionPosition || 'bottom'})`}
             </span>
             <span className="text-hairline">•</span>
             <span className="font-medium text-ink">Host:</span>
