@@ -914,10 +914,6 @@ export default function Home() {
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-200 shadow-sm">
                                 Alt Shot Match
                               </span>
-                            ) : scene.matchedTier === "local" ? (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-200 shadow-sm">
-                                Local
-                              </span>
                             ) : null}
                           </div>
 
