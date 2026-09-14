@@ -476,31 +476,24 @@ export default function SettingsModal({
     id: TextOverlayMode;
     label: string;
     badge: string;
-    description: string;
     icon: React.ElementType;
   }[] = [
     {
       id: "captions",
-      label: "Spoken Captions Only",
+      label: "Caption",
       badge: "Recommended",
-      description:
-        "Displays clean spoken subtitles synchronized with the audio speech timeline in the lower third.",
       icon: MessageSquareText,
     },
     {
       id: "graphics",
-      label: "Graphic Motion Only",
+      label: "Graphic Motion",
       badge: "Kinetic",
-      description:
-        "Displays dynamic animated hero typography (gold gradients, dual-tone punchlines, and slide-up animations).",
       icon: Sparkles,
     },
     {
       id: "none",
-      label: "None (Clean Video)",
+      label: "None",
       badge: "Pure Footage",
-      description:
-        "Generates clean background video and photo imagery with zero on-screen text overlays.",
       icon: Film,
     },
   ];
@@ -526,35 +519,26 @@ export default function SettingsModal({
         className="relative w-full max-w-2xl max-h-[90vh] rounded-2xl border border-hairline bg-white shadow-airbnb flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-10 my-auto"
       >
         {/* Header */}
-        <div className="p-6 border-b border-hairline-soft flex items-start justify-between gap-4 bg-white shrink-0">
+        <div className="px-6 py-5 border-b border-hairline-soft flex items-center justify-between gap-4 bg-white shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-full bg-[#fff0f2] text-rausch">
+            <div className="p-2 rounded-full bg-[#fff0f2] text-rausch shrink-0">
               <SettingsIcon className="w-5 h-5" />
             </div>
-            <div>
-              <h2
-                id="settings-dialog-title"
-                className="text-xl font-bold text-ink tracking-tight"
-              >
-                Media & Source Configuration
-              </h2>
-              <p
-                id="settings-dialog-desc"
-                className="text-xs text-muted mt-0.5"
-              >
-                Customize where assets are fetched and what media types are
-                utilized.
-              </p>
-            </div>
+            <h2
+              id="settings-dialog-title"
+              className="text-lg sm:text-xl font-bold text-ink tracking-tight"
+            >
+              Configuration
+            </h2>
           </div>
 
           <button
             ref={closeBtnRef}
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-white border border-hairline text-ink hover:bg-surface-soft transition-colors flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-ink"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-surface-soft hover:bg-surface-strong border border-hairline text-ink hover:text-ink transition-all flex items-center justify-center shrink-0 active:scale-95 shadow-sm"
             aria-label="Close settings dialog"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4 stroke-[2.5]" />
           </button>
         </div>
 
@@ -710,18 +694,12 @@ export default function SettingsModal({
           </fieldset>
 
 
-          {/* Section: AI Visual Search & Matching Engine (Toggle Flag) */}
+          {/* Section: Visual Search */}
           <fieldset className="space-y-3">
             <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-rausch" />
-              AI Visual Search Engine
+              Visual Search
             </legend>
-
-            <p className="text-xs text-muted">
-              Configure how script scenes are translated into stock queries. You
-              can disable this to immediately fall back to the legacy keyword
-              matching.
-            </p>
 
             <div
               role="button"
@@ -733,13 +711,13 @@ export default function SettingsModal({
                   setDraftRelatableVisualSearch((prev) => !prev);
                 }
               }}
-              className={`relative flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+              className={`relative flex items-center gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
                 draftRelatableVisualSearch
                   ? "bg-[#fff8f9] border-rausch shadow-airbnb"
                   : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
               }`}
             >
-              <div className="pt-0.5 shrink-0">
+              <div className="shrink-0">
                 <div
                   className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
                     draftRelatableVisualSearch
@@ -754,9 +732,9 @@ export default function SettingsModal({
               </div>
 
               <div className="flex-grow min-w-0">
-                <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-bold text-ink flex items-center gap-2">
-                    Relatable Visual Search & Multi-Tier Matching
+                    Visual Search
                   </span>
                   <span
                     className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
@@ -766,35 +744,8 @@ export default function SettingsModal({
                     }`}
                   >
                     {draftRelatableVisualSearch
-                      ? "Recommended (v2.0)"
-                      : "Legacy Mode"}
-                  </span>
-                </div>
-
-                <p className="text-xs text-muted leading-relaxed">
-                  Translates spiritual and metaphorical phrases into concrete,
-                  photogenic camera shots (e.g. converting heartache into
-                  thoughtful cinematic lighting) and cascades through primary,
-                  secondary, and mood queries to prevent random fallbacks.
-                </p>
-
-                <div className="mt-2.5 pt-2 border-t border-hairline-soft flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px]">
-                  <span>
-                    {draftRelatableVisualSearch ? (
-                      <span className="text-emerald-700 font-medium flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
-                        Active: Metaphor Mapping & Cascading Fallback (Tier 1
-                        &rarr; 4)
-                      </span>
-                    ) : (
-                      <span className="text-amber-700 font-medium flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
-                        Active: Legacy Single-Keyword Matching
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-[10px] text-muted italic">
-                    Uncheck to switch to old implementation
+                      ? "Active"
+                      : "Disabled"}
                   </span>
                 </div>
               </div>
@@ -974,12 +925,6 @@ export default function SettingsModal({
               On-Screen Text & Motion Overlays
             </legend>
 
-            <p className="text-xs text-muted">
-              Choose how on-screen text is presented. Captions and graphic
-              motion are mutually exclusive and will never be displayed
-              together.
-            </p>
-
             <div
               className="flex flex-col gap-2.5 pt-1"
               role="radiogroup"
@@ -993,7 +938,7 @@ export default function SettingsModal({
                   <label
                     key={opt.id}
                     htmlFor={`overlay-mode-${opt.id}`}
-                    className={`relative flex items-center gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                    className={`relative flex items-center gap-3.5 p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
                       isSelected
                         ? "bg-[#fff8f9] border-rausch shadow-airbnb"
                         : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
@@ -1029,7 +974,7 @@ export default function SettingsModal({
                         <IconComponent className="w-4 h-4" />
                       </div>
                       <div className="flex-grow min-w-0">
-                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                        <div className="flex items-center justify-between gap-1">
                           <span className="text-sm font-bold text-ink block">
                             {opt.label}
                           </span>
@@ -1043,9 +988,6 @@ export default function SettingsModal({
                             {opt.badge}
                           </span>
                         </div>
-                        <span className="text-xs text-muted block leading-tight">
-                          {opt.description}
-                        </span>
                       </div>
                     </div>
                   </label>
@@ -1577,14 +1519,14 @@ export default function SettingsModal({
             onClick={handleResetDefaults}
             className="text-xs font-semibold text-muted hover:text-ink transition-colors underline-offset-4 hover:underline"
           >
-            Reset to defaults
+            Reset
           </button>
 
           <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-lg border border-hairline bg-white text-xs font-bold text-ink hover:bg-surface-soft transition-colors"
+              className="hidden sm:inline-flex px-4 py-2.5 rounded-lg border border-hairline bg-white text-xs font-bold text-ink hover:bg-surface-soft transition-colors"
             >
               Cancel
             </button>
@@ -1595,7 +1537,7 @@ export default function SettingsModal({
               className={`px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
                 !isSourceSelectionValid
                   ? "bg-rausch-disabled text-white cursor-not-allowed"
-                  : "bg-rausch hover:bg-rausch-active text-white"
+                  : "bg-rausch hover:bg-rausch-active text-white active:scale-95"
               }`}
             >
               <Check className="w-3.5 h-3.5" />

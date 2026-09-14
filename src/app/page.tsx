@@ -543,13 +543,13 @@ export default function Home() {
         <button
           type="button"
           onClick={() => setIsSettingsOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-hairline bg-white hover:bg-surface-soft text-ink text-xs font-semibold transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-ink cursor-pointer"
+          className="inline-flex items-center gap-2 p-2 sm:px-4 sm:py-2 rounded-full border border-hairline bg-white hover:bg-surface-soft text-ink text-xs font-semibold transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-ink cursor-pointer"
           aria-label="Open Media Source and Type Settings"
           id="settings-open-button"
         >
-          <Settings className="w-3.5 h-3.5 text-rausch" />
-          <span>Settings</span>
-          <span className="px-1.5 py-0.5 rounded-full bg-[#fff0f2] text-rausch text-[10px] font-bold border border-[#ffd1da]">
+          <Settings className="w-4 h-4 text-rausch" />
+          <span className="hidden sm:inline">Settings</span>
+          <span className="hidden sm:inline px-1.5 py-0.5 rounded-full bg-[#fff0f2] text-rausch text-[10px] font-bold border border-[#ffd1da]">
             {Object.values(mediaSettings?.sources || DEFAULT_MEDIA_SETTINGS.sources).filter(Boolean).length} Sources
           </span>
         </button>
@@ -617,14 +617,11 @@ export default function Home() {
             <section className="airbnb-card p-6 shadow-sm border border-hairline bg-white">
               <h2 className="text-lg font-bold text-ink flex items-center gap-2 mb-5">
                 <Sparkles className="w-4 h-4 text-rausch" />
-                1. Enter Hadith Transcript
+                Enter Youtube Link
               </h2>
 
               {/* YouTube Import Option (Airbnb Signature Pill Search Bar) */}
               <div className="mb-6">
-                <label className="block text-[11px] font-bold text-ink uppercase tracking-wider mb-2">
-                  Import Transcript from YouTube
-                </label>
                 <div className="flex items-center rounded-full border border-hairline bg-white shadow-airbnb p-1.5 pl-4 hover:shadow-airbnb-hover transition-all">
                   <div className="flex-grow flex items-center gap-2.5 min-w-0">
                     <svg className="w-5 h-5 text-red-600 fill-current shrink-0" viewBox="0 0 24 24">
@@ -645,7 +642,9 @@ export default function Home() {
                     type="button"
                     onClick={handleFetchTranscript}
                     disabled={isFetchingTranscript || isAnalyzing || isGenerating || !youtubeLink.trim()}
-                    className={`h-10 px-5 rounded-full font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 transition-all ${
+                    aria-label="Get Transcript"
+                    title="Get Transcript"
+                    className={`w-10 h-10 rounded-full font-bold flex items-center justify-center shrink-0 transition-all ${
                       isFetchingTranscript
                         ? 'bg-rausch-disabled text-white cursor-not-allowed'
                         : !youtubeLink.trim()
@@ -654,15 +653,9 @@ export default function Home() {
                     }`}
                   >
                     {isFetchingTranscript ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Fetching...</span>
-                      </>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
                     ) : (
-                      <>
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Get Transcript</span>
-                      </>
+                      <Sparkles className="w-4 h-4" />
                     )}
                   </button>
                 </div>
@@ -740,30 +733,27 @@ export default function Home() {
                 disabled={isAnalyzing || isGenerating}
               />
               
-              <div className="mt-4 flex items-center justify-between gap-4">
-                <span className="text-xs text-muted">
-                  Supports Multi-lingual Inputs (Hindi, Urdu, English)
-                </span>
+              <div className="mt-5 flex justify-center">
                 <button
                   onClick={handleAnalyze}
                   disabled={isAnalyzing || isGenerating || !transcript.trim()}
-                  className={`px-6 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-all shadow-sm ${
+                  className={`w-full sm:w-auto px-8 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm ${
                     isAnalyzing 
                       ? 'bg-rausch-disabled text-white cursor-not-allowed'
                       : !transcript.trim()
                         ? 'bg-surface-soft text-muted cursor-not-allowed border border-hairline'
-                        : 'bg-rausch hover:bg-rausch-active text-white'
+                        : 'bg-rausch hover:bg-rausch-active text-white shadow-airbnb active:scale-95'
                   }`}
                 >
                   {isAnalyzing ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      Analyzing Script...
+                      <span>Analyzing Script...</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      Analyze Transcript
+                      <span>Analyze Transcript</span>
                     </>
                   )}
                 </button>
