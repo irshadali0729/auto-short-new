@@ -490,7 +490,7 @@ export default function Home() {
           </div>
           <div>
             <span className="font-bold text-lg text-ink tracking-tight">
-              Hadith <span className="text-rausch">Shorts</span>
+              Youtube <span className="text-rausch">Shorts</span>
             </span>
             <span className="hidden sm:inline-block ml-2 px-2 py-0.5 rounded-full bg-surface-soft text-muted text-[10px] font-bold border border-hairline-soft">
               Local Studio
@@ -898,7 +898,7 @@ export default function Home() {
                               </span>
                             ) : scene.matchedTier === "local" ? (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-200 shadow-sm">
-                                Local Match
+                                Local
                               </span>
                             ) : null}
                           </div>
