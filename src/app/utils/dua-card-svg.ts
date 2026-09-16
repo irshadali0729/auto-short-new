@@ -131,20 +131,20 @@ export function generateDuaCardSvg(
     cardBg = isDarkTheme ? "rgba(15, 23, 42, 0.82)" : "rgba(255, 255, 255, 0.88)";
   }
 
-  const maxCharsHindi = isLandscape ? 48 : (activeStyle === "full_banner" ? 34 : 30);
-  const maxCharsArabic = isLandscape ? 44 : (activeStyle === "full_banner" ? 30 : 26);
+  const maxCharsHindi = isLandscape ? 52 : (activeStyle === "full_banner" ? 44 : 38);
+  const maxCharsArabic = isLandscape ? 48 : (activeStyle === "full_banner" ? 40 : 34);
 
   const hindiLines = wrapLines(dua.hindi || "", maxCharsHindi).slice(0, 4);
   const arabicLines = wrapLines(dua.arabic || "", maxCharsArabic).slice(0, 4);
 
-  const hindiLineHeight = isLandscape ? 50 : 58;
-  const arabicLineHeight = isLandscape ? 62 : 72;
+  const hindiLineHeight = isLandscape ? 52 : 60;
+  const arabicLineHeight = isLandscape ? 64 : 74;
 
   const hindiFontSize = hindiLines.length > 2 ? (isLandscape ? 34 : 38) : (isLandscape ? 38 : 44);
   const arabicFontSize = arabicLines.length > 2 ? (isLandscape ? 42 : 48) : (isLandscape ? 48 : 56);
 
-  // Card dimensions
-  let cardWidth = isLandscape ? Math.min(targetWidth - 240, 1100) : Math.min(targetWidth - 90, 990);
+  // Card dimensions - expanded for wider presentation
+  let cardWidth = isLandscape ? Math.min(targetWidth - 200, 1160) : Math.min(targetWidth - 60, 1020);
   let cardX = (targetWidth - cardWidth) / 2;
   let cardRadius = activeStyle === "floating_pill" ? 40 : activeStyle === "full_banner" ? 0 : 28;
 
@@ -153,22 +153,37 @@ export function generateDuaCardSvg(
     cardX = 0;
   }
 
-  const headerHeight = isLandscape ? 64 : 74;
+  const rawTitle = dua.title ? dua.title.toUpperCase() : "DUA • दुआ • دعاء";
+  const headerBadgeHeight = isLandscape ? 52 : 62;
+  const headerFontSize = isLandscape ? 21 : 25;
+  const headerBadgeWidth = isLandscape
+    ? Math.max(300, Math.min(cardWidth - 80, rawTitle.length * 15 + 80))
+    : Math.max(360, Math.min(cardWidth - 60, rawTitle.length * 17 + 90));
+
+  const headerHeight = headerBadgeHeight + (isLandscape ? 12 : 16);
   const hindiBlockHeight = hindiLines.length * hindiLineHeight;
-  const dividerHeight = 36;
   const arabicBlockHeight = arabicLines.length * arabicLineHeight;
   const footerHeight = dua.reference ? (isLandscape ? 40 : 48) : 20;
-  const paddingY = isLandscape ? 34 : 44;
+  const paddingY = isLandscape ? 36 : 46;
+
+  // Spacing rhythm between blocks: badge -> hindi -> divider -> arabic -> reference.
+  // Increased gap between title badge and Hindi Dua for clean, airy breathing space.
+  const gapBadgeToHindi = isLandscape ? 55 : 75;
+  const gapHindiToDivider = isLandscape ? 28 : 34;
+  const gapDividerToArabic = isLandscape ? 46 : 56;
+  const gapArabicToReference = isLandscape ? 30 : 38;
+  const dividerHeight = gapHindiToDivider + gapDividerToArabic;
 
   const contentHeight =
     headerHeight +
+    gapBadgeToHindi +
     hindiBlockHeight +
     dividerHeight +
     arabicBlockHeight +
     footerHeight +
     paddingY * 2;
 
-  const cardHeight = Math.min(targetHeight - 140, Math.max(isLandscape ? 460 : 600, contentHeight));
+  const cardHeight = Math.min(targetHeight - 120, Math.max(isLandscape ? 480 : 620, contentHeight));
 
   // Vertical positioning
   let cardY = (targetHeight - cardHeight) / 2; // default center
@@ -181,13 +196,11 @@ export function generateDuaCardSvg(
   const centerX = targetWidth / 2;
 
   // Header positioning
-  const headerBadgeWidth = isLandscape ? 260 : 310;
-  const headerBadgeHeight = isLandscape ? 44 : 52;
   const headerBadgeX = centerX - headerBadgeWidth / 2;
   const headerBadgeY = cardY + paddingY;
 
   // Hindi text positioning (Top)
-  const hindiStartY = headerBadgeY + headerBadgeHeight + (isLandscape ? 44 : 56);
+  const hindiStartY = headerBadgeY + headerBadgeHeight + gapBadgeToHindi;
   const hindiTspans = hindiLines
     .map((line, idx) => {
       const y = hindiStartY + idx * hindiLineHeight;
@@ -195,13 +208,13 @@ export function generateDuaCardSvg(
     })
     .join("\n");
 
-  // Divider positioning
-  const dividerY = hindiStartY + hindiBlockHeight + 10;
-  const dividerWidth = Math.min(cardWidth - (isLandscape ? 180 : 140), 750);
+  // Divider positioning - wider decorative span
+  const dividerY = hindiStartY + hindiBlockHeight + gapHindiToDivider;
+  const dividerWidth = Math.min(cardWidth - (isLandscape ? 140 : 90), 860);
   const dividerX = centerX - dividerWidth / 2;
 
   // Arabic text positioning (Below Hindi)
-  const arabicStartY = dividerY + (isLandscape ? 48 : 60);
+  const arabicStartY = dividerY + gapDividerToArabic;
   const arabicTspans = arabicLines
     .map((line, idx) => {
       const y = arabicStartY + idx * arabicLineHeight;
@@ -210,7 +223,7 @@ export function generateDuaCardSvg(
     .join("\n");
 
   // Reference footer positioning
-  const referenceY = arabicStartY + arabicBlockHeight + (isLandscape ? 24 : 32);
+  const referenceY = arabicStartY + arabicBlockHeight + gapArabicToReference;
 
   return `
   <svg width="100%" height="100%" viewBox="0 0 ${targetWidth} ${targetHeight}" preserveAspectRatio="xMidYMid meet" style="display: block; max-width: 100%; height: auto;" xmlns="http://www.w3.org/2000/svg">
@@ -276,23 +289,23 @@ export function generateDuaCardSvg(
         y="${headerBadgeY}"
         width="${headerBadgeWidth}"
         height="${headerBadgeHeight}"
-        rx="26"
-        ry="26"
+        rx="${headerBadgeHeight / 2}"
+        ry="${headerBadgeHeight / 2}"
         fill="${cardHeaderBg}"
         stroke="${cardHeaderBorder}"
         stroke-width="1.5"
       />
       <text
         x="${centerX}"
-        y="${headerBadgeY + (isLandscape ? 28 : 34)}"
+        y="${headerBadgeY + (isLandscape ? 33 : 40)}"
         font-family="${FONT_HEADER}"
-        font-size="${isLandscape ? 17 : 20}"
+        font-size="${headerFontSize}"
         font-weight="800"
-        letter-spacing="1.5"
+        letter-spacing="1.2"
         text-anchor="middle"
         fill="${cardBadgeText}"
       >
-        🤲 ${escapeXml(dua.title ? dua.title.toUpperCase() : "DUA • दुआ • دعاء")}
+        🤲 ${escapeXml(rawTitle)}
       </text>
     </g>
 

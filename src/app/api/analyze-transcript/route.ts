@@ -355,29 +355,39 @@ CRITICAL TIMELINE SYNCHRONIZATION RULES:
       : "* Total duration of all scenes combined should ideally be between 15 to 45 seconds."
 }
 
-* DUA / ZIKR DETECTION & CORRECTION RULE:
-  - If the input transcript contains, recites, or references any Quranic Dua, Hadith Dua, Zikr, or Kalimah (even if transcribed phonetically or with errors, e.g. "ला इलाहा इल्लल्लाहु वाहदू ला शरी मुल्क हमला कुल श कदीर", "हसबुनल्लाहु व निअमल वकील", "अस्तग़फ़िरुल्लाह", "सुब्हानअल्लाह", etc.):
-  - You MUST identify the scene(s) where the Dua is recited or spoken.
-  - On that scene, include a "duaInfo" object:
-    * "isDua" (boolean): true
-    * "hindi" (string): The 100% correct, verified Hindi (Devanagari) pronunciation of the Dua (e.g. "ला इलाहा इल्लल्लाहु वह्दहू ला शरी-क लहू, लहुल-मुल्कु व लहुल-हम्दु, व हुवा 'अला कुल्लि शैइन क़दीर").
-    * "arabic" (string): The authentic, complete Arabic text with full Tashkeel / Harakat (e.g. "لَا إِلٰهَ إِلَّا اللهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ، وَهُوَ عَلَىٰ كُلِّ شَيْءٍ قَدِيرٌ").
+* DUA / ZIKR DETECTION & AUTOMATIC CORRECTION RULE (CRITICAL):
+  - Speech-to-text transcripts frequently contain imperfect, phonetic, incomplete, or misspelled Hindi/Urdu Duas (e.g. "ला हौला वला कुता", "हसबुन वल वकील", "ला इलाहा इल्ला अता सुभान का", "अस्तगफिरुल्ला", "अल्लाह इन असलका हुब्बक व्हि व अमलदी हुब्बक", etc.).
+  - NEVER copy or output the broken/imperfect text from the transcript into "duaInfo"!
+  - You MUST identify the intended authentic Dua/Zikr from Islamic tradition and respond with the 100% complete, verified, and grammatically perfect version:
+    * "hindi" (string): The complete, 100% correct authentic Hindi (Devanagari) pronunciation (e.g. if transcript says "ला हौला वला कुता", correct it to "ला हौल वला क़ुव्वत इल्ला बिल्लाहिल 'अलिय्यिल 'अज़ीम"; if transcript says "हसबुन वल वकील", correct it to "हसबुनल्लाहु व निअमल वकील"; if transcript says "अल्लाह इन असलका हुब्बक व्हि व अमलदी हुब्बक", correct it to "अल्लाहुम्मा इन्नी अस्अलुका हुब्बक, व हुब्ब मन युहिब्बुक, वल अमलल्लज़ी युबल्लिग़ुनी हुब्बक" — the Tirmidhi Dua for the love of Allah).
+    * "arabic" (string): The authentic, complete Arabic text with full Tashkeel / Harakat (e.g. "حَسْبُنَا اللَّهُ وَنِعْمَ الْوَكِيلُ" / "لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ" / "اللَّهُمَّ إِنِّي أَسْأَلُكَ حُبَّكَ، وَحُبَّ مَنْ يُحِبُّكَ، وَالْعَمَلَ الَّذِي يُبَلِّغُنِي حُبَّكَ").
     * "title" (string, optional): Short spiritual title (e.g. "हिफ़ाज़त की दुआ / Protection Dua").
-    * "reference" (string, optional): Authentic Hadith / Quran source (e.g. "Tirmidhi / Abu Dawud").
+    * "reference" (string, optional): Authentic Quran or Hadith source (e.g. "Sahih Bukhari / Abu Dawud").
+    * "isDua" (boolean): true
+  - If a scene contains a Dua, you MUST include this "duaInfo" object on that scene. This is a strict rule with ZERO exceptions: never silently skip "duaInfo" for a scene that recites/discusses a Dua, no matter how short the video, how many other scenes exist, or how limited the output length is. If you are running low on output space, shorten "caption"/"prompt" text rather than dropping any "duaInfo".
+  - MULTIPLE DUAS RULE: If the transcript lists more than one Dua (e.g. "नंबर एक...", "नंबर दो...", "नंबर तीन...", "पहली दुआ", "दूसरी दुआ", or any enumerated/numbered list of Duas), you MUST create a SEPARATE scene for EACH individual Dua, and EVERY one of those scenes MUST have its own corrected "duaInfo" object. Do NOT merge multiple Duas into a single scene, and do NOT leave any listed Dua without a "duaInfo" object — apply the same imperfect-to-authentic correction to each one independently.
+  - SELF-CHECK BEFORE RESPONDING: Count how many distinct Duas/Zikr are recited in the transcript. Before finalizing your JSON, verify that the exact same number of scenes contain a "duaInfo" object. If the counts don't match, fix your output before returning it.
 
 Example output:
 {
   "scenes": [
-    { 
-      "keyword": "muslim_husband", 
+    {
+      "keyword": "Prophetic Dua",
       "emoji": "🤲",
       "duration": 5, 
-      "tags": ["muslim_husband","smile","flower"],
-      "caption": "A smiling Muslim husband holding a flower in soft morning light.",
+      "tags": ["dua", "supplication", "light"],
+      "caption": "A person raising hands in heartfelt supplication during serene sunrise.",
       "graphics": [
-        {"prefixText":"I don't have","heroWord":"time.","style":"stacked-kinetic","start":0.4,"end":2.4}
+        {"prefixText":"मुश्किल वक्त की","heroWord":"दुआ","style":"stacked-kinetic","start":0.4,"end":2.4}
       ],
-      "prompt": "An elegant anime style illustration of a smiling Muslim husband holding a flower, soft morning light in the background, vertical 9:16 aspect ratio, soft lighting, highly detailed, 1k" 
+      "duaInfo": {
+        "isDua": true,
+        "hindi": "ला इलाहा इल्ला अन्ता सुब्हानका इन्नी कुन्तु मिनज़-ज़ालिमीन",
+        "arabic": "لَا إِلٰهَ إِلَّا أَنْتَ سُبْحَانَكَ إِنِّي كُنْتُ مِنَ الظَّالِمِينَ",
+        "title": "मुश्किल वक्त की दुआ / Ayat-e-Kareema",
+        "reference": "Surah Al-Anbiya (21:87)"
+      },
+      "prompt": "An elegant anime style illustration of hands raised in prayer under soft golden morning light, vertical 9:16 aspect ratio, soft lighting, highly detailed, 1k" 
     }
   ]
 }
@@ -397,16 +407,18 @@ Analyze the transcript and break it down into visually striking, relatable scene
 Translate the metaphorical, spiritual, and emotional essence into concrete, photogenic camera shots that real photographers shoot for stock media (Pexels, Pixabay, Unsplash).
 
 CRITICAL VISUAL METAPHOR & STOCK SEARCH RULES:
-* Western stock libraries (Pexels, Pixabay, Unsplash) DO NOT understand Hindi/Urdu idioms or spiritual abstractions (e.g., 'dil dukhaya', 'gunah', 'maghfirat', 'tawbah', 'haq', 'namaz chhoot jaye', 'forgiveness', 'broken heart').
+* Western stock libraries (Pexels, Pixabay, Unsplash) DO NOT understand Hindi/Urdu idioms or spiritual abstractions (e.g., 'dil dukhaya', 'gunah', 'maghfirat', 'tawbah', 'haq', 'namaz chhoot jaye', 'forgiveness', 'broken heart', 'sharab ki aadat').
 * Searching literal translations like "dil dukhaya Muslim" or "broken heart Muslim" completely fails or returns cheesy dating breakup photos.
 * You MUST translate spiritual concepts into concrete physical camera shots in English:
   - "दिल दुखाया" (Hurting someone's feelings/heart) -> "thoughtful lonely man dark cinematic lighting" OR "sad man sitting in shadows deep thought"
   - "नमाज़ छूट जाए" (Missed prayer/remorse) -> "muslim man praying silhouette sunset" OR "man prostrating prayer silhouette"
+  - "शराब की लत / नशा" (Addiction / Sins) -> "sad depressed man sitting alone at table with bottle" OR "alcoholic man sitting at table head in hands"
+  - "मां-बाप की नाफ़रमानी" (Disrespecting parents) -> "elderly sad person sitting alone looking out window" OR "sorrowful elderly mother silhouette"
   - "अल्लाह माफ़ कर सकता है" (Allah's mercy/forgiveness) -> "sun rays breaking through dramatic storm clouds" OR "hands raised dua prayer golden hour"
   - "ख़ुदा की क़सम" (Solemn oath / intense warning) -> "dramatic storm clouds lightning cinematic" OR "man walking alone desert dunes sunset"
   - "हक़ूक़ उल इबाद" (Rights of people/trust) -> "two men shaking hands greeting silhouette" OR "crowd silhouettes walking golden hour"
   - Peace & tranquility -> "ancient mosque dome sunset silhouette" OR "kaaba mecca crowd golden hour"
-* "visualQuery" (string): 3 to 6 words describing a concrete, physical camera shot in English for stock video/photo search. Focus on physical subjects, lighting, and composition (e.g. "muslim man praying silhouette", "thoughtful lonely man dark cinematic lighting", "ancient mosque dome sunset").
+* "visualQuery" (string): 3 to 6 words describing a concrete, physical camera shot in English for stock video/photo search. Focus on physical subjects, setting, and composition (e.g. "sad depressed man sitting alone at table with bottle", "muslim man praying silhouette", "ancient mosque dome sunset"). Avoid ambiguous photographer words like 'dark lighting' or 'bottle lights' that match string lights.
 * "fallbackQuery" (string): Secondary concrete physical alternative shot (3-5 words in English) if the primary shot is unavailable (e.g., "ancient mosque architecture dome", "desert sand dunes cinematic sunset").
 * "moodQuery" (string): Universal atmospheric backup shot (3-5 words in English) matching the emotional weight (e.g., "dramatic storm clouds sunset sky", "sun rays through clouds golden hour").
 * "keyword" (string): Concise 1-3 word human-readable topic label in English for the UI storyboard badge (e.g., "Broken Trust", "Sincere Prayer", "Divine Mercy").
@@ -423,15 +435,18 @@ CRITICAL VISUAL METAPHOR & STOCK SEARCH RULES:
     * Fire / Punishment -> "🔥"
     * Light / Mercy / Noor -> "✨"
 
-* DUA / ZIKR DETECTION & CORRECTION RULE:
-  - If the input transcript contains, recites, or references any Quranic Dua, Hadith Dua, Zikr, or Kalimah (even if transcribed phonetically or with errors, e.g. "ला इलाहा इल्लल्लाहु वाहदू ला शरी मुल्क हमला कुल श कदीर", "हसबुनल्लाहु व निअमल वकील", "अस्तग़फ़िरुल्लाह", "सुब्हानअल्लाह", etc.):
-  - You MUST identify the scene(s) where the speaker recites or discusses the Dua.
-  - On that scene, include a "duaInfo" object:
-    * "isDua" (boolean): true
-    * "hindi" (string): The 100% correct, verified Hindi (Devanagari) pronunciation of the Dua (e.g. "ला इलाहा इल्लल्लाहु वह्दहू ला शरी-क लहू, लहुल-मुल्कु व लहुल-हम्दु, व हुवा 'अला कुल्लि शैइन क़दीर").
-    * "arabic" (string): The authentic, complete Arabic text with full Tashkeel / Harakat (e.g. "لَا إِلٰهَ إِلَّا اللهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ، وَهُوَ عَلَىٰ كُلِّ شَيْءٍ قَدِيرٌ").
+* DUA / ZIKR DETECTION & AUTOMATIC CORRECTION RULE (CRITICAL):
+  - Speech-to-text transcripts frequently contain imperfect, phonetic, incomplete, or misspelled Hindi/Urdu Duas (e.g. "ला हौला वला कुता", "हसबुन वल वकील", "ला इलाहा इल्ला अता सुभान का", "अस्तगफिरुल्ला", "अल्लाह इन असलका हुब्बक व्हि व अमलदी हुब्बक", etc.).
+  - NEVER copy or output the broken/imperfect text from the transcript into "duaInfo"!
+  - You MUST identify the intended authentic Dua/Zikr from Islamic tradition and respond with the 100% complete, verified, and grammatically perfect version:
+    * "hindi" (string): The complete, 100% correct authentic Hindi (Devanagari) pronunciation (e.g. if transcript says "ला हौला वला कुता", correct it to "ला हौल वला क़ुव्वत इल्ला बिल्लाहिल 'अलिय्यिल 'अज़ीम"; if transcript says "हसबुन वल वकील", correct it to "हसबुनल्लाहु व निअमल वकील"; if transcript says "अल्लाह इन असलका हुब्बक व्हि व अमलदी हुब्बक", correct it to "अल्लाहुम्मा इन्नी अस्अलुका हुब्बक, व हुब्ब मन युहिब्बुक, वल अमलल्लज़ी युबल्लिग़ुनी हुब्बक" — the Tirmidhi Dua for the love of Allah).
+    * "arabic" (string): The authentic, complete Arabic text with full Tashkeel / Harakat (e.g. "حَسْبُنَا اللَّهُ وَنِعْمَ الْوَكِيلُ" / "لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ" / "اللَّهُمَّ إِنِّي أَسْأَلُكَ حُبَّكَ، وَحُبَّ مَنْ يُحِبُّكَ، وَالْعَمَلَ الَّذِي يُبَلِّغُنِي حُبَّكَ").
     * "title" (string, optional): Short spiritual title (e.g. "हिफ़ाज़त की दुआ / Protection Dua").
-    * "reference" (string, optional): Authentic Hadith / Quran source (e.g. "Tirmidhi / Abu Dawud").
+    * "reference" (string, optional): Authentic Quran or Hadith source (e.g. "Sahih Bukhari / Abu Dawud").
+    * "isDua" (boolean): true
+  - If a scene contains a Dua, you MUST include this "duaInfo" object on that scene. This is a strict rule with ZERO exceptions: never silently skip "duaInfo" for a scene that recites/discusses a Dua, no matter how short the video, how many other scenes exist, or how limited the output length is. If you are running low on output space, shorten "caption"/"prompt" text rather than dropping any "duaInfo".
+  - MULTIPLE DUAS RULE: If the transcript lists more than one Dua (e.g. "नंबर एक...", "नंबर दो...", "नंबर तीन...", "पहली दुआ", "दूसरी दुआ", or any enumerated/numbered list of Duas), you MUST create a SEPARATE scene for EACH individual Dua, and EVERY one of those scenes MUST have its own corrected "duaInfo" object. Do NOT merge multiple Duas into a single scene, and do NOT leave any listed Dua without a "duaInfo" object — apply the same imperfect-to-authentic correction to each one independently.
+  - SELF-CHECK BEFORE RESPONDING: Count how many distinct Duas/Zikr are recited in the transcript. Before finalizing your JSON, verify that the exact same number of scenes contain a "duaInfo" object. If the counts don't match, fix your output before returning it.
 
 General Rules:
 * Return valid JSON only without markdown or code fences.
@@ -460,6 +475,12 @@ General Rules:
       - "style" (string): "stacked-kinetic", "top-hero", or "thought-bubble".
       - "start" (number): Start timestamp in seconds within this scene.
       - "end" (number): End timestamp in seconds within this scene.
+  - "duaInfo" (object, ONLY when a Dua/Zikr is spoken in this scene):
+    * "isDua" (boolean): true
+    * "hindi" (string): Verified Hindi text of the Dua.
+    * "arabic" (string): Authentic Arabic text with full Harakat.
+    * "title" (string, optional): Spiritual title.
+    * "reference" (string, optional): Authentic source.
 * Generate 5-10 scenes.
 ${
   hasSegments
@@ -492,6 +513,27 @@ Example output:
         {"prefixText":"खुदा की कसम","heroWord":"दिल दुखाया","style":"stacked-kinetic","start":0.4,"end":2.4}
       ],
       "prompt": "An elegant anime style illustration of a thoughtful man sitting alone in dramatic shadow lighting, vertical 9:16 aspect ratio, soft lighting, highly detailed, 1k"
+    },
+    {
+      "keyword": "Powerful Dua",
+      "visualQuery": "hands raised in dua prayer golden sunrise",
+      "fallbackQuery": "muslim man praying silhouette sunset",
+      "moodQuery": "sun rays through clouds golden hour",
+      "emoji": "🤲",
+      "duration": 5,
+      "tags": ["dua", "supplication", "light"],
+      "caption": "Hands raised in earnest supplication asking for relief and mercy under a golden sunrise.",
+      "graphics": [
+        {"prefixText":"मुश्किल वक्त की","heroWord":"दुआ","style":"stacked-kinetic","start":0.4,"end":2.4}
+      ],
+      "duaInfo": {
+        "isDua": true,
+        "hindi": "ला इलाहा इल्ला अन्ता सुब्हानका इन्नी कुन्तु मिनज़-ज़ालिमीन",
+        "arabic": "لَا إِلٰهَ إِلَّا أَنْتَ سُبْحَانَكَ إِنِّي كُنْتُ مِنَ الظَّالِمِينَ",
+        "title": "मुश्किल वक्त की दुआ / Ayat-e-Kareema",
+        "reference": "Surah Al-Anbiya (21:87)"
+      },
+      "prompt": "An elegant anime style illustration of hands raised in prayer under soft golden morning light, vertical 9:16 aspect ratio, soft lighting, highly detailed, 1k"
     }
   ]
 }
@@ -573,7 +615,13 @@ export async function POST(request: Request) {
           ],
           model,
           response_format: { type: "json_object" },
-          max_tokens: 3500,
+          // Low temperature keeps rule-following (e.g. always attaching duaInfo)
+          // consistent across runs instead of varying scene-to-scene by sampling luck.
+          temperature: 0.2,
+          // Raised from 3500: with multiple Duas each needing a full corrected
+          // hindi+arabic duaInfo block, the previous limit could truncate the JSON
+          // mid-scene, silently dropping duaInfo (or whole scenes) near the cutoff.
+          max_tokens: 6500,
         });
 
         responseContent = chatCompletion.choices[0]?.message?.content || null;
