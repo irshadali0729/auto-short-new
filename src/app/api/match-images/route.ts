@@ -55,6 +55,50 @@ interface MediaSettingsPayload {
   videoHostType?: string;
 }
 
+function tokenizeQuery(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2);
+}
+
+function relevanceScore(candidateText: string, queryTokens: string[]): number {
+  if (!candidateText || queryTokens.length === 0) return 0;
+  const candTokens = new Set(tokenizeQuery(candidateText));
+  let score = 0;
+  for (const t of queryTokens) {
+    if (candTokens.has(t)) score++;
+  }
+  return score;
+}
+
+// Picks the candidate whose metadata text (alt/description/tags) best overlaps the
+// search query, instead of blindly trusting the provider's result order. Falls back
+// to the previous "first unused" behavior when no candidate has any keyword overlap,
+// so this can only improve match quality, never regress it.
+function pickBestScored<T>(
+  items: T[],
+  usedIds: Set<string | number>,
+  getId: (item: T) => string | number,
+  getText: (item: T) => string,
+  queryTokens: string[],
+): T {
+  const unused = items.filter((i) => !usedIds.has(getId(i)));
+  const pool = unused.length > 0 ? unused : items;
+
+  let best = pool[0];
+  let bestScore = -1;
+  for (const item of pool) {
+    const score = relevanceScore(getText(item), queryTokens);
+    if (score > bestScore) {
+      bestScore = score;
+      best = item;
+    }
+  }
+  return best;
+}
+
 function shuffleArray<T>(array: T[]): T[] {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -1075,13 +1119,13 @@ async function getPexelsPhoto(
       return null;
     }
 
-    let chosenPhoto = data.photos[0];
-    for (const photo of data.photos) {
-      if (!usedPexelsIds.has(photo.id)) {
-        chosenPhoto = photo;
-        break;
-      }
-    }
+    const chosenPhoto = pickBestScored(
+      data.photos,
+      usedPexelsIds,
+      (p: any) => p.id,
+      (p: any) => p.alt || "",
+      tokenizeQuery(searchQuery),
+    );
 
     usedPexelsIds.add(chosenPhoto.id);
 
@@ -1162,13 +1206,13 @@ async function getUnsplashPhoto(
       return null;
     }
 
-    let chosen = data.results[0];
-    for (const r of data.results) {
-      if (!usedUnsplashIds.has(String(r.id))) {
-        chosen = r;
-        break;
-      }
-    }
+    const chosen = pickBestScored(
+      data.results,
+      usedUnsplashIds,
+      (r: any) => String(r.id),
+      (r: any) => `${r.alt_description || ""} ${r.description || ""}`,
+      tokenizeQuery(searchQuery),
+    );
 
     usedUnsplashIds.add(String(chosen.id));
 
@@ -1238,17 +1282,22 @@ async function getPixabayVideo(
       return null;
     }
 
-    const unusedHits = data.hits.filter((hit: { id: number }) => !usedPixabayVideoIds.has(hit.id));
-    const pool = unusedHits.length > 0 ? unusedHits : data.hits;
-
-    // Prioritize video clips matching target aspect ratio
+    // Prioritize video clips matching target aspect ratio, then pick the best
+    // tag-relevance match among those (falling back to the full set if none match).
     const isPortrait = targetRatio === "9:16";
-    const matchedHit = pool.find((hit: { videos?: { medium?: { width: number; height: number }; large?: { width: number; height: number } } }) => {
+    const orientedHits = data.hits.filter((hit: { videos?: { medium?: { width: number; height: number }; large?: { width: number; height: number } } }) => {
       const vid = hit.videos?.medium || hit.videos?.large;
       return vid && (isPortrait ? vid.height > vid.width : vid.width > vid.height);
     });
+    const candidatePool = orientedHits.length > 0 ? orientedHits : data.hits;
 
-    const chosen = matchedHit || pool[0];
+    const chosen = pickBestScored(
+      candidatePool,
+      usedPixabayVideoIds,
+      (h: any) => h.id,
+      (h: any) => h.tags || "",
+      tokenizeQuery(searchQuery),
+    );
     usedPixabayVideoIds.add(chosen.id);
 
     const videoUrl =
@@ -1306,13 +1355,13 @@ async function getPixabayPhoto(
       return null;
     }
 
-    let chosen = data.hits[0];
-    for (const hit of data.hits) {
-      if (!usedPixabayPhotoIds.has(hit.id)) {
-        chosen = hit;
-        break;
-      }
-    }
+    const chosen = pickBestScored(
+      data.hits,
+      usedPixabayPhotoIds,
+      (h: any) => h.id,
+      (h: any) => h.tags || "",
+      tokenizeQuery(searchQuery),
+    );
     usedPixabayPhotoIds.add(chosen.id);
 
     const imageUrl = chosen.largeImageURL || chosen.webformatURL;
