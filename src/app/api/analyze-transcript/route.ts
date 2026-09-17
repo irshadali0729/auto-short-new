@@ -1,32 +1,15 @@
 import { NextResponse } from "next/server";
 import { Groq } from "groq-sdk";
 import { resolveEmojiForText } from "@/app/utils/emoji-resolver";
+import { rescaleSceneDurations } from "@/app/utils/scene-timing";
+import type {
+  GraphicBeat,
+  TranscriptSegment,
+  CaptionSlice,
+  DuaInfo,
+} from "@/app/types/scene";
 
-export interface GraphicBeat {
-  prefixText?: string;
-  heroWord: string;
-  suffixText?: string;
-  style?: "stacked-kinetic" | "top-hero" | "thought-bubble" | "breakdown-card";
-  text?: string;
-  accent?: string;
-  type?: "impact" | "money" | "result" | "platform";
-  start: number;
-  end: number;
-}
-
-export interface TranscriptSegment {
-  text: string;
-  start: number;
-  duration: number;
-  end: number;
-}
-
-export interface CaptionSlice {
-  text: string;
-  start: number;
-  end: number;
-  emoji?: string;
-}
+export type { GraphicBeat, TranscriptSegment, CaptionSlice } from "@/app/types/scene";
 
 function buildGraphicBeats(
   transcript: string,
@@ -199,14 +182,6 @@ function alignScenesToSegments(
       captions: sceneCaptions.length > 0 ? sceneCaptions : undefined,
     };
   });
-}
-
-export interface DuaInfo {
-  isDua: boolean;
-  hindi: string;
-  arabic: string;
-  title?: string;
-  reference?: string;
 }
 
 interface GroqScene {
@@ -669,55 +644,7 @@ export async function POST(request: Request) {
     } else {
       const targetLengthNum = Number(targetLength);
       if (targetLengthNum && !isNaN(targetLengthNum) && targetLengthNum > 0) {
-        const currentSum = finalScenes.reduce(
-          (acc: number, s: GroqScene) => acc + (Number(s.duration) || 0),
-          0,
-        );
-        if (currentSum > 0) {
-          finalScenes = finalScenes.map((s: GroqScene) => ({
-            ...s,
-            duration: Number(
-              (
-                (Number(s.duration) || 0) *
-                (targetLengthNum / currentSum)
-              ).toFixed(2),
-            ),
-          }));
-
-          const newSum = finalScenes.reduce(
-            (acc: number, s: GroqScene) => acc + s.duration,
-            0,
-          );
-          const difference = targetLengthNum - newSum;
-          if (Math.abs(difference) > 0.001 && finalScenes.length > 0) {
-            finalScenes[finalScenes.length - 1].duration = Number(
-              (finalScenes[finalScenes.length - 1].duration + difference).toFixed(
-                2,
-              ),
-            );
-          }
-        } else {
-          const equalDuration = Number(
-            (targetLengthNum / finalScenes.length).toFixed(2),
-          );
-          finalScenes = finalScenes.map((s: GroqScene) => ({
-            ...s,
-            duration: equalDuration,
-          }));
-
-          const newSum = finalScenes.reduce(
-            (acc: number, s: GroqScene) => acc + s.duration,
-            0,
-          );
-          const difference = targetLengthNum - newSum;
-          if (Math.abs(difference) > 0.001 && finalScenes.length > 0) {
-            finalScenes[finalScenes.length - 1].duration = Number(
-              (finalScenes[finalScenes.length - 1].duration + difference).toFixed(
-                2,
-              ),
-            );
-          }
-        }
+        finalScenes = rescaleSceneDurations(finalScenes, targetLengthNum);
       }
     }
 

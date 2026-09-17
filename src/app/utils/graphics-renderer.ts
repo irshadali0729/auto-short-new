@@ -1,18 +1,9 @@
 import fs from "fs";
 import path from "path";
 import sharp from "sharp";
+import type { GraphicBeat } from "@/app/types/scene";
 
-export interface GraphicBeat {
-  prefixText?: string;
-  heroWord: string;
-  suffixText?: string;
-  style?: "stacked-kinetic" | "top-hero" | "thought-bubble" | "breakdown-card";
-  text?: string;
-  accent?: string;
-  type?: "impact" | "money" | "result" | "platform";
-  start: number;
-  end: number;
-}
+export type { GraphicBeat } from "@/app/types/scene";
 
 function escapeXml(unsafe: string): string {
   return unsafe

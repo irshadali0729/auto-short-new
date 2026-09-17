@@ -3,24 +3,7 @@ import fs from "fs";
 import path from "path";
 import { getHostVideos, pickRandomHostVideo } from "@/app/utils/host-library";
 import { getCachedLibrary, invalidateLibraryCache } from "@/app/utils/library-cache";
-
-interface GraphicBeat {
-  prefixText?: string;
-  heroWord?: string;
-  suffixText?: string;
-  style?: "stacked-kinetic" | "top-hero" | "thought-bubble" | "breakdown-card";
-  text?: string;
-  accent?: string;
-  type?: "impact" | "money" | "result" | "platform";
-  start: number;
-  end: number;
-}
-
-interface CaptionSlice {
-  text: string;
-  start: number;
-  end: number;
-}
+import type { GraphicBeat, CaptionSlice, DuaInfo, Scene } from "@/app/types/scene";
 
 interface SceneInput {
   keyword: string;
@@ -31,13 +14,7 @@ interface SceneInput {
   emoji?: string;
   graphics?: GraphicBeat[];
   captions?: CaptionSlice[];
-  duaInfo?: {
-    isDua: boolean;
-    hindi: string;
-    arabic: string;
-    title?: string;
-    reference?: string;
-  };
+  duaInfo?: DuaInfo;
 }
 
 interface MediaSettingsPayload {
@@ -202,31 +179,7 @@ export async function POST(request: Request) {
     const hasHostVideos = availableHostVideos.length > 0;
     let lastHostAsset: string | undefined = undefined;
 
-    const matchedScenes: Array<{
-      keyword: string;
-      duration: number;
-      image: string;
-      isFallback: boolean;
-      isHostScene?: boolean;
-      isSplitScreen?: boolean;
-      hostAsset?: string;
-      stockAsset?: string;
-      visualQuery?: string;
-      fallbackQuery?: string;
-      moodQuery?: string;
-      matchedTier?: "visual" | "fallback" | "mood" | "local" | "random" | "legacy";
-      matchedQuery?: string;
-      emoji?: string;
-      graphics?: GraphicBeat[];
-      captions?: CaptionSlice[];
-      duaInfo?: {
-        isDua: boolean;
-        hindi: string;
-        arabic: string;
-        title?: string;
-        reference?: string;
-      };
-    }> = [];
+    const matchedScenes: Scene[] = [];
 
     const usedAssets = new Set<string>();
     const usedPexelsPhotoIds = new Set<number>();

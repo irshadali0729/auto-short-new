@@ -1,23 +1,6 @@
-export type DuaCardTheme =
-  | "cream"
-  | "white"
-  | "light_grey"
-  | "emerald_dark"
-  | "midnight_gold";
+import type { DuaCardTheme, DuaCardPosition, DuaCardStyle, DuaInfo } from "@/app/types/scene";
 
-export type DuaCardPosition = "top" | "center" | "bottom";
-export type DuaCardStyle = "classic" | "minimal_glass" | "floating_pill" | "full_banner";
-
-export interface DuaInfo {
-  isDua: boolean;
-  hindi: string;
-  arabic: string;
-  title?: string;
-  reference?: string;
-  theme?: DuaCardTheme;
-  position?: DuaCardPosition;
-  cardStyle?: DuaCardStyle;
-}
+export type { DuaCardTheme, DuaCardPosition, DuaCardStyle, DuaInfo } from "@/app/types/scene";
 
 function escapeXml(unsafe: string): string {
   return unsafe

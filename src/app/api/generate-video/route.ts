@@ -4,37 +4,16 @@ import path from "path";
 import { spawn } from "child_process";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { cleanupAssets } from "@/app/utils/cleanup";
+import { renderGraphicOverlayPng } from "@/app/utils/graphics-renderer";
 import {
-  GraphicBeat,
-  renderGraphicOverlayPng,
-} from "@/app/utils/graphics-renderer";
-import {
-  CaptionSlice,
   CaptionPosition,
   renderCaptionOverlayPng,
 } from "@/app/utils/caption-renderer";
-import {
-  DuaInfo,
-  DuaCardTheme,
-  renderDuaOverlayPng,
-} from "@/app/utils/dua-renderer";
+import { DuaCardTheme, renderDuaOverlayPng } from "@/app/utils/dua-renderer";
+import { isVideoAsset } from "@/app/utils/media-url";
+import type { Scene, GraphicBeat } from "@/app/types/scene";
 
 const ffmpegPath = ffmpegInstaller.path;
-
-interface Scene {
-  keyword: string;
-  duration: number;
-  image: string;
-  isFallback: boolean;
-  isHostScene?: boolean;
-  isSplitScreen?: boolean;
-  hostAsset?: string;
-  stockAsset?: string;
-  emoji?: string;
-  graphics?: GraphicBeat[];
-  captions?: CaptionSlice[];
-  duaInfo?: DuaInfo;
-}
 
 interface ProgressData {
   complete: boolean;
@@ -291,8 +270,7 @@ async function resolveSceneAsset(
   if (!assetPathOrUrl) return "";
 
   if (assetPathOrUrl.startsWith("http://") || assetPathOrUrl.startsWith("https://")) {
-    const isVideo = /\.(mp4|webm|mov)(\?.*)?$/i.test(assetPathOrUrl);
-    const ext = isVideo ? ".mp4" : ".jpg";
+    const ext = isVideoAsset(assetPathOrUrl) ? ".mp4" : ".jpg";
     const tempFilePath = path.join(tempDir, `${tempPrefix}${ext}`);
 
     console.log(`[generate-video] Downloading temporary remote asset for compile: ${assetPathOrUrl}`);
@@ -426,7 +404,7 @@ async function resolveSceneAsset(
         }
       }
 
-      const isVideoAsset = /\.(mp4|webm|mov)(\?.*)?$/i.test(imageFilename);
+      const sceneImageIsVideo = isVideoAsset(imageFilename);
 
       const isSplitScreenScene = Boolean(scene.isSplitScreen && scene.hostAsset);
       const hostFilename = scene.hostAsset || "";
@@ -441,7 +419,7 @@ async function resolveSceneAsset(
 
       if (hasValidHostFile) {
         overlayBaseInputIdx = 2; // Input 0: Host Video, Input 1: Stock Media
-        const isStockVideo = /\.(mp4|webm|mov)$/i.test(imageFilename);
+        const isStockVideo = isVideoAsset(imageFilename);
 
         if (targetRatio === "16:9") {
           // Landscape: Left/Right 50/50 Split
@@ -484,7 +462,7 @@ async function resolveSceneAsset(
             `[split_raw]drawbox=x=0:y=${dividerY}:w=${targetWidth}:h=4:color=white@0.35:t=fill[zoomed];` +
             `[zoomed]drawgrid=width=100:height=100:thickness=1:color=white@0.04[grid];`;
         }
-      } else if (isVideoAsset) {
+      } else if (sceneImageIsVideo) {
         filterGraph =
           `[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${targetHeight},boxblur=20:5,setpts=PTS-STARTPTS[bg];` +
           `[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,setpts=PTS-STARTPTS[fg_scaled];` +
@@ -563,12 +541,12 @@ async function resolveSceneAsset(
         // Input 0: Host video clip
         ffmpegArgs.push("-stream_loop", "-1", "-i", inputHostPath);
         // Input 1: Stock media (video or still photo)
-        if (/\.(mp4|webm|mov)$/i.test(imageFilename)) {
+        if (isVideoAsset(imageFilename)) {
           ffmpegArgs.push("-stream_loop", "-1", "-i", inputImagePath);
         } else {
           ffmpegArgs.push("-loop", "1", "-i", inputImagePath);
         }
-      } else if (isVideoAsset) {
+      } else if (sceneImageIsVideo) {
         ffmpegArgs.push("-stream_loop", "-1", "-i", inputImagePath);
       } else {
         ffmpegArgs.push("-loop", "1", "-i", inputImagePath);

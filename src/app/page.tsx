@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Sparkles,
   Image as ImageIcon,
@@ -26,57 +26,11 @@ import SettingsModal, {
 import ReplaceImageModal from '@/app/components/ReplaceImageModal';
 import DuaEditModal from '@/app/components/DuaEditModal';
 import SceneLivePreviewPlayer from '@/app/components/SceneLivePreviewPlayer';
-import { DuaInfo } from '@/app/utils/dua-card-svg';
-import { CaptionPosition } from '@/app/utils/caption-renderer';
 import { getMediaUrl, isVideoAsset } from '@/app/utils/media-url';
+import { rescaleSceneDurations } from '@/app/utils/scene-timing';
+import type { Scene, TranscriptSegment, DuaInfo } from '@/app/types/scene';
 
-interface GraphicBeat {
-  prefixText?: string;
-  heroWord: string;
-  suffixText?: string;
-  style?: "stacked-kinetic" | "top-hero" | "thought-bubble" | "breakdown-card";
-  text?: string;
-  accent?: string;
-  start: number;
-  end: number;
-}
-
-export interface TranscriptSegment {
-  text: string;
-  start: number;
-  duration: number;
-  end: number;
-}
-
-export interface CaptionSlice {
-  text: string;
-  start: number;
-  end: number;
-  emoji?: string;
-}
-
-interface Scene {
-  keyword: string;
-  duration: number;
-  image: string;
-  isFallback: boolean;
-  isHostScene?: boolean;
-  isSplitScreen?: boolean;
-  hostAsset?: string;
-  stockAsset?: string;
-  visualQuery?: string;
-  fallbackQuery?: string;
-  moodQuery?: string;
-  matchedTier?: "visual" | "fallback" | "mood" | "local" | "random" | "legacy";
-  matchedQuery?: string;
-  emoji?: string;
-  graphics?: GraphicBeat[];
-  captions?: CaptionSlice[];
-  duaInfo?: DuaInfo;
-}
-
-
-
+export type { Scene, TranscriptSegment, GraphicBeat, CaptionSlice } from '@/app/types/scene';
 
 export default function Home() {
   const [transcript, setTranscript] = useState('');
@@ -85,6 +39,19 @@ export default function Home() {
   const [isFetchingTranscript, setIsFetchingTranscript] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [scenes, setScenes] = useState<Scene[]>([]);
+
+  // Prefix-sum of scene durations, so each scene's absolute start time is a lookup
+  // instead of an O(n) slice+reduce recomputed for every scene on every render.
+  const sceneStartTimes = useMemo(() => {
+    const starts: number[] = [];
+    let acc = 0;
+    for (const s of scenes) {
+      starts.push(acc);
+      acc += s.duration;
+    }
+    return starts;
+  }, [scenes]);
+
   const [targetVideoLength, setTargetVideoLength] = useState<number | ''>(30);
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
@@ -93,6 +60,17 @@ export default function Home() {
   const [generationStep, setGenerationStep] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [pollCount, setPollCount] = useState<number>(0);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clear any in-flight progress poll on unmount so it doesn't keep calling
+  // setState after the component is gone.
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
 
   // Settings Panel state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -360,20 +338,7 @@ export default function Home() {
 
     // If scenes already exist, proportionally scale them so their sum matches the new target length
     if (scenes.length > 0) {
-      const currentSum = scenes.reduce((acc, s) => acc + s.duration, 0);
-      if (currentSum > 0) {
-        const updatedScenes = scenes.map(s => ({
-          ...s,
-          duration: Number((s.duration * (num / currentSum)).toFixed(2))
-        }));
-        // Correct rounding error on the last scene
-        const newSum = updatedScenes.reduce((acc, s) => acc + s.duration, 0);
-        const difference = num - newSum;
-        if (Math.abs(difference) > 0.001 && updatedScenes.length > 0) {
-          updatedScenes[updatedScenes.length - 1].duration = Number((updatedScenes[updatedScenes.length - 1].duration + difference).toFixed(2));
-        }
-        setScenes(updatedScenes);
-      }
+      setScenes(rescaleSceneDurations(scenes, num));
     }
   };
 
@@ -398,6 +363,11 @@ export default function Home() {
 
   const handleGenerateVideo = async () => {
     if (scenes.length === 0) return;
+
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
 
     setErrorMessage('');
     setIsGenerating(true);
@@ -439,7 +409,7 @@ export default function Home() {
 
       let localPollCount = 0;
       // Polling interval set to 30 seconds (30000ms)
-      const pollInterval = setInterval(async () => {
+      pollIntervalRef.current = setInterval(async () => {
         try {
           localPollCount++;
           setPollCount(localPollCount);
@@ -452,7 +422,8 @@ export default function Home() {
           const progData = await progRes.json();
 
           if (progData.complete) {
-            clearInterval(pollInterval);
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
             setIsGenerating(false);
             setGenerationStep('');
             if (progData.error) {
@@ -799,7 +770,7 @@ export default function Home() {
                 {/* Storyboard Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {scenes.map((scene, idx) => {
-                    const sceneStart = scenes.slice(0, idx).reduce((acc, s) => acc + s.duration, 0);
+                    const sceneStart = sceneStartTimes[idx];
                     const sceneEnd = sceneStart + scene.duration;
                     const isCurrentPreview = activePreviewSceneIndex === idx;
                     return (
@@ -895,7 +866,7 @@ export default function Home() {
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-600 text-white shadow-sm flex items-center gap-1">
                                   ⚡ Split Screen
                                 </span>
-                              ) : /\.(mp4|webm|mov)$/i.test(scene.image) ? (
+                              ) : isVideoAsset(scene.image) ? (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rausch text-white shadow-sm flex items-center gap-1">
                                   <Film className="w-2.5 h-2.5" /> Video
                                 </span>

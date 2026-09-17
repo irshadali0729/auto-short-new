@@ -2,13 +2,9 @@ import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import { EmojiStyle, resolveEmojiDataUri } from "@/app/utils/emoji-resolver";
+import type { CaptionSlice } from "@/app/types/scene";
 
-export interface CaptionSlice {
-  text: string;
-  start: number;
-  end: number;
-  emoji?: string;
-}
+export type { CaptionSlice } from "@/app/types/scene";
 
 function escapeXml(unsafe: string): string {
   return unsafe
