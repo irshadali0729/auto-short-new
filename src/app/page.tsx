@@ -106,6 +106,21 @@ export default function Home() {
   // Image replacement state
   const [allLibraryImages, setAllLibraryImages] = useState<string[]>([]);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
+  // Scene indices whose stock image failed to load (broken/expired remote URL),
+  // so we can show an explicit "replace this" message instead of a silent fade.
+  const [brokenImageIndices, setBrokenImageIndices] = useState<Set<number>>(new Set());
+
+  const markImageBroken = (index: number) => {
+    setBrokenImageIndices((prev) => (prev.has(index) ? prev : new Set(prev).add(index)));
+  };
+  const markImageLoaded = (index: number) => {
+    setBrokenImageIndices((prev) => {
+      if (!prev.has(index)) return prev;
+      const next = new Set(prev);
+      next.delete(index);
+      return next;
+    });
+  };
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Active Storyboard Scene Preview state
@@ -274,6 +289,7 @@ export default function Home() {
     setIsAnalyzing(true);
     setScenes([]);
     setVideoUrl('');
+    setBrokenImageIndices(new Set());
 
     try {
       // 1. Analyze transcript to get keywords/durations (with real timeline segments if present)
@@ -458,15 +474,17 @@ export default function Home() {
               setErrorMessage('Video generation completed, but output path was not returned.');
             }
           } else {
-            // Update UI subtext for each poll count
-            if (localPollCount === 1) {
-              setGenerationStep(`Check 1 (${pollSeconds}s): Still rendering scene clips...`);
-            } else if (localPollCount === 2) {
-              setGenerationStep(`Check 2 (${pollSeconds * 2}s): Merging video tracks...`);
-            } else if (localPollCount === 3) {
-              setGenerationStep(`Check 3 (${pollSeconds * 3}s): Finalizing compile files...`);
+            // Driven by the backend's actual stage/scene-count instead of
+            // fabricated copy that guessed what was happening from poll count.
+            const elapsed = `${localPollCount * pollSeconds}s`;
+            if (progData.stage === 'merging') {
+              setGenerationStep(`Merging video tracks... (${elapsed})`);
+            } else if (progData.stage === 'rendering_scenes' && progData.totalScenes) {
+              setGenerationStep(
+                `Rendering scene ${Math.min(progData.scenesCompleted + 1, progData.totalScenes)}/${progData.totalScenes}... (${elapsed})`,
+              );
             } else {
-              setGenerationStep(`Check ${localPollCount} (${localPollCount * pollSeconds}s): Final steps...`);
+              setGenerationStep(`Preparing video compile... (${elapsed})`);
             }
           }
         } catch (pollErr) {
@@ -868,9 +886,8 @@ export default function Home() {
                                     src={getMediaUrl(scene.image)}
                                     alt={scene.keyword}
                                     className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                      (e.target as HTMLElement).style.opacity = '0.3';
-                                    }}
+                                    onError={() => markImageBroken(idx)}
+                                    onLoad={() => markImageLoaded(idx)}
                                   />
                                 )}
                                 <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-bold bg-black/60 text-white backdrop-blur-xs">
@@ -893,10 +910,29 @@ export default function Home() {
                               src={getMediaUrl(scene.image)}
                               alt={scene.keyword}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.opacity = '0.3';
-                              }}
+                              onError={() => markImageBroken(idx)}
+                              onLoad={() => markImageLoaded(idx)}
                             />
+                          )}
+
+                          {/* Broken/expired remote image notice — replaces the old silent 30% opacity fade */}
+                          {brokenImageIndices.has(idx) && (
+                            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-ink/80 text-center p-3">
+                              <AlertCircle className="w-6 h-6 text-white" />
+                              <p className="text-xs font-semibold text-white leading-snug">
+                                Image failed to load
+                              </p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleReplaceClick(idx);
+                                }}
+                                className="mt-1 px-3 py-1.5 rounded-lg bg-white text-ink text-xs font-bold hover:bg-surface-soft transition-colors cursor-pointer"
+                              >
+                                Replace Image
+                              </button>
+                            </div>
                           )}
 
                           {/* Guest Favorite-Style Floating Badges (Top Left) */}
@@ -1189,7 +1225,19 @@ export default function Home() {
             )}
 
             {/* Empty Video Preview State (When no scenes analyzed yet) */}
-            {scenes.length === 0 && !videoUrl && !isGenerating && (
+            {scenes.length === 0 && !videoUrl && !isGenerating && isAnalyzing && (
+              <section className="rounded-2xl border border-dashed border-hairline p-8 text-center flex flex-col items-center justify-center h-[480px] bg-surface-soft/40 shadow-sm">
+                <div className="w-16 h-16 rounded-full bg-white border border-hairline flex items-center justify-center mb-4 shadow-airbnb">
+                  <div className="w-6 h-6 rounded-full border-2 border-[#ffd1da] border-t-rausch animate-spin" />
+                </div>
+                <h3 className="text-base font-bold text-ink mb-1">Analyzing Transcript…</h3>
+                <p className="text-xs text-muted max-w-[240px]">
+                  Breaking your transcript into scenes and matching visuals — this can take a moment.
+                </p>
+              </section>
+            )}
+
+            {scenes.length === 0 && !videoUrl && !isGenerating && !isAnalyzing && (
               <section className="rounded-2xl border border-dashed border-hairline p-8 text-center flex flex-col items-center justify-center h-[480px] bg-surface-soft/40 shadow-sm">
                 <div className="w-16 h-16 rounded-full bg-white border border-hairline flex items-center justify-center mb-4 shadow-airbnb">
                   <Play className="w-6 h-6 text-muted" />

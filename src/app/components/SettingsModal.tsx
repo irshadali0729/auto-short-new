@@ -22,6 +22,7 @@ import {
   UserCheck,
   Video,
 } from "lucide-react";
+import { useFocusTrap } from "@/app/utils/useFocusTrap";
 
 export type MediaSourceKey = "unsplash" | "pixabay" | "pexels" | "local";
 export type MediaTypeFilter = "only_videos" | "only_images" | "both";
@@ -159,6 +160,11 @@ export default function SettingsModal({
   const [validationError, setValidationError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Keep Tab/Shift+Tab cycling inside the dialog while it's open. Initial
+  // focus is handled separately below (closeBtnRef), so pass it through here
+  // too — otherwise the trap would steal focus onto its own default target.
+  useFocusTrap(isOpen, dialogRef, closeBtnRef);
 
   // Sync draft state with external props on open
   useEffect(() => {

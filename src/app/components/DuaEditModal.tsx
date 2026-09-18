@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Check,
@@ -24,6 +24,7 @@ import {
   DuaCardStyle,
   generateDuaCardSvg,
 } from '@/app/utils/dua-card-svg';
+import { useFocusTrap } from '@/app/utils/useFocusTrap';
 
 interface DuaEditModalProps {
   isOpen: boolean;
@@ -55,9 +56,18 @@ export default function DuaEditModal({
   const [activePosition, setActivePosition] = useState<DuaCardPosition>('center');
   const [activeStyle, setActiveStyle] = useState<DuaCardStyle>('classic');
   const [previewAspectRatio, setPreviewAspectRatio] = useState<'9:16' | '16:9'>(aspectRatio);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const hindiInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Keep Tab/Shift+Tab cycling inside the dialog, and move focus onto the
+  // first text field on open instead of leaving it on the trigger button.
+  useFocusTrap(isOpen, dialogRef, hindiInputRef);
 
   useEffect(() => {
     if (isOpen) {
+      setFormError(null);
       if (initialDua) {
         setDraftHindi(initialDua.hindi || '');
         setDraftArabic(initialDua.arabic || '');
@@ -212,20 +222,29 @@ export default function DuaEditModal({
   ];
 
   const handleSave = () => {
-    if (!draftIsDua || (!draftHindi.trim() && !draftArabic.trim())) {
+    if (!draftIsDua) {
       onSaveDua(sceneIndex, undefined);
-    } else {
-      onSaveDua(sceneIndex, {
-        isDua: true,
-        hindi: draftHindi.trim(),
-        arabic: draftArabic.trim(),
-        title: draftTitle.trim() || undefined,
-        reference: draftReference.trim() || undefined,
-        theme: activeTheme,
-        position: activePosition,
-        cardStyle: activeStyle,
-      });
+      onClose();
+      return;
     }
+
+    // Both fields are required — a card missing either half renders broken
+    // (blank Hindi or blank Arabic block) and previously saved silently.
+    if (!draftHindi.trim() || !draftArabic.trim()) {
+      setFormError('Please fill in both the Hindi and Arabic text before saving.');
+      return;
+    }
+
+    onSaveDua(sceneIndex, {
+      isDua: true,
+      hindi: draftHindi.trim(),
+      arabic: draftArabic.trim(),
+      title: draftTitle.trim() || undefined,
+      reference: draftReference.trim() || undefined,
+      theme: activeTheme,
+      position: activePosition,
+      cardStyle: activeStyle,
+    });
     onClose();
   };
 
@@ -249,7 +268,10 @@ export default function DuaEditModal({
       />
 
       {/* Modal Dialog */}
-      <div className="relative w-full max-w-5xl rounded-2xl border border-hairline bg-white shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-10 my-auto max-h-[92vh]">
+      <div
+        ref={dialogRef}
+        className="relative w-full max-w-5xl rounded-2xl border border-hairline bg-white shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-10 my-auto max-h-[92vh]"
+      >
         {/* Header */}
         <div className="px-5 py-4 sm:px-6 sm:py-4.5 border-b border-hairline-soft flex items-center justify-between gap-4 bg-white shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -474,9 +496,13 @@ export default function DuaEditModal({
                 <span className="text-[10px] text-rausch font-bold">Top Display</span>
               </label>
               <textarea
+                ref={hindiInputRef}
                 rows={3}
                 value={draftHindi}
-                onChange={(e) => setDraftHindi(e.target.value)}
+                onChange={(e) => {
+                  setDraftHindi(e.target.value);
+                  if (formError) setFormError(null);
+                }}
                 placeholder="Enter or edit Hindi Devanagari text..."
                 className="w-full p-3 text-sm rounded-xl border border-hairline focus:border-rausch focus:ring-1 focus:ring-rausch outline-none text-ink font-medium resize-none leading-relaxed"
               />
@@ -492,7 +518,10 @@ export default function DuaEditModal({
                 rows={3}
                 dir="rtl"
                 value={draftArabic}
-                onChange={(e) => setDraftArabic(e.target.value)}
+                onChange={(e) => {
+                  setDraftArabic(e.target.value);
+                  if (formError) setFormError(null);
+                }}
                 placeholder="أدخل النص العربي مع التشكيل..."
                 className="w-full p-3 text-base rounded-xl border border-hairline focus:border-rausch focus:ring-1 focus:ring-rausch outline-none text-emerald-900 font-semibold resize-none leading-loose font-arabic"
               />
@@ -577,32 +606,39 @@ export default function DuaEditModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 sm:p-5 border-t border-hairline-soft bg-white flex items-center justify-between gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={handleRemoveDua}
-            className="text-xs font-semibold text-red-600 hover:text-red-700 transition-colors flex items-center gap-1.5"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Remove Dua Card</span>
-          </button>
+        <div className="p-4 sm:p-5 border-t border-hairline-soft bg-white flex flex-col gap-2.5 shrink-0">
+          {formError && (
+            <p role="alert" className="text-xs font-semibold text-red-600">
+              {formError}
+            </p>
+          )}
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={handleRemoveDua}
+              className="text-xs font-semibold text-red-600 hover:text-red-700 transition-colors flex items-center gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Remove Dua Card</span>
+            </button>
 
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-lg border border-hairline bg-white text-xs font-bold text-ink hover:bg-surface-soft transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              className="px-5 py-2.5 rounded-lg bg-rausch hover:bg-rausch-active text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
-            >
-              <Check className="w-3.5 h-3.5" />
-              Save Dua Card
-            </button>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 rounded-lg border border-hairline bg-white text-xs font-bold text-ink hover:bg-surface-soft transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="px-5 py-2.5 rounded-lg bg-rausch hover:bg-rausch-active text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+              >
+                <Check className="w-3.5 h-3.5" />
+                Save Dua Card
+              </button>
+            </div>
           </div>
         </div>
       </div>

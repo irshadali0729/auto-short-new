@@ -28,10 +28,19 @@ import type { Scene, GraphicBeat } from "@/app/types/scene";
 
 const ffmpegPath = ffmpegInstaller.path;
 
+export type GenerationStage =
+  | "preparing"
+  | "rendering_scenes"
+  | "merging"
+  | "done";
+
 interface ProgressData {
   complete: boolean;
   error: string | null;
   videoPath: string | null;
+  stage?: GenerationStage;
+  scenesCompleted?: number;
+  totalScenes?: number;
 }
 
 export interface JobControl {
@@ -64,6 +73,19 @@ function finishJob(runId: string, data: ProgressData) {
     progressMap.delete(runId);
     jobControlMap.delete(runId);
   }, PROGRESS_TTL_MS);
+}
+
+// Merges a stage/scene-count update into the job's progress entry instead of
+// replacing it, so the client can show real backend state ("Scene 3/8
+// rendering") instead of the old fabricated "Check N (30s): ..." copy that
+// wasn't actually driven by what the server was doing.
+function updateProgress(runId: string, partial: Partial<ProgressData>) {
+  const current = progressMap.get(runId) || {
+    complete: false,
+    error: null,
+    videoPath: null,
+  };
+  progressMap.set(runId, { ...current, ...partial });
 }
 
 const CANCELLED_ERROR_MESSAGE = "Video generation cancelled.";
@@ -217,6 +239,9 @@ export async function POST(request: Request) {
       complete: false,
       error: null,
       videoPath: null,
+      stage: "preparing",
+      scenesCompleted: 0,
+      totalScenes: scenes.length,
     });
     jobControlMap.set(runId, {
       processes: new Set(),
@@ -274,6 +299,7 @@ async function compileVideoInBackground(
     cancelled: false,
   };
   jobControlMap.set(runId, jobControl);
+  updateProgress(runId, { stage: "preparing", scenesCompleted: 0, totalScenes: scenes.length });
 
   try {
     const projectRoot = process.cwd();
@@ -634,12 +660,21 @@ async function resolveSceneAsset(
           !(err instanceof Error && err.message === CANCELLED_ERROR_MESSAGE) &&
           !jobControl.cancelled,
       });
+
+      scenesCompletedCount++;
+      updateProgress(runId, {
+        stage: "rendering_scenes",
+        scenesCompleted: scenesCompletedCount,
+        totalScenes: adjustedScenes.length,
+      });
     }
 
     // Render scene clips with bounded concurrency instead of strictly serially —
     // scenes are independent (each writes its own clip_<i>.mp4), so a few can
     // run through FFmpeg at once without risking cross-scene interference.
     let nextSceneIndex = 0;
+    let scenesCompletedCount = 0;
+    updateProgress(runId, { stage: "rendering_scenes", scenesCompleted: 0, totalScenes: adjustedScenes.length });
     async function sceneWorker(): Promise<void> {
       while (true) {
         if (jobControl.cancelled) return;
@@ -658,6 +693,8 @@ async function resolveSceneAsset(
     if (jobControl.cancelled) {
       throw new Error(CANCELLED_ERROR_MESSAGE);
     }
+
+    updateProgress(runId, { stage: "merging" });
 
     const mergedVideoPath = path.join(tempDir, "merged_video.mp4");
     const concatTxtPath = path.join(tempDir, "concat.txt");
@@ -701,6 +738,9 @@ async function resolveSceneAsset(
       complete: true,
       error: null,
       videoPath: `/api/video?t=${Date.now()}`,
+      stage: "done",
+      scenesCompleted: adjustedScenes.length,
+      totalScenes: adjustedScenes.length,
     });
 
     const isProduction =

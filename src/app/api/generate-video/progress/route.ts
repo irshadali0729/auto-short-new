@@ -1,7 +1,16 @@
 import { NextResponse } from 'next/server';
 
+interface ProgressData {
+  complete: boolean;
+  error: string | null;
+  videoPath: string | null;
+  stage?: "preparing" | "rendering_scenes" | "merging" | "done";
+  scenesCompleted?: number;
+  totalScenes?: number;
+}
+
 interface CustomGlobal {
-  videoProgress?: Map<string, { complete: boolean; error: string | null; videoPath: string | null }>;
+  videoProgress?: Map<string, ProgressData>;
 }
 
 export async function GET(request: Request) {

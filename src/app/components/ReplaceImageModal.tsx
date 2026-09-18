@@ -17,6 +17,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { getMediaUrl } from '@/app/utils/media-url';
+import { useFocusTrap } from '@/app/utils/useFocusTrap';
 
 export interface ReplaceImageModalProps {
   isOpen: boolean;
@@ -90,6 +91,10 @@ export default function ReplaceImageModal({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const modalContainerRef = useRef<HTMLDivElement>(null);
+
+  // Keep Tab/Shift+Tab cycling inside the dialog while it's open. Initial
+  // focus is handled separately below (searchInputRef).
+  useFocusTrap(isOpen, modalContainerRef, searchInputRef);
 
   // Pre-fill search with scene keyword or reset when modal opens
   useEffect(() => {
