@@ -32,6 +32,11 @@ export type MediaSourceKey = "unsplash" | "pixabay" | "pexels" | "local";
 export type MediaTypeFilter = "only_videos" | "only_images" | "both";
 export type TextOverlayMode = "none" | "captions" | "graphics";
 export type CaptionPosition = "top" | "middle" | "bottom";
+export type CaptionThemeOption =
+  | "pill"
+  | "bold_outline"
+  | "gradient_highlight"
+  | "pill_translucent";
 export type VideoAspectRatio = "9:16" | "16:9";
 export type EmojiStyleOption = "fluent" | "apple" | "twitter";
 export type DuaCardThemeOption = "cream" | "light_grey" | "white";
@@ -54,6 +59,7 @@ export interface MediaSettings {
   mediaType: MediaTypeFilter;
   textOverlayMode: TextOverlayMode;
   captionPosition?: CaptionPosition;
+  captionTheme?: CaptionThemeOption;
   enableGraphicMotion?: boolean;
   graphicMotionTheme?: GraphicMotionThemeOption;
   zoomSpeed: number;
@@ -80,6 +86,7 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   mediaType: "only_images",
   textOverlayMode: "captions",
   captionPosition: "top",
+  captionTheme: "pill",
   enableGraphicMotion: false,
   graphicMotionTheme: "auto",
   zoomSpeed: 2,
@@ -137,6 +144,10 @@ export default function SettingsModal({
       settings?.captionPosition ||
         DEFAULT_MEDIA_SETTINGS.captionPosition ||
         "bottom",
+    );
+  const [draftCaptionTheme, setDraftCaptionTheme] =
+    useState<CaptionThemeOption>(
+      settings?.captionTheme || DEFAULT_MEDIA_SETTINGS.captionTheme || "pill",
     );
   const [draftGraphicMotionTheme, setDraftGraphicMotionTheme] =
     useState<GraphicMotionThemeOption>(
@@ -221,6 +232,9 @@ export default function SettingsModal({
         settings?.captionPosition ||
           DEFAULT_MEDIA_SETTINGS.captionPosition ||
           "bottom",
+      );
+      setDraftCaptionTheme(
+        settings?.captionTheme || DEFAULT_MEDIA_SETTINGS.captionTheme || "pill",
       );
       setDraftGraphicMotionTheme(
         settings?.graphicMotionTheme ||
@@ -373,6 +387,7 @@ export default function SettingsModal({
         draftTextOverlayMode || DEFAULT_MEDIA_SETTINGS.textOverlayMode,
       captionPosition:
         draftCaptionPosition || DEFAULT_MEDIA_SETTINGS.captionPosition || "bottom",
+      captionTheme: draftCaptionTheme || DEFAULT_MEDIA_SETTINGS.captionTheme || "pill",
       enableGraphicMotion: draftTextOverlayMode === "graphics",
       graphicMotionTheme: draftGraphicMotionTheme || "auto",
       zoomSpeed:
@@ -402,6 +417,7 @@ export default function SettingsModal({
     setDraftMediaType(DEFAULT_MEDIA_SETTINGS.mediaType);
     setDraftTextOverlayMode(DEFAULT_MEDIA_SETTINGS.textOverlayMode);
     setDraftCaptionPosition(DEFAULT_MEDIA_SETTINGS.captionPosition || "bottom");
+    setDraftCaptionTheme(DEFAULT_MEDIA_SETTINGS.captionTheme || "pill");
     setDraftGraphicMotionTheme(DEFAULT_MEDIA_SETTINGS.graphicMotionTheme || "auto");
     setDraftZoomSpeed(DEFAULT_MEDIA_SETTINGS.zoomSpeed);
     setDraftTransitionDuration(DEFAULT_MEDIA_SETTINGS.transitionDuration);
@@ -453,6 +469,47 @@ export default function SettingsModal({
     },
   ];
 
+  const captionThemeOptions: {
+    id: CaptionThemeOption;
+    label: string;
+    tagline: string;
+    badge: string;
+    desc: string;
+    preview: string;
+  }[] = [
+    {
+      id: "pill",
+      label: "Dark Pill Badge",
+      tagline: "Rounded translucent black badge",
+      badge: "Default",
+      desc: "Classic subtitle badge — a soft black pill behind bold white text for maximum contrast on any background.",
+      preview: "⬛",
+    },
+    {
+      id: "bold_outline",
+      label: "Bold Outline",
+      tagline: "No background, thick stroked text",
+      badge: "Meme Style",
+      desc: "Bare Impact-style caption with a heavy black outline and no background badge — punchy and minimal.",
+      preview: "🔤",
+    },
+    {
+      id: "gradient_highlight",
+      label: "Gradient Highlight",
+      tagline: "Brand-colored gradient bar",
+      badge: "Vibrant",
+      desc: "A rausch-to-gold gradient bar behind the text for a colorful, high-energy look.",
+      preview: "🌈",
+    },
+    {
+      id: "pill_translucent",
+      label: "Dark Pill (60% Opacity)",
+      tagline: "Lighter, more see-through badge",
+      badge: "Subtle",
+      desc: "Same dark pill badge as the default, but at 60% opacity so more of the footage shows through behind the text.",
+      preview: "◻️",
+    },
+  ];
 
   const emojiStyleOptions = [
     {
@@ -1512,6 +1569,57 @@ export default function SettingsModal({
                             {opt.label}
                           </span>
                           <span className="text-[10px] text-muted block mt-0.5 leading-tight">
+                            {opt.desc}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Caption Visual Theme Selection */}
+              <div className="pt-3 border-t border-hairline-soft mt-3">
+                <span className="text-xs font-bold text-ink block mb-1">
+                  Caption Visual Theme
+                </span>
+                <p className="text-[11px] text-muted mb-2.5">
+                  Choose how the subtitle text itself is styled — background badge, bare outlined text, or a colored gradient bar.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {captionThemeOptions.map((opt) => {
+                    const isSelected = draftCaptionTheme === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setDraftCaptionTheme(opt.id)}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                          isSelected
+                            ? "bg-[#fff0f2] border-rausch shadow-sm"
+                            : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-2">
+                          <span className="text-xl">{opt.preview}</span>
+                          <span
+                            className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                              isSelected
+                                ? "bg-rausch text-white"
+                                : "bg-surface-soft text-muted"
+                            }`}
+                          >
+                            {opt.badge}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-ink block leading-tight">
+                            {opt.label}
+                          </span>
+                          <span className="text-[10px] text-muted block mt-0.5 leading-tight">
+                            {opt.tagline}
+                          </span>
+                          <span className="text-[10px] text-muted block mt-1 leading-tight">
                             {opt.desc}
                           </span>
                         </div>

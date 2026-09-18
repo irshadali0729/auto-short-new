@@ -335,7 +335,7 @@ export default function SceneLivePreviewPlayer({
                 loop
                 muted
                 playsInline
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover object-[50%_25%]"
               />
               <span className="absolute bottom-1.5 right-2 px-1.5 py-0.5 rounded text-[8px] font-bold bg-black/70 text-white backdrop-blur-xs border border-white/10">
                 🎙️ Avatar Video
@@ -394,35 +394,47 @@ export default function SceneLivePreviewPlayer({
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-black/40 via-transparent to-black/60" />
 
         {/* --- LIVE OVERLAY LAYER 1: SPOKEN CAPTIONS --- */}
-        {mediaSettings.textOverlayMode === 'captions' && (
-          <div
-            className={`absolute inset-x-3 z-20 flex flex-col items-center justify-center transition-all duration-300 pointer-events-none ${
-              captionPos === 'top'
-                ? 'top-12'
-                : captionPos === 'middle'
-                  ? 'top-1/2 -translate-y-1/2'
-                  : 'bottom-10'
-            }`}
-          >
-            {activeCaptionText ? (
-              <div className="max-w-[90%] px-3 py-1.5 rounded-xl bg-black/80 backdrop-blur-md border border-white/20 text-center shadow-2xl animate-fadeIn">
-                <div className="flex items-center justify-center gap-1.5 mb-0.5">
-                  <span className="text-base leading-none">{activeScene.emoji || '✨'}</span>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-rausch">Spoken</span>
+        {mediaSettings.textOverlayMode === 'captions' && (() => {
+          const captionTheme = mediaSettings.captionTheme || 'pill';
+          const badgeClassName =
+            captionTheme === 'bold_outline'
+              ? 'max-w-[90%] px-1 py-1 text-center'
+              : captionTheme === 'gradient_highlight'
+                ? 'max-w-[90%] px-3 py-1.5 rounded-xl bg-gradient-to-br from-rausch to-amber-500 border border-white/30 text-center shadow-2xl'
+                : captionTheme === 'pill_translucent'
+                  ? 'max-w-[90%] px-3 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-center shadow-2xl'
+                  : 'max-w-[90%] px-3 py-1.5 rounded-xl bg-black/80 backdrop-blur-md border border-white/20 text-center shadow-2xl';
+          const textClassName =
+            captionTheme === 'bold_outline'
+              ? 'text-sm sm:text-base font-extrabold text-white leading-tight [text-shadow:_-2px_-2px_0_#000,_2px_-2px_0_#000,_-2px_2px_0_#000,_2px_2px_0_#000]'
+              : 'text-xs sm:text-sm font-extrabold text-white leading-tight drop-shadow-md';
+
+          return (
+            <div
+              className={`absolute inset-x-3 z-20 flex flex-col items-center justify-center transition-all duration-300 pointer-events-none ${
+                captionPos === 'top'
+                  ? 'top-12'
+                  : captionPos === 'middle'
+                    ? 'top-1/2 -translate-y-1/2'
+                    : 'bottom-10'
+              }`}
+            >
+              {activeCaptionText ? (
+                <div className={`${badgeClassName} animate-fadeIn`}>
+                  <div className="flex items-center justify-center gap-1.5 mb-0.5">
+                    <span className="text-base leading-none">{activeScene.emoji || '✨'}</span>
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-rausch">Spoken</span>
+                  </div>
+                  <p className={textClassName}>{activeCaptionText}</p>
                 </div>
-                <p className="text-xs sm:text-sm font-extrabold text-white leading-tight drop-shadow-md">
-                  {activeCaptionText}
-                </p>
-              </div>
-            ) : activeScene.captions && activeScene.captions[0] ? (
-              <div className="max-w-[90%] px-3 py-1.5 rounded-xl bg-black/80 backdrop-blur-md border border-white/20 text-center shadow-2xl">
-                <p className="text-xs sm:text-sm font-extrabold text-white leading-tight drop-shadow-md">
-                  {activeScene.captions[0].text}
-                </p>
-              </div>
-            ) : null}
-          </div>
-        )}
+              ) : activeScene.captions && activeScene.captions[0] ? (
+                <div className={badgeClassName}>
+                  <p className={textClassName}>{activeScene.captions[0].text}</p>
+                </div>
+              ) : null}
+            </div>
+          );
+        })()}
 
         {/* --- LIVE OVERLAY LAYER 2: KINETIC GRAPHIC MOTION --- */}
         {mediaSettings.textOverlayMode === 'graphics' && (activeGraphic || activeScene.graphics?.[0]) && (
@@ -653,7 +665,7 @@ export default function SceneLivePreviewPlayer({
             ) : (
               <>
                 <Video className="w-4 h-4" />
-                <span>Compile & Generate Video ({totalDuration.toFixed(0)}s)</span>
+                <span>Generate Video ({totalDuration.toFixed(0)}s)</span>
               </>
             )}
           </button>

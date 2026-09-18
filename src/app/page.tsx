@@ -408,6 +408,7 @@ export default function Home() {
           transitionDuration: mediaSettings.transitionDuration ?? DEFAULT_MEDIA_SETTINGS.transitionDuration,
           textOverlayMode: mediaSettings.textOverlayMode || (mediaSettings.enableGraphicMotion ? 'graphics' : 'captions'),
           captionPosition: mediaSettings.captionPosition || DEFAULT_MEDIA_SETTINGS.captionPosition,
+          captionTheme: mediaSettings.captionTheme || DEFAULT_MEDIA_SETTINGS.captionTheme,
           enableGraphicMotion: mediaSettings.textOverlayMode === 'graphics',
           graphicMotionTheme: mediaSettings.graphicMotionTheme || 'auto',
           enableCaptions: mediaSettings.textOverlayMode === 'captions',
@@ -609,7 +610,7 @@ export default function Home() {
                   : `Captions (${mediaSettings?.captionPosition || 'bottom'})`}
             </span>
             <span className="text-hairline">•</span>
-            <span className="font-medium text-ink">Host:</span>
+            <span className="font-medium text-ink">Avatar:</span>
             <span className={`font-bold ${mediaSettings.enableAvatarHost !== false ? 'text-emerald-700' : 'text-muted'}`}>
               {mediaSettings.enableAvatarHost !== false ? 'Active' : 'Off'}
             </span>
@@ -866,10 +867,10 @@ export default function Home() {
                                   loop
                                   muted
                                   playsInline
-                                  className="w-full h-full object-cover"
+                                  className="w-full h-full object-cover object-[50%_25%]"
                                 />
                                 <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-bold bg-black/60 text-white backdrop-blur-xs">
-                                  Host Top
+                                  Avatar Top
                                 </span>
                               </div>
                               <div className="h-1/2 w-full relative overflow-hidden bg-black/40">

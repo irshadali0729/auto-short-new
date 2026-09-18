@@ -40,12 +40,18 @@ function wrapText(text: string, maxCharsPerLine: number = 34): string[] {
 
 export type CaptionPosition = "top" | "middle" | "bottom";
 
+// "pill" is the original dark rounded-badge look. "bold_outline" drops the
+// background entirely for a bare Impact-style stroked caption. "gradient_highlight"
+// swaps the pill's flat black fill for a brand-colored gradient bar.
+export type CaptionTheme = "pill" | "bold_outline" | "gradient_highlight" | "pill_translucent";
+
 export function generateCaptionSvg(
   captionText: string,
   targetWidth: number = 1080,
   targetHeight: number = 1920,
   emojiDataUri?: string | null,
   captionPosition: CaptionPosition = "bottom",
+  captionTheme: CaptionTheme = "pill",
 ): string {
   const isLandscape = targetWidth > targetHeight;
   const maxChars = isLandscape ? 52 : 34;
@@ -86,6 +92,58 @@ export function generateCaptionSvg(
     })
     .join("\n");
 
+  // "bold_outline" has no background badge — the text stroke alone carries
+  // readability, so it needs to be noticeably thicker than the pill theme's.
+  const backgroundMarkup =
+    captionTheme === "bold_outline"
+      ? ""
+      : captionTheme === "gradient_highlight"
+        ? `<rect
+      x="${pillX}"
+      y="${pillY}"
+      width="${pillWidth}"
+      height="${pillHeight}"
+      rx="20"
+      ry="20"
+      fill="url(#captionGradient)"
+      fill-opacity="0.94"
+      stroke="#FFFFFF"
+      stroke-width="1.5"
+      stroke-opacity="0.35"
+      filter="url(#pillShadow)"
+    />`
+        : captionTheme === "pill_translucent"
+          ? `<rect
+      x="${pillX}"
+      y="${pillY}"
+      width="${pillWidth}"
+      height="${pillHeight}"
+      rx="20"
+      ry="20"
+      fill="#000000"
+      fill-opacity="0.6"
+      stroke="#FFFFFF"
+      stroke-width="1.5"
+      stroke-opacity="0.18"
+      filter="url(#pillShadow)"
+    />`
+          : `<rect
+      x="${pillX}"
+      y="${pillY}"
+      width="${pillWidth}"
+      height="${pillHeight}"
+      rx="20"
+      ry="20"
+      fill="#000000"
+      fill-opacity="0.65"
+      stroke="#FFFFFF"
+      stroke-width="1.5"
+      stroke-opacity="0.18"
+      filter="url(#pillShadow)"
+    />`;
+
+  const textStrokeWidth = captionTheme === "bold_outline" ? 10 : 6;
+
   return `
   <svg width="${targetWidth}" height="${targetHeight}" viewBox="0 0 ${targetWidth} ${targetHeight}" xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -98,23 +156,14 @@ export function generateCaptionSvg(
       <filter id="emojiShadow" x="-30%" y="-30%" width="160%" height="160%">
         <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#000000" flood-opacity="0.85" />
       </filter>
+      <linearGradient id="captionGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#FF385C" />
+        <stop offset="100%" stop-color="#FFB400" />
+      </linearGradient>
     </defs>
 
-    <!-- Translucent Dark Pill Badge for Maximum Readability -->
-    <rect 
-      x="${pillX}" 
-      y="${pillY}" 
-      width="${pillWidth}" 
-      height="${pillHeight}" 
-      rx="20" 
-      ry="20" 
-      fill="#000000" 
-      fill-opacity="0.65" 
-      stroke="#FFFFFF" 
-      stroke-width="1.5" 
-      stroke-opacity="0.18"
-      filter="url(#pillShadow)" 
-    />
+    <!-- Theme-Specific Background Badge (skipped entirely for bold_outline) -->
+    ${backgroundMarkup}
 
     <!-- High-Contrast Subtitle Text -->
     <text
@@ -124,7 +173,7 @@ export function generateCaptionSvg(
       text-anchor="middle"
       fill="#FFFFFF"
       stroke="#000000"
-      stroke-width="6"
+      stroke-width="${textStrokeWidth}"
       stroke-linejoin="round"
       paint-order="stroke fill"
       filter="url(#captionShadow)"
@@ -150,6 +199,7 @@ export async function renderCaptionOverlayPng(
   emoji?: string,
   emojiStyle: EmojiStyle = "fluent",
   captionPosition: CaptionPosition = "bottom",
+  captionTheme: CaptionTheme = "pill",
 ): Promise<string> {
   let emojiDataUri: string | null = null;
   if (emoji) {
@@ -166,6 +216,7 @@ export async function renderCaptionOverlayPng(
     targetHeight,
     emojiDataUri,
     captionPosition,
+    captionTheme,
   );
 
   const dir = path.dirname(outputPath);

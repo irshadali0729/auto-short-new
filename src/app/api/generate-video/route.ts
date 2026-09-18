@@ -7,6 +7,7 @@ import { cleanupAssets } from "@/app/utils/cleanup";
 import { renderGraphicOverlayPng } from "@/app/utils/graphics-renderer";
 import {
   CaptionPosition,
+  CaptionTheme,
   renderCaptionOverlayPng,
 } from "@/app/utils/caption-renderer";
 import { DuaCardTheme, renderDuaOverlayPng } from "@/app/utils/dua-renderer";
@@ -209,6 +210,7 @@ export async function POST(request: Request) {
       transitionDuration,
       textOverlayMode,
       captionPosition,
+      captionTheme,
       enableGraphicMotion,
       enableCaptions,
       aspectRatio,
@@ -241,6 +243,12 @@ export async function POST(request: Request) {
       captionPosition === "top" || captionPosition === "middle" || captionPosition === "bottom"
         ? captionPosition
         : "bottom";
+    const resolvedCaptionTheme: CaptionTheme =
+      captionTheme === "bold_outline" ||
+      captionTheme === "gradient_highlight" ||
+      captionTheme === "pill_translucent"
+        ? captionTheme
+        : "pill";
 
     // Mutually exclusive text overlay mode
     const resolvedMode: "none" | "captions" | "graphics" =
@@ -279,6 +287,7 @@ export async function POST(request: Request) {
       duaCardTheme || "cream",
       resolvedCaptionPosition,
       graphicMotionTheme || "auto",
+      resolvedCaptionTheme,
     ).catch((err) => {
       console.error("Background compilation crash:", err);
       finishJob(runId, {
@@ -310,6 +319,7 @@ async function compileVideoInBackground(
   duaCardTheme: DuaCardTheme = "cream",
   captionPosition: CaptionPosition = "bottom",
   graphicMotionTheme: GraphicMotionThemeOption = "auto",
+  captionTheme: CaptionTheme = "pill",
 ) {
   let tempDir = "";
   const jobControl: JobControl = jobControlMap.get(runId) || {
@@ -456,6 +466,7 @@ async function resolveSceneAsset(
               sliceEmoji,
               emojiStyle,
               captionPosition,
+              captionTheme,
             );
             if (fs.existsSync(overlayPath)) {
               captionPngList.push({
@@ -548,8 +559,11 @@ async function resolveSceneAsset(
               `[b_still]zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':d=1:s=${targetWidth}x${halfHeight}:fps=30[bottom];`;
           }
 
+          // Bias the crop window toward the top of the source frame (instead of
+          // dead-centering it) so the avatar's head isn't clipped when a tall
+          // 9:16 clip gets squeezed into this short half-height split panel.
           filterGraph =
-            `[0:v]scale=${targetWidth}:${halfHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${halfHeight},setpts=PTS-STARTPTS[top];` +
+            `[0:v]scale=${targetWidth}:${halfHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${halfHeight}:(in_w-out_w)/2:(in_h-out_h)*0.25,setpts=PTS-STARTPTS[top];` +
             stockChain +
             `[top][bottom]vstack=inputs=2[split_raw];` +
             `[split_raw]drawbox=x=0:y=${dividerY}:w=${targetWidth}:h=4:color=white@0.35:t=fill[zoomed];` +
