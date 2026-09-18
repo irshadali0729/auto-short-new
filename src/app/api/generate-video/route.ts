@@ -18,7 +18,8 @@ import {
   CLEANUP_DELAY_MS,
   PROGRESS_TTL_MS,
   SCENE_RENDER_CONCURRENCY,
-  FFMPEG_THREADS_PER_SCENE,
+  FFMPEG_PRESET,
+  getFfmpegThreadsPerScene,
   OVERLAY_FONT_PATHS,
   FFMPEG_MAX_ATTEMPTS,
   FFMPEG_RETRY_BASE_DELAY_MS,
@@ -618,11 +619,11 @@ async function resolveSceneAsset(
         "-c:v",
         "libx264",
         "-preset",
-        "superfast",
+        FFMPEG_PRESET,
         "-pix_fmt",
         "yuv420p",
         "-threads",
-        FFMPEG_THREADS_PER_SCENE,
+        getFfmpegThreadsPerScene(),
         clipOutputPath,
       );
 

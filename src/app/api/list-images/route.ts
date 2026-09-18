@@ -3,7 +3,7 @@ import { getCachedLibrary } from '@/app/utils/library-cache';
 
 export async function GET() {
   try {
-    const cachedItems = getCachedLibrary();
+    const cachedItems = await getCachedLibrary();
     const availableImages = cachedItems.map((item) => item.relativePath);
 
     return NextResponse.json({ images: availableImages });

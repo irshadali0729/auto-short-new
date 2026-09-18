@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { getHostVideos, pickRandomHostVideo } from "@/app/utils/host-library";
-import { getCachedLibrary, invalidateLibraryCache } from "@/app/utils/library-cache";
+import { getCachedLibrary, addLibraryCacheItem } from "@/app/utils/library-cache";
 import { withRetry } from "@/app/utils/retry";
 import type { GraphicBeat, CaptionSlice, DuaInfo, Scene } from "@/app/types/scene";
 
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
     const saveOnlineMediaToDisk = mediaSettings.saveOnlineMediaToDisk !== false;
 
     // Use fast In-Memory Cache (0ms) indexing all categorized subfolders
-    const cachedItems = getCachedLibrary();
+    const cachedItems = await getCachedLibrary();
     const availableAssets = cachedItems.map((item) => item.relativePath);
 
     const mediaFilter = mediaSettings.mediaType || "both";
@@ -953,6 +953,20 @@ function getFallbackAsset(
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+// All downloaded stock assets land directly at the image-library root (no
+// subfolder), so registering the new file in the warm cache is a straight
+// append instead of a full re-scan (see addLibraryCacheItem).
+function registerDownloadedAsset(filename: string, isVideo: boolean): void {
+  addLibraryCacheItem({
+    filename,
+    relativePath: filename,
+    category: "General",
+    isVideo,
+    ext: path.extname(filename).toLowerCase(),
+    sizeBytes: 0,
+  });
+}
+
 async function downloadMedia(url: string, destPath: string): Promise<void> {
   const res = await fetchWithRetry(url);
   if (!res.ok) {
@@ -1052,7 +1066,7 @@ async function getPexelsVideo(
         fs.mkdirSync(libraryPath, { recursive: true });
       }
       await downloadMedia(bestFile.link, destPath);
-      invalidateLibraryCache();
+      registerDownloadedAsset(filename, true);
     }
 
     return filename;
@@ -1151,7 +1165,7 @@ async function getPexelsPhoto(
         fs.mkdirSync(libraryPath, { recursive: true });
       }
       await downloadMedia(imageUrl, destPath);
-      invalidateLibraryCache();
+      registerDownloadedAsset(filename, false);
     }
 
     return filename;
@@ -1247,7 +1261,7 @@ async function getUnsplashPhoto(
         fs.mkdirSync(libraryPath, { recursive: true });
       }
       await downloadMedia(imageUrl, destPath);
-      invalidateLibraryCache();
+      registerDownloadedAsset(filename, false);
     }
 
     return filename;
@@ -1329,7 +1343,7 @@ async function getPixabayVideo(
         fs.mkdirSync(libraryPath, { recursive: true });
       }
       await downloadMedia(videoUrl, destPath);
-      invalidateLibraryCache();
+      registerDownloadedAsset(filename, true);
     }
 
     return filename;
@@ -1396,7 +1410,7 @@ async function getPixabayPhoto(
         fs.mkdirSync(libraryPath, { recursive: true });
       }
       await downloadMedia(imageUrl, destPath);
-      invalidateLibraryCache();
+      registerDownloadedAsset(filename, false);
     }
 
     return filename;

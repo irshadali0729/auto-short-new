@@ -2,6 +2,8 @@
 // the video generation pipeline, so they can be tuned without hunting through
 // FFmpeg filter-graph strings.
 
+import os from "os";
+
 export const ZOOM_STEP_BASE = 0.0006;
 export const ZOOM_CAP = 1.15;
 
@@ -15,7 +17,21 @@ export const PROGRESS_TTL_MS = 15 * 60 * 1000;
 // How many scene clips are allowed to render through FFmpeg at the same time.
 export const SCENE_RENDER_CONCURRENCY = 2;
 
-export const FFMPEG_THREADS_PER_SCENE = "2";
+// FFmpeg's x264 encoder preset controls the speed/quality tradeoff. Was
+// hardcoded to "superfast" everywhere; now overridable per-deployment via
+// env var without touching the filter-graph code (e.g. FFMPEG_PRESET=medium
+// on a beefier render box for better quality at some cost to speed).
+export const FFMPEG_PRESET = process.env.FFMPEG_PRESET || "superfast";
+
+// Previously a flat "2" regardless of the host machine. Scene clips render
+// with SCENE_RENDER_CONCURRENCY FFmpeg processes in parallel, so this divides
+// the machine's cores across them instead of leaving most cores idle on a
+// beefy box (or over-subscribing a small one). Always at least 1.
+export function getFfmpegThreadsPerScene(): string {
+  const cpuCount = os.cpus()?.length || 4;
+  const threads = Math.max(1, Math.floor(cpuCount / SCENE_RENDER_CONCURRENCY));
+  return String(threads);
+}
 
 // Cross-platform search order for a bold sans-serif font usable by FFmpeg's
 // drawtext filter. Previously only Windows paths were listed, so overlay text

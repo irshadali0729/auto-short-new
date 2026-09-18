@@ -16,19 +16,29 @@ const CACHE_TTL_MS = 60 * 1000; // 60 seconds TTL
 let cachedLibraryItems: CachedMediaItem[] | null = null;
 let lastCacheTime = 0;
 
-function scanDirectoryRecursively(dir: string, baseDir: string): CachedMediaItem[] {
+// Scans one directory's entries and recurses into subdirectories in parallel.
+// Uses the async fs API so a large library scan doesn't block the event loop
+// the way a chain of synchronous fs calls would.
+async function scanDirectoryRecursively(dir: string, baseDir: string): Promise<CachedMediaItem[]> {
   let items: CachedMediaItem[] = [];
   try {
-    if (!fs.existsSync(dir)) return items;
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const exists = await fs.promises
+      .access(dir)
+      .then(() => true)
+      .catch(() => false);
+    if (!exists) return items;
+
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+
+    const subdirScans: Promise<CachedMediaItem[]>[] = [];
 
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
-      
+
       if (entry.isDirectory()) {
         // Skip hidden folders, temp directories, or node_modules
         if (!entry.name.startsWith('.') && entry.name !== 'temp' && entry.name !== 'node_modules') {
-          items = items.concat(scanDirectoryRecursively(fullPath, baseDir));
+          subdirScans.push(scanDirectoryRecursively(fullPath, baseDir));
         }
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name).toLowerCase();
@@ -37,14 +47,6 @@ function scanDirectoryRecursively(dir: string, baseDir: string): CachedMediaItem
           const relDir = path.dirname(relPath);
           const category = relDir === '.' || relDir === '' ? 'General' : relDir.split('/')[0];
           const isVideo = /\.(mp4|webm|mov)$/i.test(ext);
-          
-          let sizeBytes = 0;
-          try {
-            const stats = fs.statSync(fullPath);
-            sizeBytes = stats.size;
-          } catch {
-            // Ignore stat errors
-          }
 
           items.push({
             filename: entry.name,
@@ -52,10 +54,19 @@ function scanDirectoryRecursively(dir: string, baseDir: string): CachedMediaItem
             category,
             isVideo,
             ext,
-            sizeBytes,
+            // File size is not needed by any current consumer (list-images,
+            // match-images) — computing it here used to mean one blocking
+            // fs.statSync() per file on every cold-cache scan. It's now left
+            // at 0 and only resolved on demand via getAssetSizeBytes().
+            sizeBytes: 0,
           });
         }
       }
+    }
+
+    const subdirResults = await Promise.all(subdirScans);
+    for (const result of subdirResults) {
+      items = items.concat(result);
     }
   } catch (err) {
     console.error(`[library-cache] Error scanning directory ${dir}:`, err);
@@ -66,7 +77,7 @@ function scanDirectoryRecursively(dir: string, baseDir: string): CachedMediaItem
 /**
  * Returns the cached list of all media items in image-library (0ms in-memory read when warm).
  */
-export function getCachedLibrary(forceRefresh: boolean = false): CachedMediaItem[] {
+export async function getCachedLibrary(forceRefresh: boolean = false): Promise<CachedMediaItem[]> {
   const now = Date.now();
 
   if (!forceRefresh && cachedLibraryItems && (now - lastCacheTime < CACHE_TTL_MS)) {
@@ -84,7 +95,7 @@ export function getCachedLibrary(forceRefresh: boolean = false): CachedMediaItem
     }
   }
 
-  const scanned = scanDirectoryRecursively(libraryPath, libraryPath);
+  const scanned = await scanDirectoryRecursively(libraryPath, libraryPath);
   cachedLibraryItems = scanned.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
   lastCacheTime = now;
 
@@ -100,16 +111,42 @@ export function invalidateLibraryCache(): void {
 }
 
 /**
+ * Appends a single freshly-downloaded asset directly into the warm cache
+ * instead of forcing a full re-scan of the whole library. `match-images`
+ * calls this after every stock-media download, so without it a video with
+ * many scenes would trigger a full recursive re-scan per scene.
+ */
+export function addLibraryCacheItem(item: CachedMediaItem): void {
+  if (!cachedLibraryItems) return; // cache is cold; next read will scan fresh anyway
+  if (cachedLibraryItems.some((i) => i.relativePath === item.relativePath)) return;
+  cachedLibraryItems.push(item);
+  cachedLibraryItems.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+}
+
+/**
+ * Resolves a single asset's on-disk size on demand, for the rare caller that
+ * actually needs it (the bulk scan intentionally skips this).
+ */
+export function getAssetSizeBytes(relativePathOrFilename: string): number {
+  try {
+    const fullPath = path.join(process.cwd(), 'image-library', relativePathOrFilename);
+    return fs.statSync(fullPath).size;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Fast in-memory search across category folders and filenames.
  */
-export function searchCachedLibrary(
+export async function searchCachedLibrary(
   query: string,
   options?: {
     category?: string;
     mediaType?: 'only_videos' | 'only_images' | 'both';
   }
-): CachedMediaItem[] {
-  const library = getCachedLibrary();
+): Promise<CachedMediaItem[]> {
+  const library = await getCachedLibrary();
   const lowerQuery = query.toLowerCase().trim();
   const filterType = options?.mediaType || 'both';
   const targetCategory = options?.category ? options.category.toLowerCase().trim() : null;
