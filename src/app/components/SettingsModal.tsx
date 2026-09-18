@@ -20,9 +20,9 @@ import {
   Smile,
   BookOpen,
   UserCheck,
-  Video,
 } from "lucide-react";
 import { useFocusTrap } from "@/app/utils/useFocusTrap";
+import SettingsAccordionSection from "@/app/components/settings/SettingsAccordionSection";
 
 export type MediaSourceKey = "unsplash" | "pixabay" | "pexels" | "local";
 export type MediaTypeFilter = "only_videos" | "only_images" | "both";
@@ -94,6 +94,10 @@ function resolveOverlayMode(s: MediaSettings): TextOverlayMode {
   return "captions";
 }
 
+// Sections that are expanded by default when the modal opens — the settings
+// users tend to touch most often.
+const DEFAULT_OPEN_SECTIONS = ["sources", "aspectRatio", "overlayMode"];
+
 export default function SettingsModal({
   isOpen,
   onClose,
@@ -158,8 +162,15 @@ export default function SettingsModal({
       "women_host",
   );
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [openSections, setOpenSections] = useState<Set<string>>(
+    new Set(DEFAULT_OPEN_SECTIONS),
+  );
+  const [activeNavId, setActiveNavId] = useState<string>("sources");
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const scrollTargetRef = useRef<string | null>(null);
 
   // Keep Tab/Shift+Tab cycling inside the dialog while it's open. Initial
   // focus is handled separately below (closeBtnRef), so pass it through here
@@ -218,6 +229,8 @@ export default function SettingsModal({
           "women_host",
       );
       setValidationError(null);
+      setOpenSections(new Set(DEFAULT_OPEN_SECTIONS));
+      setActiveNavId("sources");
       // Focus management
       setTimeout(() => closeBtnRef.current?.focus(), 50);
     }
@@ -233,6 +246,20 @@ export default function SettingsModal({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
+
+  // Once a targeted section has been expanded, scroll it into view.
+  useEffect(() => {
+    const targetId = scrollTargetRef.current;
+    if (targetId && openSections.has(targetId)) {
+      scrollTargetRef.current = null;
+      requestAnimationFrame(() => {
+        sectionRefs.current[targetId]?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    }
+  }, [openSections]);
 
   if (!isOpen) return null;
 
@@ -256,6 +283,24 @@ export default function SettingsModal({
     }
 
     setDraftSources(nextSources);
+  };
+
+  const toggleSection = (id: string) => {
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const jumpToSection = (id: string) => {
+    setActiveNavId(id);
+    scrollTargetRef.current = id;
+    setOpenSections((prev) => new Set(prev).add(id));
   };
 
   const handleSave = () => {
@@ -314,6 +359,8 @@ export default function SettingsModal({
     setDraftEnableVideoHost(DEFAULT_MEDIA_SETTINGS.enableVideoHost !== false);
     setDraftVideoHostType(DEFAULT_MEDIA_SETTINGS.videoHostType || "women_host");
     setValidationError(null);
+    setOpenSections(new Set(DEFAULT_OPEN_SECTIONS));
+    setActiveNavId("sources");
   };
 
   const captionPositionOptions: {
@@ -504,6 +551,53 @@ export default function SettingsModal({
     },
   ];
 
+  // Metadata driving both the accordion headers and the quick-jump nav
+  // (mobile chip row + desktop rail).
+  const navSections: { id: string; label: string; icon: React.ElementType }[] =
+    [
+      { id: "sources", label: "Sources", icon: Globe },
+      { id: "visualSearch", label: "Visual Search", icon: Sparkles },
+      { id: "aspectRatio", label: "Format", icon: Smartphone },
+      { id: "mediaType", label: "Media Type", icon: Film },
+      { id: "overlayMode", label: "Text", icon: Type },
+      { id: "captions", label: "Captions", icon: Smile },
+      { id: "dua", label: "Dua", icon: BookOpen },
+      { id: "host", label: "Host", icon: UserCheck },
+      { id: "camera", label: "Motion", icon: SlidersHorizontal },
+    ];
+
+  const summaries: Record<string, string> = {
+    sources: `${selectedSourcesCount} source${
+      selectedSourcesCount === 1 ? "" : "s"
+    } selected · ${draftSaveOnlineMediaToDisk ? "Saved to disk" : "Streamed"}`,
+    visualSearch: draftRelatableVisualSearch ? "Active" : "Disabled",
+    aspectRatio:
+      aspectRatioOptions.find((o) => o.id === draftAspectRatio)?.label ||
+      draftAspectRatio,
+    mediaType:
+      mediaTypeOptions.find((o) => o.id === draftMediaType)?.label ||
+      draftMediaType,
+    overlayMode:
+      overlayModeOptions.find((o) => o.id === draftTextOverlayMode)?.label ||
+      draftTextOverlayMode,
+    captions: draftEnableEmojiCaptions
+      ? `${
+          emojiStyleOptions.find((o) => o.id === draftEmojiStyle)?.label
+        } · ${
+          captionPositionOptions.find((o) => o.id === draftCaptionPosition)
+            ?.label
+        }`
+      : "Emojis disabled",
+    dua: draftEnableDuaOverlay
+      ? duaThemeOptions.find((o) => o.id === draftDuaCardTheme)?.label ||
+        "Enabled"
+      : "Disabled",
+    host: draftEnableVideoHost ? "Enabled" : "Disabled",
+    camera: `${draftZoomSpeed.toFixed(1)}x zoom · ${draftTransitionDuration.toFixed(
+      1,
+    )}s fade`,
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
@@ -522,7 +616,7 @@ export default function SettingsModal({
       {/* Modal Dialog Box */}
       <div
         ref={dialogRef}
-        className="relative w-full max-w-2xl max-h-[90vh] rounded-2xl border border-hairline bg-white shadow-airbnb flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-10 my-auto"
+        className="relative w-full max-w-2xl sm:max-w-3xl lg:max-w-4xl max-h-[90vh] rounded-2xl border border-hairline bg-white shadow-airbnb flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-10 my-auto"
       >
         {/* Header */}
         <div className="px-6 py-5 border-b border-hairline-soft flex items-center justify-between gap-4 bg-white shrink-0">
@@ -548,6 +642,29 @@ export default function SettingsModal({
           </button>
         </div>
 
+        {/* Mobile quick-jump chip row */}
+        <div className="sm:hidden flex items-center gap-2 px-4 py-2.5 border-b border-hairline-soft overflow-x-auto no-scrollbar shrink-0">
+          {navSections.map((nav) => {
+            const NavIcon = nav.icon;
+            const isActive = activeNavId === nav.id;
+            return (
+              <button
+                key={nav.id}
+                type="button"
+                onClick={() => jumpToSection(nav.id)}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold whitespace-nowrap transition-colors ${
+                  isActive
+                    ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
+                    : "bg-white text-muted border-hairline hover:bg-surface-soft"
+                }`}
+              >
+                <NavIcon className="w-3.5 h-3.5" />
+                {nav.label}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Validation Warning Alert */}
         {validationError && (
           <div
@@ -559,253 +676,375 @@ export default function SettingsModal({
           </div>
         )}
 
-        {/* Scrollable Form Body */}
-        <div className="p-6 space-y-7 overflow-y-auto flex-1 min-h-[140px]">
-          {/* Section 1: Source Selection (Checkboxes) */}
-          <fieldset className="space-y-3">
-            <div className="flex items-center justify-between">
-              <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
-                <Globe className="w-4 h-4 text-rausch" />
-                Source Selection
-              </legend>
-              <span
-                className={`text-xs font-semibold px-2 py-0.5 rounded-md border ${
-                  isSourceSelectionValid
-                    ? "bg-surface-soft text-ink border-hairline"
-                    : "bg-red-50 text-[#c13515] border-red-200"
-                }`}
-              >
-                {selectedSourcesCount} selected
-              </span>
-            </div>
+        {/* Body: desktop rail + scrollable content */}
+        <div className="flex-1 flex min-h-[140px] overflow-hidden">
+          {/* Desktop left rail */}
+          <div className="hidden sm:flex flex-col w-44 shrink-0 border-r border-hairline-soft bg-surface-soft/40 p-2.5 gap-1 overflow-y-auto">
+            {navSections.map((nav) => {
+              const NavIcon = nav.icon;
+              const isActive = activeNavId === nav.id;
+              return (
+                <button
+                  key={nav.id}
+                  type="button"
+                  onClick={() => jumpToSection(nav.id)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-left transition-colors ${
+                    isActive
+                      ? "bg-[#fff0f2] text-rausch"
+                      : "text-ink hover:bg-surface-soft"
+                  }`}
+                >
+                  <NavIcon className="w-4 h-4 shrink-0" />
+                  <span className="truncate">{nav.label}</span>
+                </button>
+              );
+            })}
+          </div>
 
-            <p className="text-xs text-muted">
-              Select one or more repositories to source video backgrounds and
-              matching imagery.
-            </p>
+          {/* Scrollable Form Body */}
+          <div ref={bodyRef} className="p-6 space-y-3 overflow-y-auto flex-1">
+            {/* Section: Source Selection */}
+            <SettingsAccordionSection
+              id="sources"
+              title="Source Selection"
+              icon={Globe}
+              summary={summaries.sources}
+              isOpen={openSections.has("sources")}
+              onToggle={toggleSection}
+              sectionRef={(el) => (sectionRefs.current.sources = el)}
+            >
+              <div className="flex items-center justify-end -mt-1">
+                <span
+                  className={`text-xs font-semibold px-2 py-0.5 rounded-md border ${
+                    isSourceSelectionValid
+                      ? "bg-surface-soft text-ink border-hairline"
+                      : "bg-red-50 text-[#c13515] border-red-200"
+                  }`}
+                >
+                  {selectedSourcesCount} selected
+                </span>
+              </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              {sourceCards.map((src) => {
-                const isChecked = draftSources[src.key];
-                const IconComponent = src.icon;
-                return (
-                  <label
-                    key={src.key}
-                    htmlFor={`source-${src.key}`}
-                    className={`relative flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
-                      isChecked
-                        ? "bg-[#fff8f9] border-rausch shadow-airbnb"
-                        : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
-                    }`}
-                  >
-                    <div className="pt-0.5">
-                      <input
-                        type="checkbox"
-                        id={`source-${src.key}`}
-                        checked={isChecked}
-                        onChange={() => handleSourceToggle(src.key)}
-                        className="sr-only"
-                        aria-checked={isChecked}
-                      />
+              <p className="text-xs text-muted">
+                Select one or more repositories to source video backgrounds and
+                matching imagery.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                {sourceCards.map((src) => {
+                  const isChecked = draftSources[src.key];
+                  const IconComponent = src.icon;
+                  return (
+                    <label
+                      key={src.key}
+                      htmlFor={`source-${src.key}`}
+                      className={`relative flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                        isChecked
+                          ? "bg-[#fff8f9] border-rausch shadow-airbnb"
+                          : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
+                      }`}
+                    >
+                      <div className="pt-0.5">
+                        <input
+                          type="checkbox"
+                          id={`source-${src.key}`}
+                          checked={isChecked}
+                          onChange={() => handleSourceToggle(src.key)}
+                          className="sr-only"
+                          aria-checked={isChecked}
+                        />
+                        <div
+                          className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
+                            isChecked
+                              ? "bg-rausch border-rausch text-white"
+                              : "border-hairline bg-white"
+                          }`}
+                        >
+                          {isChecked && (
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex-grow min-w-0">
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <span className="text-sm font-bold text-ink flex items-center gap-1.5">
+                            <IconComponent
+                              className={`w-3.5 h-3.5 ${isChecked ? "text-rausch" : "text-muted"}`}
+                            />
+                            {src.label}
+                          </span>
+                          <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-surface-soft text-muted border border-hairline-soft">
+                            {src.badge}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted leading-tight">
+                          {src.tagline}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {/* Storage Option: Save Online Media to Local Disk */}
+              <div className="pt-2">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDraftSaveOnlineMediaToDisk((prev) => !prev)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setDraftSaveOnlineMediaToDisk((prev) => !prev);
+                    }
+                  }}
+                  className={`relative flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                    draftSaveOnlineMediaToDisk
+                      ? "bg-[#fff8f9] border-rausch shadow-airbnb"
+                      : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
+                  }`}
+                >
+                  <div className="pt-0.5 shrink-0">
+                    <div
+                      className={`w-11 h-6 rounded-full transition-colors flex items-center p-0.5 ${
+                        draftSaveOnlineMediaToDisk ? "bg-rausch" : "bg-zinc-300"
+                      }`}
+                    >
                       <div
-                        className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
-                          isChecked
-                            ? "bg-rausch border-rausch text-white"
-                            : "border-hairline bg-white"
+                        className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${
+                          draftSaveOnlineMediaToDisk ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex-grow min-w-0">
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <span className="text-sm font-bold text-ink flex items-center gap-1.5">
+                        <HardDrive className={`w-4 h-4 ${draftSaveOnlineMediaToDisk ? "text-rausch" : "text-muted"}`} />
+                        Save Online Stock Media to Local Library
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                          draftSaveOnlineMediaToDisk
+                            ? "bg-[#fff0f2] text-rausch border border-[#ffd1da]"
+                            : "bg-surface-soft text-muted border border-hairline"
                         }`}
                       >
-                        {isChecked && (
-                          <Check className="w-3.5 h-3.5 stroke-[3]" />
-                        )}
-                      </div>
+                        {draftSaveOnlineMediaToDisk ? "Saved to Disk" : "Direct Stream"}
+                      </span>
                     </div>
+                    <p className="text-xs text-muted leading-relaxed">
+                      {draftSaveOnlineMediaToDisk
+                        ? "Automatically downloads and saves matched Pexels, Pixabay, & Unsplash clips into image-library/ for permanent offline reuse."
+                        : "Streams and compiles videos using direct remote URLs without saving permanent files to your local image-library/ folder."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </SettingsAccordionSection>
 
-                    <div className="flex-grow min-w-0">
-                      <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className="text-sm font-bold text-ink flex items-center gap-1.5">
-                          <IconComponent
-                            className={`w-3.5 h-3.5 ${isChecked ? "text-rausch" : "text-muted"}`}
-                          />
-                          {src.label}
-                        </span>
-                        <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-surface-soft text-muted border border-hairline-soft">
-                          {src.badge}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-muted leading-tight">
-                        {src.tagline}
-                      </p>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-
-            {/* Storage Option: Save Online Media to Local Disk */}
-            <div className="pt-2">
+            {/* Section: Visual Search */}
+            <SettingsAccordionSection
+              id="visualSearch"
+              title="Visual Search"
+              icon={Sparkles}
+              summary={summaries.visualSearch}
+              isOpen={openSections.has("visualSearch")}
+              onToggle={toggleSection}
+              sectionRef={(el) => (sectionRefs.current.visualSearch = el)}
+            >
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => setDraftSaveOnlineMediaToDisk((prev) => !prev)}
+                onClick={() => setDraftRelatableVisualSearch((prev) => !prev)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    setDraftSaveOnlineMediaToDisk((prev) => !prev);
+                    setDraftRelatableVisualSearch((prev) => !prev);
                   }
                 }}
-                className={`relative flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
-                  draftSaveOnlineMediaToDisk
+                className={`relative flex items-center gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                  draftRelatableVisualSearch
                     ? "bg-[#fff8f9] border-rausch shadow-airbnb"
                     : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
                 }`}
               >
-                <div className="pt-0.5 shrink-0">
+                <div className="shrink-0">
                   <div
-                    className={`w-11 h-6 rounded-full transition-colors flex items-center p-0.5 ${
-                      draftSaveOnlineMediaToDisk ? "bg-rausch" : "bg-zinc-300"
+                    className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
+                      draftRelatableVisualSearch
+                        ? "border-rausch bg-rausch text-white"
+                        : "border-hairline bg-white"
                     }`}
                   >
-                    <div
-                      className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${
-                        draftSaveOnlineMediaToDisk ? "translate-x-5" : "translate-x-0"
-                      }`}
-                    />
+                    {draftRelatableVisualSearch && (
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    )}
                   </div>
                 </div>
 
                 <div className="flex-grow min-w-0">
-                  <div className="flex items-center justify-between gap-1 mb-0.5">
-                    <span className="text-sm font-bold text-ink flex items-center gap-1.5">
-                      <HardDrive className={`w-4 h-4 ${draftSaveOnlineMediaToDisk ? "text-rausch" : "text-muted"}`} />
-                      Save Online Stock Media to Local Library
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-bold text-ink flex items-center gap-2">
+                      Visual Search
                     </span>
                     <span
-                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
-                        draftSaveOnlineMediaToDisk
-                          ? "bg-[#fff0f2] text-rausch border border-[#ffd1da]"
-                          : "bg-surface-soft text-muted border border-hairline"
+                      className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
+                        draftRelatableVisualSearch
+                          ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
+                          : "bg-surface-soft text-muted border-hairline-soft"
                       }`}
                     >
-                      {draftSaveOnlineMediaToDisk ? "Saved to Disk" : "Direct Stream"}
+                      {draftRelatableVisualSearch
+                        ? "Active"
+                        : "Disabled"}
                     </span>
                   </div>
-                  <p className="text-xs text-muted leading-relaxed">
-                    {draftSaveOnlineMediaToDisk
-                      ? "Automatically downloads and saves matched Pexels, Pixabay, & Unsplash clips into image-library/ for permanent offline reuse."
-                      : "Streams and compiles videos using direct remote URLs without saving permanent files to your local image-library/ folder."}
-                  </p>
                 </div>
               </div>
-            </div>
-          </fieldset>
+            </SettingsAccordionSection>
 
-
-          {/* Section: Visual Search */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-rausch" />
-              Visual Search
-            </legend>
-
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => setDraftRelatableVisualSearch((prev) => !prev)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setDraftRelatableVisualSearch((prev) => !prev);
-                }
-              }}
-              className={`relative flex items-center gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
-                draftRelatableVisualSearch
-                  ? "bg-[#fff8f9] border-rausch shadow-airbnb"
-                  : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
-              }`}
+            {/* Section: Video Canvas & Aspect Ratio */}
+            <SettingsAccordionSection
+              id="aspectRatio"
+              title="Video Canvas & Aspect Ratio"
+              icon={Smartphone}
+              summary={summaries.aspectRatio}
+              isOpen={openSections.has("aspectRatio")}
+              onToggle={toggleSection}
+              sectionRef={(el) => (sectionRefs.current.aspectRatio = el)}
             >
-              <div className="shrink-0">
-                <div
-                  className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
-                    draftRelatableVisualSearch
-                      ? "border-rausch bg-rausch text-white"
-                      : "border-hairline bg-white"
-                  }`}
-                >
-                  {draftRelatableVisualSearch && (
-                    <Check className="w-3.5 h-3.5 stroke-[3]" />
-                  )}
-                </div>
-              </div>
+              <p className="text-xs text-muted">
+                Choose the target format for video and photo assets. YouTube
+                Shorts require 9:16 vertical full-screen.
+              </p>
 
-              <div className="flex-grow min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-bold text-ink flex items-center gap-2">
-                    Visual Search
-                  </span>
-                  <span
-                    className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
-                      draftRelatableVisualSearch
-                        ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
-                        : "bg-surface-soft text-muted border-hairline-soft"
-                    }`}
-                  >
-                    {draftRelatableVisualSearch
-                      ? "Active"
-                      : "Disabled"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </fieldset>
+              <div
+                className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1"
+                role="radiogroup"
+                aria-label="Video Aspect Ratio"
+              >
+                {aspectRatioOptions.map((opt) => {
+                  const isSelected = draftAspectRatio === opt.id;
+                  const IconComponent = opt.icon;
 
-          {/* Section: Video Canvas & Aspect Ratio */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
-              <Smartphone className="w-4 h-4 text-rausch" />
-              Video Canvas & Aspect Ratio
-            </legend>
-
-            <p className="text-xs text-muted">
-              Choose the target format for video and photo assets. YouTube
-              Shorts require 9:16 vertical full-screen.
-            </p>
-
-            <div
-              className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1"
-              role="radiogroup"
-              aria-label="Video Aspect Ratio"
-            >
-              {aspectRatioOptions.map((opt) => {
-                const isSelected = draftAspectRatio === opt.id;
-                const IconComponent = opt.icon;
-
-                return (
-                  <label
-                    key={opt.id}
-                    htmlFor={`aspect-ratio-${opt.id}`}
-                    className={`relative flex flex-col justify-between p-4 rounded-xl border transition-all cursor-pointer select-none ${
-                      isSelected
-                        ? "bg-[#fff8f9] border-rausch shadow-airbnb"
-                        : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className={`p-2 rounded-lg ${isSelected ? "bg-[#fff0f2] text-rausch" : "bg-surface-soft text-muted"}`}
-                        >
-                          <IconComponent className="w-4 h-4" />
+                  return (
+                    <label
+                      key={opt.id}
+                      htmlFor={`aspect-ratio-${opt.id}`}
+                      className={`relative flex flex-col justify-between p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                        isSelected
+                          ? "bg-[#fff8f9] border-rausch shadow-airbnb"
+                          : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`p-2 rounded-lg ${isSelected ? "bg-[#fff0f2] text-rausch" : "bg-surface-soft text-muted"}`}
+                          >
+                            <IconComponent className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-sm font-bold text-ink block leading-tight">
+                              {opt.id}
+                            </span>
+                            <span className="text-[11px] font-semibold text-muted">
+                              {opt.resolution}
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-sm font-bold text-ink block leading-tight">
-                            {opt.id}
-                          </span>
-                          <span className="text-[11px] font-semibold text-muted">
-                            {opt.resolution}
-                          </span>
+
+                        <div
+                          className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors shrink-0 ${
+                            isSelected
+                              ? "border-rausch bg-rausch"
+                              : "border-hairline bg-white"
+                          }`}
+                        >
+                          {isSelected && (
+                            <div className="w-2 h-2 rounded-full bg-white" />
+                          )}
                         </div>
                       </div>
 
+                      <input
+                        type="radio"
+                        id={`aspect-ratio-${opt.id}`}
+                        name="videoAspectRatio"
+                        value={opt.id}
+                        checked={isSelected}
+                        onChange={() => setDraftAspectRatio(opt.id)}
+                        className="sr-only"
+                      />
+
+                      <div>
+                        <span
+                          className={`inline-block text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border mb-1.5 ${
+                            isSelected
+                              ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
+                              : "bg-surface-soft text-muted border-hairline-soft"
+                          }`}
+                        >
+                          {opt.badge}
+                        </span>
+                        <p className="text-xs text-muted leading-tight">
+                          {opt.description}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </SettingsAccordionSection>
+
+            {/* Section: Media Type Filter */}
+            <SettingsAccordionSection
+              id="mediaType"
+              title="Media Type Filter"
+              icon={Film}
+              summary={summaries.mediaType}
+              isOpen={openSections.has("mediaType")}
+              onToggle={toggleSection}
+              sectionRef={(el) => (sectionRefs.current.mediaType = el)}
+            >
+              <p className="text-xs text-muted">
+                Filter the assets requested by the auto-matcher for each generated
+                scene.
+              </p>
+
+              <div
+                className="flex flex-col gap-2.5 pt-1"
+                role="radiogroup"
+                aria-label="Media Type Filter"
+              >
+                {mediaTypeOptions.map((opt) => {
+                  const isSelected = draftMediaType === opt.id;
+                  const IconComponent = opt.icon;
+
+                  return (
+                    <label
+                      key={opt.id}
+                      htmlFor={`media-type-${opt.id}`}
+                      className={`relative flex items-center gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                        isSelected
+                          ? "bg-[#fff8f9] border-rausch shadow-airbnb"
+                          : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        id={`media-type-${opt.id}`}
+                        name="mediaTypeFilter"
+                        value={opt.id}
+                        checked={isSelected}
+                        onChange={() => setDraftMediaType(opt.id)}
+                        className="sr-only"
+                      />
+
+                      {/* Styled Radio Circle */}
                       <div
                         className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors shrink-0 ${
                           isSelected
@@ -817,713 +1056,644 @@ export default function SettingsModal({
                           <div className="w-2 h-2 rounded-full bg-white" />
                         )}
                       </div>
-                    </div>
 
-                    <input
-                      type="radio"
-                      id={`aspect-ratio-${opt.id}`}
-                      name="videoAspectRatio"
-                      value={opt.id}
-                      checked={isSelected}
-                      onChange={() => setDraftAspectRatio(opt.id)}
-                      className="sr-only"
-                    />
-
-                    <div>
-                      <span
-                        className={`inline-block text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border mb-1.5 ${
-                          isSelected
-                            ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
-                            : "bg-surface-soft text-muted border-hairline-soft"
-                        }`}
-                      >
-                        {opt.badge}
-                      </span>
-                      <p className="text-xs text-muted leading-tight">
-                        {opt.description}
-                      </p>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          {/* Section 2: Media Type Filter (Radio Buttons / Toggle Group) */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
-              <Film className="w-4 h-4 text-rausch" />
-              Media Type Filter
-            </legend>
-
-            <p className="text-xs text-muted">
-              Filter the assets requested by the auto-matcher for each generated
-              scene.
-            </p>
-
-            <div
-              className="flex flex-col gap-2.5 pt-1"
-              role="radiogroup"
-              aria-label="Media Type Filter"
-            >
-              {mediaTypeOptions.map((opt) => {
-                const isSelected = draftMediaType === opt.id;
-                const IconComponent = opt.icon;
-
-                return (
-                  <label
-                    key={opt.id}
-                    htmlFor={`media-type-${opt.id}`}
-                    className={`relative flex items-center gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
-                      isSelected
-                        ? "bg-[#fff8f9] border-rausch shadow-airbnb"
-                        : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      id={`media-type-${opt.id}`}
-                      name="mediaTypeFilter"
-                      value={opt.id}
-                      checked={isSelected}
-                      onChange={() => setDraftMediaType(opt.id)}
-                      className="sr-only"
-                    />
-
-                    {/* Styled Radio Circle */}
-                    <div
-                      className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors shrink-0 ${
-                        isSelected
-                          ? "border-rausch bg-rausch"
-                          : "border-hairline bg-white"
-                      }`}
-                    >
-                      {isSelected && (
-                        <div className="w-2 h-2 rounded-full bg-white" />
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-3 flex-grow min-w-0">
-                      <div
-                        className={`p-2 rounded-lg ${isSelected ? "bg-[#fff0f2] text-rausch" : "bg-surface-soft text-muted"}`}
-                      >
-                        <IconComponent className="w-4 h-4" />
-                      </div>
-                      <div className="flex-grow min-w-0">
-                        <span className="text-sm font-bold text-ink block">
-                          {opt.label}
-                        </span>
-                        <span className="text-xs text-muted block mt-0.5">
-                          {opt.description}
-                        </span>
-                      </div>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          {/* Section 3: On-Screen Text & Motion Overlays (Mutually Exclusive) */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
-              <Type className="w-4 h-4 text-rausch" />
-              On-Screen Text & Motion Overlays
-            </legend>
-
-            <div
-              className="flex flex-col gap-2.5 pt-1"
-              role="radiogroup"
-              aria-label="Text Overlay Mode"
-            >
-              {overlayModeOptions.map((opt) => {
-                const isSelected = draftTextOverlayMode === opt.id;
-                const IconComponent = opt.icon;
-
-                return (
-                  <label
-                    key={opt.id}
-                    htmlFor={`overlay-mode-${opt.id}`}
-                    className={`relative flex items-center gap-3.5 p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
-                      isSelected
-                        ? "bg-[#fff8f9] border-rausch shadow-airbnb"
-                        : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      id={`overlay-mode-${opt.id}`}
-                      name="textOverlayMode"
-                      value={opt.id}
-                      checked={isSelected}
-                      onChange={() => setDraftTextOverlayMode(opt.id)}
-                      className="sr-only"
-                    />
-
-                    {/* Styled Radio Circle */}
-                    <div
-                      className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors shrink-0 ${
-                        isSelected
-                          ? "border-rausch bg-rausch"
-                          : "border-hairline bg-white"
-                      }`}
-                    >
-                      {isSelected && (
-                        <div className="w-2 h-2 rounded-full bg-white" />
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-3 flex-grow min-w-0">
-                      <div
-                        className={`p-2 rounded-lg ${isSelected ? "bg-[#fff0f2] text-rausch" : "bg-surface-soft text-muted"}`}
-                      >
-                        <IconComponent className="w-4 h-4" />
-                      </div>
-                      <div className="flex-grow min-w-0">
-                        <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-3 flex-grow min-w-0">
+                        <div
+                          className={`p-2 rounded-lg ${isSelected ? "bg-[#fff0f2] text-rausch" : "bg-surface-soft text-muted"}`}
+                        >
+                          <IconComponent className="w-4 h-4" />
+                        </div>
+                        <div className="flex-grow min-w-0">
                           <span className="text-sm font-bold text-ink block">
                             {opt.label}
                           </span>
-                          <span
-                            className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
-                              isSelected
-                                ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
-                                : "bg-surface-soft text-muted border-hairline-soft"
-                            }`}
-                          >
-                            {opt.badge}
+                          <span className="text-xs text-muted block mt-0.5">
+                            {opt.description}
                           </span>
                         </div>
                       </div>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          {/* Section: Viral Captions & 3D Emojis */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
-              <Smile className="w-4 h-4 text-rausch" />
-              Viral Captions & 3D Emojis
-            </legend>
-
-            <p className="text-xs text-muted">
-              Display high-impact 3D emojis positioned gracefully above subtitle
-              captions to maximize viewer retention and emotional resonance.
-            </p>
-
-            {/* Toggle Card */}
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => setDraftEnableEmojiCaptions((prev) => !prev)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setDraftEnableEmojiCaptions((prev) => !prev);
-                }
-              }}
-              className={`flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
-                draftEnableEmojiCaptions
-                  ? "bg-[#fff8f9] border-rausch shadow-airbnb"
-                  : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
-              }`}
-            >
-              <div
-                className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
-                  draftEnableEmojiCaptions
-                    ? "border-rausch bg-rausch text-white"
-                    : "border-hairline bg-white"
-                }`}
-              >
-                {draftEnableEmojiCaptions && (
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
-                )}
-              </div>
-              <div className="flex-grow min-w-0">
-                <div className="flex items-center justify-between gap-2 mb-0.5">
-                  <span className="text-sm font-bold text-ink">
-                    Enable 3D Emoji Overlays in Captions
-                  </span>
-                  <span
-                    className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
-                      draftEnableEmojiCaptions
-                        ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
-                        : "bg-surface-soft text-muted border-hairline-soft"
-                    }`}
-                  >
-                    {draftEnableEmojiCaptions ? "Active" : "Disabled"}
-                  </span>
-                </div>
-                <p className="text-xs text-muted leading-tight">
-                  Automatically pairs scenes and subtitles with relevant
-                  emotional 3D emojis (e.g., 💔, 🤲, ⏳, 🔥, ✨).
-                </p>
-              </div>
-            </div>
-
-            {/* Emoji Style Selection */}
-            <div
-              className={`pt-1 transition-opacity ${
-                draftEnableEmojiCaptions
-                  ? "opacity-100"
-                  : "opacity-40 pointer-events-none"
-              }`}
-            >
-              <span className="text-xs font-bold text-ink block mb-2">
-                Emoji Rendering Aesthetics
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {emojiStyleOptions.map((opt) => {
-                  const isSelected = draftEmojiStyle === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      disabled={!draftEnableEmojiCaptions}
-                      onClick={() => setDraftEmojiStyle(opt.id)}
-                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
-                        isSelected && draftEnableEmojiCaptions
-                          ? "bg-[#fff0f2] border-rausch shadow-sm"
-                          : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-1 mb-1.5">
-                        <span className="text-xl">{opt.preview}</span>
-                        <span
-                          className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                            isSelected && draftEnableEmojiCaptions
-                              ? "bg-rausch text-white"
-                              : "bg-surface-soft text-muted"
-                          }`}
-                        >
-                          {opt.badge}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-ink block leading-tight">
-                          {opt.label}
-                        </span>
-                        <span className="text-[10px] text-muted block mt-0.5 leading-tight">
-                          {opt.tagline}
-                        </span>
-                      </div>
-                    </button>
+                    </label>
                   );
                 })}
               </div>
-            </div>
+            </SettingsAccordionSection>
 
-            {/* Caption Vertical Position Selection */}
-            <div className="pt-3 border-t border-hairline-soft mt-3">
-              <span className="text-xs font-bold text-ink block mb-1">
-                Caption Screen Position
-              </span>
-              <p className="text-[11px] text-muted mb-2.5">
-                Choose where spoken subtitles appear on the video canvas (Top, Middle, or Bottom).
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {captionPositionOptions.map((opt) => {
-                  const isSelected = draftCaptionPosition === opt.id;
+            {/* Section: On-Screen Text & Motion Overlays (Mutually Exclusive) */}
+            <SettingsAccordionSection
+              id="overlayMode"
+              title="On-Screen Text & Motion Overlays"
+              icon={Type}
+              summary={summaries.overlayMode}
+              isOpen={openSections.has("overlayMode")}
+              onToggle={toggleSection}
+              sectionRef={(el) => (sectionRefs.current.overlayMode = el)}
+            >
+              <div
+                className="flex flex-col gap-2.5 pt-1"
+                role="radiogroup"
+                aria-label="Text Overlay Mode"
+              >
+                {overlayModeOptions.map((opt) => {
+                  const isSelected = draftTextOverlayMode === opt.id;
+                  const IconComponent = opt.icon;
+
                   return (
-                    <button
+                    <label
                       key={opt.id}
-                      type="button"
-                      onClick={() => setDraftCaptionPosition(opt.id)}
-                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                      htmlFor={`overlay-mode-${opt.id}`}
+                      className={`relative flex items-center gap-3.5 p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
                         isSelected
-                          ? "bg-[#fff0f2] border-rausch shadow-sm"
-                          : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
+                          ? "bg-[#fff8f9] border-rausch shadow-airbnb"
+                          : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-1 mb-2">
-                        {/* Mini Phone Frame Diagram */}
-                        <div className="w-6 h-8 rounded border border-hairline bg-surface-soft flex flex-col justify-between p-0.5 shrink-0">
-                          <div
-                            className={`h-1.5 w-full rounded-[2px] transition-colors ${
-                              opt.id === "top"
-                                ? isSelected
-                                  ? "bg-rausch"
-                                  : "bg-ink"
-                                : "bg-hairline"
-                            }`}
-                          />
-                          <div
-                            className={`h-1.5 w-full rounded-[2px] transition-colors ${
-                              opt.id === "middle"
-                                ? isSelected
-                                  ? "bg-rausch"
-                                  : "bg-ink"
-                                : "bg-hairline"
-                            }`}
-                          />
-                          <div
-                            className={`h-1.5 w-full rounded-[2px] transition-colors ${
-                              opt.id === "bottom"
-                                ? isSelected
-                                  ? "bg-rausch"
-                                  : "bg-ink"
-                                : "bg-hairline"
-                            }`}
-                          />
-                        </div>
+                      <input
+                        type="radio"
+                        id={`overlay-mode-${opt.id}`}
+                        name="textOverlayMode"
+                        value={opt.id}
+                        checked={isSelected}
+                        onChange={() => setDraftTextOverlayMode(opt.id)}
+                        className="sr-only"
+                      />
 
-                        <span
-                          className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                            isSelected
-                              ? "bg-rausch text-white"
-                              : "bg-surface-soft text-muted"
-                          }`}
-                        >
-                          {opt.badge}
-                        </span>
+                      {/* Styled Radio Circle */}
+                      <div
+                        className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors shrink-0 ${
+                          isSelected
+                            ? "border-rausch bg-rausch"
+                            : "border-hairline bg-white"
+                        }`}
+                      >
+                        {isSelected && (
+                          <div className="w-2 h-2 rounded-full bg-white" />
+                        )}
                       </div>
-                      <div>
-                        <span className="text-xs font-bold text-ink block leading-tight">
-                          {opt.label}
-                        </span>
-                        <span className="text-[10px] text-muted block mt-0.5 leading-tight">
-                          {opt.desc}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </fieldset>
 
-          {/* Section: Spiritual Highlights & Dua Overlays */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-rausch" />
-              Spiritual Highlights & Dua Overlays
-            </legend>
-
-            <p className="text-xs text-muted">
-              Detect Quranic & Hadith Duas in the transcript, auto-correct Hindi
-              and Arabic text using AI, and render a dedicated Islamic prayer
-              card overlay.
-            </p>
-
-            {/* Toggle Card */}
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => setDraftEnableDuaOverlay((prev) => !prev)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setDraftEnableDuaOverlay((prev) => !prev);
-                }
-              }}
-              className={`flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
-                draftEnableDuaOverlay
-                  ? "bg-[#fff8f9] border-rausch shadow-airbnb"
-                  : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
-              }`}
-            >
-              <div
-                className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
-                  draftEnableDuaOverlay
-                    ? "border-rausch bg-rausch text-white"
-                    : "border-hairline bg-white"
-                }`}
-              >
-                {draftEnableDuaOverlay && (
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
-                )}
-              </div>
-              <div className="flex-grow min-w-0">
-                <div className="flex items-center justify-between gap-2 mb-0.5">
-                  <span className="text-sm font-bold text-ink">
-                    Enable Dua Detection & Card Overlay
-                  </span>
-                  <span
-                    className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
-                      draftEnableDuaOverlay
-                        ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
-                        : "bg-surface-soft text-muted border-hairline-soft"
-                    }`}
-                  >
-                    {draftEnableDuaOverlay ? "Active" : "Disabled"}
-                  </span>
-                </div>
-                <p className="text-xs text-muted leading-tight">
-                  When a Dua is spoken, replaces standard subtitles with a
-                  refined prayer card in Hindi and Arabic with Tashkeel.
-                </p>
-              </div>
-            </div>
-
-            {/* Dua Card Theme Selection */}
-            <div
-              className={`pt-1 transition-opacity ${
-                draftEnableDuaOverlay
-                  ? "opacity-100"
-                  : "opacity-40 pointer-events-none"
-              }`}
-            >
-              <span className="text-xs font-bold text-ink block mb-2">
-                Dua Card Color Aesthetics
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {duaThemeOptions.map((opt) => {
-                  const isSelected = draftDuaCardTheme === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      disabled={!draftEnableDuaOverlay}
-                      onClick={() => setDraftDuaCardTheme(opt.id)}
-                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
-                        isSelected && draftEnableDuaOverlay
-                          ? "bg-[#fff0f2] border-rausch shadow-sm"
-                          : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-1 mb-2">
+                      <div className="flex items-center gap-3 flex-grow min-w-0">
                         <div
-                          className="w-5 h-5 rounded-md border shadow-inner"
-                          style={{
-                            backgroundColor: opt.colorPreview,
-                            borderColor: opt.borderPreview,
-                          }}
-                        />
-                        <span
-                          className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                            isSelected && draftEnableDuaOverlay
-                              ? "bg-rausch text-white"
-                              : "bg-surface-soft text-muted"
-                          }`}
+                          className={`p-2 rounded-lg ${isSelected ? "bg-[#fff0f2] text-rausch" : "bg-surface-soft text-muted"}`}
                         >
-                          {opt.badge}
-                        </span>
+                          <IconComponent className="w-4 h-4" />
+                        </div>
+                        <div className="flex-grow min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-sm font-bold text-ink block">
+                              {opt.label}
+                            </span>
+                            <span
+                              className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
+                                isSelected
+                                  ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
+                                  : "bg-surface-soft text-muted border-hairline-soft"
+                              }`}
+                            >
+                              {opt.badge}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-xs font-bold text-ink block leading-tight">
-                          {opt.label}
-                        </span>
-                        <span className="text-[10px] text-muted block mt-0.5 leading-tight">
-                          {opt.tagline}
-                        </span>
-                      </div>
-                    </button>
+                    </label>
                   );
                 })}
               </div>
-            </div>
-          </fieldset>
+            </SettingsAccordionSection>
 
-          {/* Section: AI Video Host Presenter & Split-Screen */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-rausch" />
-              AI Video Host Presenter & Split-Screen
-            </legend>
-
-            <p className="text-xs text-muted">
-              Incorporate physical host gesture clips into the short. Scene 1
-              acts as an engaging host intro hook, followed by stock footage,
-              and Scene 4 renders a dynamic 50/50 split screen.
-            </p>
-
-            {/* Toggle Card Container */}
-            <div
-              className={`p-4 rounded-xl border transition-all ${
-                draftEnableVideoHost
-                  ? "bg-[#fff8f9] border-rausch shadow-airbnb"
-                  : "bg-white border-hairline"
-              }`}
+            {/* Section: Viral Captions & 3D Emojis */}
+            <SettingsAccordionSection
+              id="captions"
+              title="Viral Captions & 3D Emojis"
+              icon={Smile}
+              summary={summaries.captions}
+              isOpen={openSections.has("captions")}
+              onToggle={toggleSection}
+              sectionRef={(el) => (sectionRefs.current.captions = el)}
             >
-              {/* Interactive Header Row */}
+              <p className="text-xs text-muted">
+                Display high-impact 3D emojis positioned gracefully above subtitle
+                captions to maximize viewer retention and emotional resonance.
+              </p>
+
+              {/* Toggle Card */}
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => setDraftEnableVideoHost((prev) => !prev)}
+                onClick={() => setDraftEnableEmojiCaptions((prev) => !prev)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    setDraftEnableVideoHost((prev) => !prev);
+                    setDraftEnableEmojiCaptions((prev) => !prev);
                   }
                 }}
-                className="flex items-start gap-3.5 cursor-pointer select-none"
+                className={`flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                  draftEnableEmojiCaptions
+                    ? "bg-[#fff8f9] border-rausch shadow-airbnb"
+                    : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
+                }`}
               >
                 <div
                   className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
-                    draftEnableVideoHost
+                    draftEnableEmojiCaptions
                       ? "border-rausch bg-rausch text-white"
                       : "border-hairline bg-white"
                   }`}
                 >
-                  {draftEnableVideoHost && (
+                  {draftEnableEmojiCaptions && (
                     <Check className="w-3.5 h-3.5 stroke-[3]" />
                   )}
                 </div>
                 <div className="flex-grow min-w-0">
                   <div className="flex items-center justify-between gap-2 mb-0.5">
-                    <span className="text-sm font-bold text-ink flex items-center gap-1.5">
-                      Enable Video Host & Split-Screen Storytelling
+                    <span className="text-sm font-bold text-ink">
+                      Enable 3D Emoji Overlays in Captions
                     </span>
                     <span
                       className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
-                        draftEnableVideoHost
+                        draftEnableEmojiCaptions
                           ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
                           : "bg-surface-soft text-muted border-hairline-soft"
                       }`}
                     >
-                      {draftEnableVideoHost ? "Active" : "Disabled"}
+                      {draftEnableEmojiCaptions ? "Active" : "Disabled"}
                     </span>
                   </div>
                   <p className="text-xs text-muted leading-tight">
-                    Automatically chooses gesture explanation videos from{" "}
-                    <code className="text-[11px] font-mono bg-surface-soft px-1 rounded">
-                      image-library/host/women_host
-                    </code>{" "}
-                    and schedules full-screen and split-screen scenes.
+                    Automatically pairs scenes and subtitles with relevant
+                    emotional 3D emojis (e.g., 💔, 🤲, ⏳, 🔥, ✨).
                   </p>
                 </div>
               </div>
 
-              {/* 3-Scene Cadence Preview (Safely separated from toggle row) */}
+              {/* Emoji Style Selection */}
               <div
-                className={`mt-3 pt-3 border-t border-hairline-soft grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] transition-opacity ${
-                  draftEnableVideoHost ? "opacity-100" : "opacity-40"
+                className={`pt-1 transition-opacity ${
+                  draftEnableEmojiCaptions
+                    ? "opacity-100"
+                    : "opacity-40 pointer-events-none"
                 }`}
               >
-                <div className="p-2.5 rounded-lg bg-white border border-hairline flex flex-col gap-1 shadow-xs">
-                  <span className="font-bold text-ink flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rausch" />
-                    Scene 1: Hook
-                  </span>
-                  <span className="text-[10px] text-muted leading-tight">
-                    Full-screen host gesture explaining topic
-                  </span>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-white border border-hairline flex flex-col gap-1 shadow-xs">
-                  <span className="font-bold text-ink flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                    Scene 2 & 3: Stock
-                  </span>
-                  <span className="text-[10px] text-muted leading-tight">
-                    Full-screen cinematic footage or photos
-                  </span>
-                </div>
-
-                <div className="p-2.5 rounded-lg bg-white border border-hairline flex flex-col gap-1 shadow-xs">
-                  <span className="font-bold text-ink flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                    Scene 4: Split-Screen
-                  </span>
-                  <span className="text-[10px] text-muted leading-tight">
-                    Top 50% Host clip + Bottom 50% Stock
-                  </span>
+                <span className="text-xs font-bold text-ink block mb-2">
+                  Emoji Rendering Aesthetics
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {emojiStyleOptions.map((opt) => {
+                    const isSelected = draftEmojiStyle === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        disabled={!draftEnableEmojiCaptions}
+                        onClick={() => setDraftEmojiStyle(opt.id)}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                          isSelected && draftEnableEmojiCaptions
+                            ? "bg-[#fff0f2] border-rausch shadow-sm"
+                            : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1.5">
+                          <span className="text-xl">{opt.preview}</span>
+                          <span
+                            className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                              isSelected && draftEnableEmojiCaptions
+                                ? "bg-rausch text-white"
+                                : "bg-surface-soft text-muted"
+                            }`}
+                          >
+                            {opt.badge}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-ink block leading-tight">
+                            {opt.label}
+                          </span>
+                          <span className="text-[10px] text-muted block mt-0.5 leading-tight">
+                            {opt.tagline}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
-          </fieldset>
 
-          {/* Section 4: Camera & Transition Dynamics */}
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
-              <SlidersHorizontal className="w-4 h-4 text-rausch" />
-              Camera Dynamics & Transitions
-            </legend>
+              {/* Caption Vertical Position Selection */}
+              <div className="pt-3 border-t border-hairline-soft mt-3">
+                <span className="text-xs font-bold text-ink block mb-1">
+                  Caption Screen Position
+                </span>
+                <p className="text-[11px] text-muted mb-2.5">
+                  Choose where spoken subtitles appear on the video canvas (Top, Middle, or Bottom).
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {captionPositionOptions.map((opt) => {
+                    const isSelected = draftCaptionPosition === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setDraftCaptionPosition(opt.id)}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                          isSelected
+                            ? "bg-[#fff0f2] border-rausch shadow-sm"
+                            : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-2">
+                          {/* Mini Phone Frame Diagram */}
+                          <div className="w-6 h-8 rounded border border-hairline bg-surface-soft flex flex-col justify-between p-0.5 shrink-0">
+                            <div
+                              className={`h-1.5 w-full rounded-[2px] transition-colors ${
+                                opt.id === "top"
+                                  ? isSelected
+                                    ? "bg-rausch"
+                                    : "bg-ink"
+                                  : "bg-hairline"
+                              }`}
+                            />
+                            <div
+                              className={`h-1.5 w-full rounded-[2px] transition-colors ${
+                                opt.id === "middle"
+                                  ? isSelected
+                                    ? "bg-rausch"
+                                    : "bg-ink"
+                                  : "bg-hairline"
+                              }`}
+                            />
+                            <div
+                              className={`h-1.5 w-full rounded-[2px] transition-colors ${
+                                opt.id === "bottom"
+                                  ? isSelected
+                                    ? "bg-rausch"
+                                    : "bg-ink"
+                                  : "bg-hairline"
+                              }`}
+                            />
+                          </div>
 
-            <p className="text-xs text-muted">
-              Configure camera zooming motion across clips and crossfade
-              transition timing between scenes.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-              {/* Zoom Speed Card */}
-              <div className="p-4 rounded-xl border border-hairline bg-surface-soft/60 flex flex-col gap-3">
-                <div className="flex justify-between items-center">
-                  <label
-                    htmlFor="settings-zoom-speed"
-                    className="text-xs font-bold text-ink uppercase tracking-wider"
-                  >
-                    Zoom/Pan Speed
-                  </label>
-                  <span className="px-2 py-0.5 rounded-md bg-[#fff0f2] border border-[#ffd1da] text-rausch text-xs font-bold tabular-nums">
-                    {draftZoomSpeed.toFixed(1)}x
-                  </span>
+                          <span
+                            className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                              isSelected
+                                ? "bg-rausch text-white"
+                                : "bg-surface-soft text-muted"
+                            }`}
+                          >
+                            {opt.badge}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-ink block leading-tight">
+                            {opt.label}
+                          </span>
+                          <span className="text-[10px] text-muted block mt-0.5 leading-tight">
+                            {opt.desc}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
+              </div>
+            </SettingsAccordionSection>
 
-                <input
-                  id="settings-zoom-speed"
-                  type="range"
-                  min="0.2"
-                  max="2.0"
-                  step="0.1"
-                  value={draftZoomSpeed}
-                  onChange={(e) =>
-                    setDraftZoomSpeed(parseFloat(e.target.value))
+            {/* Section: Spiritual Highlights & Dua Overlays */}
+            <SettingsAccordionSection
+              id="dua"
+              title="Spiritual Highlights & Dua Overlays"
+              icon={BookOpen}
+              summary={summaries.dua}
+              isOpen={openSections.has("dua")}
+              onToggle={toggleSection}
+              sectionRef={(el) => (sectionRefs.current.dua = el)}
+            >
+              <p className="text-xs text-muted">
+                Detect Quranic & Hadith Duas in the transcript, auto-correct Hindi
+                and Arabic text using AI, and render a dedicated Islamic prayer
+                card overlay.
+              </p>
+
+              {/* Toggle Card */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setDraftEnableDuaOverlay((prev) => !prev)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setDraftEnableDuaOverlay((prev) => !prev);
                   }
-                  className="w-full h-2 bg-hairline rounded-lg appearance-none cursor-pointer accent-[#ff385c] outline-none focus-visible:ring-2 focus-visible:ring-rausch"
-                  aria-valuemin={0.2}
-                  aria-valuemax={2.0}
-                  aria-valuenow={draftZoomSpeed}
-                  aria-valuetext={`${draftZoomSpeed.toFixed(1)}x speed`}
-                />
-
-                <div className="flex justify-between text-[10px] text-muted font-medium">
-                  <span>0.2x (Subtle)</span>
-                  <span>1.0x (Default)</span>
-                  <span>2.0x (Dramatic)</span>
+                }}
+                className={`flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                  draftEnableDuaOverlay
+                    ? "bg-[#fff8f9] border-rausch shadow-airbnb"
+                    : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
+                }`}
+              >
+                <div
+                  className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
+                    draftEnableDuaOverlay
+                      ? "border-rausch bg-rausch text-white"
+                      : "border-hairline bg-white"
+                  }`}
+                >
+                  {draftEnableDuaOverlay && (
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  )}
+                </div>
+                <div className="flex-grow min-w-0">
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <span className="text-sm font-bold text-ink">
+                      Enable Dua Detection & Card Overlay
+                    </span>
+                    <span
+                      className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
+                        draftEnableDuaOverlay
+                          ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
+                          : "bg-surface-soft text-muted border-hairline-soft"
+                      }`}
+                    >
+                      {draftEnableDuaOverlay ? "Active" : "Disabled"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted leading-tight">
+                    When a Dua is spoken, replaces standard subtitles with a
+                    refined prayer card in Hindi and Arabic with Tashkeel.
+                  </p>
                 </div>
               </div>
 
-              {/* Transition Duration Card */}
-              <div className="p-4 rounded-xl border border-hairline bg-surface-soft/60 flex flex-col gap-3">
-                <div className="flex justify-between items-center">
-                  <label
-                    htmlFor="settings-transition-duration"
-                    className="text-xs font-bold text-ink uppercase tracking-wider"
+              {/* Dua Card Theme Selection */}
+              <div
+                className={`pt-1 transition-opacity ${
+                  draftEnableDuaOverlay
+                    ? "opacity-100"
+                    : "opacity-40 pointer-events-none"
+                }`}
+              >
+                <span className="text-xs font-bold text-ink block mb-2">
+                  Dua Card Color Aesthetics
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {duaThemeOptions.map((opt) => {
+                    const isSelected = draftDuaCardTheme === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        disabled={!draftEnableDuaOverlay}
+                        onClick={() => setDraftDuaCardTheme(opt.id)}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                          isSelected && draftEnableDuaOverlay
+                            ? "bg-[#fff0f2] border-rausch shadow-sm"
+                            : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-2">
+                          <div
+                            className="w-5 h-5 rounded-md border shadow-inner"
+                            style={{
+                              backgroundColor: opt.colorPreview,
+                              borderColor: opt.borderPreview,
+                            }}
+                          />
+                          <span
+                            className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                              isSelected && draftEnableDuaOverlay
+                                ? "bg-rausch text-white"
+                                : "bg-surface-soft text-muted"
+                            }`}
+                          >
+                            {opt.badge}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-ink block leading-tight">
+                            {opt.label}
+                          </span>
+                          <span className="text-[10px] text-muted block mt-0.5 leading-tight">
+                            {opt.tagline}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </SettingsAccordionSection>
+
+            {/* Section: AI Video Host Presenter & Split-Screen */}
+            <SettingsAccordionSection
+              id="host"
+              title="AI Video Host Presenter & Split-Screen"
+              icon={UserCheck}
+              summary={summaries.host}
+              isOpen={openSections.has("host")}
+              onToggle={toggleSection}
+              sectionRef={(el) => (sectionRefs.current.host = el)}
+            >
+              <p className="text-xs text-muted">
+                Incorporate physical host gesture clips into the short. Scene 1
+                acts as an engaging host intro hook, followed by stock footage,
+                and Scene 4 renders a dynamic 50/50 split screen.
+              </p>
+
+              {/* Toggle Card Container */}
+              <div
+                className={`p-4 rounded-xl border transition-all ${
+                  draftEnableVideoHost
+                    ? "bg-[#fff8f9] border-rausch shadow-airbnb"
+                    : "bg-white border-hairline"
+                }`}
+              >
+                {/* Interactive Header Row */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDraftEnableVideoHost((prev) => !prev)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setDraftEnableVideoHost((prev) => !prev);
+                    }
+                  }}
+                  className="flex items-start gap-3.5 cursor-pointer select-none"
+                >
+                  <div
+                    className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
+                      draftEnableVideoHost
+                        ? "border-rausch bg-rausch text-white"
+                        : "border-hairline bg-white"
+                    }`}
                   >
-                    Crossfade Duration
-                  </label>
-                  <span className="px-2 py-0.5 rounded-md bg-[#fff0f2] border border-[#ffd1da] text-rausch text-xs font-bold tabular-nums">
-                    {draftTransitionDuration.toFixed(1)}s
-                  </span>
+                    {draftEnableVideoHost && (
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    )}
+                  </div>
+                  <div className="flex-grow min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                      <span className="text-sm font-bold text-ink flex items-center gap-1.5">
+                        Enable Video Host & Split-Screen Storytelling
+                      </span>
+                      <span
+                        className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
+                          draftEnableVideoHost
+                            ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
+                            : "bg-surface-soft text-muted border-hairline-soft"
+                        }`}
+                      >
+                        {draftEnableVideoHost ? "Active" : "Disabled"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted leading-tight">
+                      Automatically chooses gesture explanation videos from{" "}
+                      <code className="text-[11px] font-mono bg-surface-soft px-1 rounded">
+                        image-library/host/{draftVideoHostType}
+                      </code>{" "}
+                      and schedules full-screen and split-screen scenes.
+                    </p>
+                  </div>
                 </div>
 
-                <input
-                  id="settings-transition-duration"
-                  type="range"
-                  min="0.0"
-                  max="1.5"
-                  step="0.1"
-                  value={draftTransitionDuration}
-                  onChange={(e) =>
-                    setDraftTransitionDuration(parseFloat(e.target.value))
-                  }
-                  className="w-full h-2 bg-hairline rounded-lg appearance-none cursor-pointer accent-[#ff385c] outline-none focus-visible:ring-2 focus-visible:ring-rausch"
-                  aria-valuemin={0.0}
-                  aria-valuemax={1.5}
-                  aria-valuenow={draftTransitionDuration}
-                  aria-valuetext={`${draftTransitionDuration.toFixed(1)} seconds`}
-                />
+                {/* 3-Scene Cadence Preview (Safely separated from toggle row) */}
+                <div
+                  className={`mt-3 pt-3 border-t border-hairline-soft grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] transition-opacity ${
+                    draftEnableVideoHost ? "opacity-100" : "opacity-40"
+                  }`}
+                >
+                  <div className="p-2.5 rounded-lg bg-white border border-hairline flex flex-col gap-1 shadow-xs">
+                    <span className="font-bold text-ink flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rausch" />
+                      Scene 1: Hook
+                    </span>
+                    <span className="text-[10px] text-muted leading-tight">
+                      Full-screen host gesture explaining topic
+                    </span>
+                  </div>
 
-                <div className="flex justify-between text-[10px] text-muted font-medium">
-                  <span>0.0s (Hard Cut)</span>
-                  <span>0.3s (Default)</span>
-                  <span>1.5s (Slow Fade)</span>
+                  <div className="p-2.5 rounded-lg bg-white border border-hairline flex flex-col gap-1 shadow-xs">
+                    <span className="font-bold text-ink flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                      Scene 2 & 3: Stock
+                    </span>
+                    <span className="text-[10px] text-muted leading-tight">
+                      Full-screen cinematic footage or photos
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-white border border-hairline flex flex-col gap-1 shadow-xs">
+                    <span className="font-bold text-ink flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      Scene 4: Split-Screen
+                    </span>
+                    <span className="text-[10px] text-muted leading-tight">
+                      Top 50% Host clip + Bottom 50% Stock
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </fieldset>
+            </SettingsAccordionSection>
+
+            {/* Section: Camera & Transition Dynamics */}
+            <SettingsAccordionSection
+              id="camera"
+              title="Camera Dynamics & Transitions"
+              icon={SlidersHorizontal}
+              summary={summaries.camera}
+              isOpen={openSections.has("camera")}
+              onToggle={toggleSection}
+              sectionRef={(el) => (sectionRefs.current.camera = el)}
+            >
+              <p className="text-xs text-muted">
+                Configure camera zooming motion across clips and crossfade
+                transition timing between scenes.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                {/* Zoom Speed Card */}
+                <div className="p-4 rounded-xl border border-hairline bg-surface-soft/60 flex flex-col gap-3">
+                  <div className="flex justify-between items-center">
+                    <label
+                      htmlFor="settings-zoom-speed"
+                      className="text-xs font-bold text-ink uppercase tracking-wider"
+                    >
+                      Zoom/Pan Speed
+                    </label>
+                    <span className="px-2 py-0.5 rounded-md bg-[#fff0f2] border border-[#ffd1da] text-rausch text-xs font-bold tabular-nums">
+                      {draftZoomSpeed.toFixed(1)}x
+                    </span>
+                  </div>
+
+                  <input
+                    id="settings-zoom-speed"
+                    type="range"
+                    min="0.2"
+                    max="2.0"
+                    step="0.1"
+                    value={draftZoomSpeed}
+                    onChange={(e) =>
+                      setDraftZoomSpeed(parseFloat(e.target.value))
+                    }
+                    className="w-full h-2 bg-hairline rounded-lg appearance-none cursor-pointer accent-[#ff385c] outline-none focus-visible:ring-2 focus-visible:ring-rausch"
+                    aria-valuemin={0.2}
+                    aria-valuemax={2.0}
+                    aria-valuenow={draftZoomSpeed}
+                    aria-valuetext={`${draftZoomSpeed.toFixed(1)}x speed`}
+                  />
+
+                  <div className="flex justify-between text-[10px] text-muted font-medium">
+                    <span>0.2x (Subtle)</span>
+                    <span>1.0x (Default)</span>
+                    <span>2.0x (Dramatic)</span>
+                  </div>
+                </div>
+
+                {/* Transition Duration Card */}
+                <div className="p-4 rounded-xl border border-hairline bg-surface-soft/60 flex flex-col gap-3">
+                  <div className="flex justify-between items-center">
+                    <label
+                      htmlFor="settings-transition-duration"
+                      className="text-xs font-bold text-ink uppercase tracking-wider"
+                    >
+                      Crossfade Duration
+                    </label>
+                    <span className="px-2 py-0.5 rounded-md bg-[#fff0f2] border border-[#ffd1da] text-rausch text-xs font-bold tabular-nums">
+                      {draftTransitionDuration.toFixed(1)}s
+                    </span>
+                  </div>
+
+                  <input
+                    id="settings-transition-duration"
+                    type="range"
+                    min="0.0"
+                    max="1.5"
+                    step="0.1"
+                    value={draftTransitionDuration}
+                    onChange={(e) =>
+                      setDraftTransitionDuration(parseFloat(e.target.value))
+                    }
+                    className="w-full h-2 bg-hairline rounded-lg appearance-none cursor-pointer accent-[#ff385c] outline-none focus-visible:ring-2 focus-visible:ring-rausch"
+                    aria-valuemin={0.0}
+                    aria-valuemax={1.5}
+                    aria-valuenow={draftTransitionDuration}
+                    aria-valuetext={`${draftTransitionDuration.toFixed(1)} seconds`}
+                  />
+
+                  <div className="flex justify-between text-[10px] text-muted font-medium">
+                    <span>0.0s (Hard Cut)</span>
+                    <span>0.3s (Default)</span>
+                    <span>1.5s (Slow Fade)</span>
+                  </div>
+                </div>
+              </div>
+            </SettingsAccordionSection>
+          </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="p-5 border-t border-hairline-soft bg-white flex items-center justify-between gap-3 shrink-0">
+        <div className="p-5 border-t border-hairline-soft bg-white flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
           <button
             type="button"
             onClick={handleResetDefaults}
-            className="text-xs font-semibold text-muted hover:text-ink transition-colors underline-offset-4 hover:underline"
+            className="text-xs font-semibold text-muted hover:text-ink transition-colors underline-offset-4 hover:underline self-center sm:self-auto"
           >
             Reset
           </button>
@@ -1532,7 +1702,7 @@ export default function SettingsModal({
             <button
               type="button"
               onClick={onClose}
-              className="hidden sm:inline-flex px-4 py-2.5 rounded-lg border border-hairline bg-white text-xs font-bold text-ink hover:bg-surface-soft transition-colors"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-hairline bg-white text-xs font-bold text-ink hover:bg-surface-soft transition-colors"
             >
               Cancel
             </button>
@@ -1540,7 +1710,7 @@ export default function SettingsModal({
               type="button"
               onClick={handleSave}
               disabled={!isSourceSelectionValid}
-              className={`px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
+              className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${
                 !isSourceSelectionValid
                   ? "bg-rausch-disabled text-white cursor-not-allowed"
                   : "bg-rausch hover:bg-rausch-active text-white active:scale-95"
