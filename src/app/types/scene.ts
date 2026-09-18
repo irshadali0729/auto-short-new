@@ -16,7 +16,14 @@ export type GraphicBeatStyle =
   | "stacked-kinetic"
   | "top-hero"
   | "thought-bubble"
-  | "breakdown-card";
+  | "breakdown-card"
+  | "neon-underline"
+  | "highlight-marker";
+
+// "auto" lets each beat keep whichever style the AI assigned it (a mix of
+// stacked-kinetic/top-hero/thought-bubble); any other value forces every
+// beat in the video to render with that one theme.
+export type GraphicMotionThemeOption = "auto" | GraphicBeatStyle;
 
 export type GraphicBeatType = "impact" | "money" | "result" | "platform";
 

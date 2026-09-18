@@ -93,6 +93,33 @@ function normalizeSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
   });
 }
 
+// Strips punctuation so hero-word/segment matching isn't broken by commas,
+// danda (।), quotes, etc. that speech-to-text and the LLM don't always agree on.
+function normalizeForMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[.,!?।"'‘’“”:;()]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// A heroWord phrase matches a segment if any of its words appear in that
+// segment's text — not just when the whole phrase is a literal substring.
+// This lets multi-word heroWords (e.g. "100 मर्तबा") still find their real
+// timestamp even if the words land in different transcript segments.
+function heroWordMatchesSegment(hero: string, segmentText: string): boolean {
+  const normalizedSegment = normalizeForMatch(segmentText);
+  if (!normalizedSegment) return false;
+
+  const normalizedHero = normalizeForMatch(hero);
+  if (!normalizedHero) return false;
+
+  if (normalizedSegment.includes(normalizedHero)) return true;
+
+  const heroWords = normalizedHero.split(" ").filter((w) => w.length > 1);
+  return heroWords.some((w) => normalizedSegment.includes(w));
+}
+
 function alignScenesToSegments(
   scenes: GroqScene[],
   rawSegments: TranscriptSegment[],
@@ -139,7 +166,7 @@ function alignScenesToSegments(
 
       let matchedSegment = segments[segStart];
       for (let s = segStart; s <= segEnd; s++) {
-        if (segments[s]?.text.toLowerCase().includes(hero)) {
+        if (segments[s] && heroWordMatchesSegment(hero, segments[s].text)) {
           matchedSegment = segments[s];
           break;
         }

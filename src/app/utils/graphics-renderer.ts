@@ -157,6 +157,181 @@ export function generateOverlaySvg(beat: GraphicBeat): string {
     </svg>`;
   }
 
+  if (style === "breakdown-card") {
+    const lines = [prefix, hero, suffix].filter(Boolean);
+    const lineHeight = 118;
+    const cardHeight = 160 + lines.length * lineHeight;
+    const cardY = 1300 - cardHeight / 2;
+    const centerY = 1300;
+
+    return `
+    <svg width="1080" height="1920" viewBox="0 0 1080 1920" xmlns="http://www.w3.org/2000/svg">
+      ${buildDefs()}
+
+      <!-- Frosted dark breakdown card -->
+      <rect x="90" y="${cardY}" width="900" height="${cardHeight}" rx="36"
+        fill="#0A0A0A" fill-opacity="0.72" stroke="url(#goldGradient)" stroke-width="4" />
+
+      <!-- Left accent bar -->
+      <rect x="90" y="${cardY}" width="10" height="${cardHeight}" rx="5" fill="url(#goldGradient)" />
+
+      ${
+        prefix
+          ? `<text x="540" y="${centerY - (lines.length > 1 ? lineHeight : 0)}"
+              font-family="${FONT_SANS}"
+              font-size="58"
+              font-weight="800"
+              text-anchor="middle"
+              fill="#E7E7E7">
+              ${prefix}
+            </text>`
+          : ""
+      }
+
+      <text x="540" y="${centerY}"
+        font-family="${FONT_DISPLAY}"
+        font-size="112"
+        font-weight="900"
+        text-anchor="middle"
+        fill="url(#goldGradient)"
+        filter="url(#heroShadow)">
+        ${hero}
+      </text>
+
+      ${
+        suffix
+          ? `<text x="540" y="${centerY + lineHeight}"
+              font-family="${FONT_SANS}"
+              font-size="58"
+              font-weight="800"
+              text-anchor="middle"
+              fill="#E7E7E7">
+              ${suffix}
+            </text>`
+          : ""
+      }
+    </svg>`;
+  }
+
+  if (style === "neon-underline") {
+    return `
+    <svg width="1080" height="1920" viewBox="0 0 1080 1920" xmlns="http://www.w3.org/2000/svg">
+      ${buildDefs()}
+      <filter id="neonGlow" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="14" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+
+      ${
+        prefix
+          ? `<text x="540" y="1180"
+              font-family="${FONT_SANS}"
+              font-size="64"
+              font-weight="700"
+              text-anchor="middle"
+              fill="#FFFFFF"
+              stroke="#000000"
+              stroke-width="10"
+              stroke-linejoin="round"
+              paint-order="stroke fill"
+              filter="url(#subShadow)">
+              ${prefix}
+            </text>`
+          : ""
+      }
+
+      <text x="540" y="1330"
+        font-family="${FONT_SANS}"
+        font-size="130"
+        font-weight="900"
+        text-anchor="middle"
+        fill="#4DE8FF"
+        filter="url(#neonGlow)">
+        ${hero}
+      </text>
+
+      <!-- Glowing underline accent -->
+      <rect x="290" y="1370" width="500" height="14" rx="7" fill="#4DE8FF" filter="url(#neonGlow)" />
+
+      ${
+        suffix
+          ? `<text x="540" y="1470"
+              font-family="${FONT_SANS}"
+              font-size="64"
+              font-weight="700"
+              text-anchor="middle"
+              fill="#FFFFFF"
+              stroke="#000000"
+              stroke-width="10"
+              stroke-linejoin="round"
+              paint-order="stroke fill"
+              filter="url(#subShadow)">
+              ${suffix}
+            </text>`
+          : ""
+      }
+    </svg>`;
+  }
+
+  if (style === "highlight-marker") {
+    return `
+    <svg width="1080" height="1920" viewBox="0 0 1080 1920" xmlns="http://www.w3.org/2000/svg">
+      ${buildDefs()}
+
+      ${
+        prefix
+          ? `<text x="540" y="1160"
+              font-family="${FONT_SANS}"
+              font-size="66"
+              font-weight="800"
+              text-anchor="middle"
+              fill="#FFFFFF"
+              stroke="#000000"
+              stroke-width="11"
+              stroke-linejoin="round"
+              paint-order="stroke fill"
+              filter="url(#subShadow)">
+              ${prefix}
+            </text>`
+          : ""
+      }
+
+      <!-- Rough hand-drawn highlighter stroke behind the hero word -->
+      <path d="M 260,1290 C 460,1250 620,1250 830,1300 C 630,1340 440,1345 260,1320 Z"
+        fill="url(#goldGradient)" fill-opacity="0.85" transform="rotate(-2 540 1300)" />
+
+      <text x="540" y="1330"
+        font-family="${FONT_DISPLAY}"
+        font-size="126"
+        font-weight="900"
+        text-anchor="middle"
+        fill="#0A0A0A">
+        ${hero}
+      </text>
+
+      ${
+        suffix
+          ? `<text x="540" y="1470"
+              font-family="${FONT_SANS}"
+              font-size="66"
+              font-weight="800"
+              text-anchor="middle"
+              fill="#FFFFFF"
+              stroke="#000000"
+              stroke-width="11"
+              stroke-linejoin="round"
+              paint-order="stroke fill"
+              filter="url(#subShadow)">
+              ${suffix}
+            </text>`
+          : ""
+      }
+    </svg>`;
+  }
+
   // Default: stacked-kinetic (Matches Images 1 & 3 & 5)
   const hasPrefix = Boolean(prefix);
   const hasSuffix = Boolean(suffix);

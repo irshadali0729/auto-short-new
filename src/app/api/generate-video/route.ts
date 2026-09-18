@@ -24,7 +24,7 @@ import {
   FFMPEG_MAX_ATTEMPTS,
   FFMPEG_RETRY_BASE_DELAY_MS,
 } from "@/app/config/video-config";
-import type { Scene, GraphicBeat } from "@/app/types/scene";
+import type { Scene, GraphicBeat, GraphicMotionThemeOption } from "@/app/types/scene";
 
 const ffmpegPath = ffmpegInstaller.path;
 
@@ -216,6 +216,7 @@ export async function POST(request: Request) {
       emojiStyle,
       enableDuaOverlay,
       duaCardTheme,
+      graphicMotionTheme,
     } = await request.json();
 
     if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
@@ -277,6 +278,7 @@ export async function POST(request: Request) {
       enableDuaOverlay !== false,
       duaCardTheme || "cream",
       resolvedCaptionPosition,
+      graphicMotionTheme || "auto",
     ).catch((err) => {
       console.error("Background compilation crash:", err);
       finishJob(runId, {
@@ -307,6 +309,7 @@ async function compileVideoInBackground(
   enableDuaOverlay: boolean = true,
   duaCardTheme: DuaCardTheme = "cream",
   captionPosition: CaptionPosition = "bottom",
+  graphicMotionTheme: GraphicMotionThemeOption = "auto",
 ) {
   let tempDir = "";
   const jobControl: JobControl = jobControlMap.get(runId) || {
@@ -472,8 +475,12 @@ async function resolveSceneAsset(
         for (let b = 0; b < beats.length; b++) {
           const beat = beats[b];
           const overlayPath = path.join(tempDir, `overlay_${i}_${b}.png`);
+          const themedBeat =
+            graphicMotionTheme !== "auto"
+              ? { ...beat, style: graphicMotionTheme }
+              : beat;
           try {
-            await renderGraphicOverlayPng(beat, overlayPath, targetWidth, targetHeight);
+            await renderGraphicOverlayPng(themedBeat, overlayPath, targetWidth, targetHeight);
             if (fs.existsSync(overlayPath)) {
               overlayPngList.push({
                 path: overlayPath,

@@ -43,6 +43,7 @@ export interface StoryboardScene {
     start: number;
     end: number;
     colorScheme?: string;
+    style?: string;
   }>;
   duaInfo?: {
     isDua: boolean;
@@ -428,6 +429,106 @@ export default function SceneLivePreviewPlayer({
             {(() => {
               const gfx = activeGraphic || activeScene.graphics?.[0];
               if (!gfx) return null;
+
+              // Mirrors graphics-renderer.ts: a theme picked in Settings forces every
+              // beat to that look; "auto" (or unset) falls back to whatever style the
+              // AI assigned this specific beat.
+              const themeOverride = mediaSettings.graphicMotionTheme;
+              const effectiveStyle =
+                themeOverride && themeOverride !== 'auto'
+                  ? themeOverride
+                  : gfx.style || 'stacked-kinetic';
+
+              if (effectiveStyle === 'breakdown-card') {
+                return (
+                  <div className="max-w-[90%] px-4 py-2.5 rounded-xl bg-black/75 border-2 border-amber-400 border-l-[6px] text-center shadow-2xl animate-fadeIn">
+                    {gfx.prefixText && (
+                      <div className="text-[10px] font-bold text-zinc-200 uppercase tracking-wider">
+                        {gfx.prefixText}
+                      </div>
+                    )}
+                    <div className="text-sm sm:text-base font-black uppercase tracking-tight bg-gradient-to-b from-amber-200 via-amber-400 to-orange-600 bg-clip-text text-transparent">
+                      {gfx.heroWord}
+                    </div>
+                    {gfx.suffixText && (
+                      <div className="text-[10px] font-bold text-zinc-200">
+                        {gfx.suffixText}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              if (effectiveStyle === 'neon-underline') {
+                return (
+                  <div className="max-w-[90%] px-3.5 py-2 text-center pointer-events-none">
+                    {gfx.prefixText && (
+                      <div className="text-[10px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] uppercase tracking-wider">
+                        {gfx.prefixText}
+                      </div>
+                    )}
+                    <div className="text-sm sm:text-base font-black uppercase tracking-tight text-cyan-300 drop-shadow-[0_0_10px_rgba(77,232,255,0.9)]">
+                      {gfx.heroWord}
+                    </div>
+                    <div className="mx-auto mt-0.5 h-1 w-2/3 rounded-full bg-cyan-300 shadow-[0_0_10px_2px_rgba(77,232,255,0.9)]" />
+                    {gfx.suffixText && (
+                      <div className="text-[10px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] mt-1">
+                        {gfx.suffixText}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              if (effectiveStyle === 'highlight-marker') {
+                return (
+                  <div className="max-w-[90%] px-3.5 py-2 text-center pointer-events-none">
+                    {gfx.prefixText && (
+                      <div className="text-[10px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] uppercase tracking-wider">
+                        {gfx.prefixText}
+                      </div>
+                    )}
+                    <div className="relative inline-block px-1">
+                      <span className="absolute inset-x-[-6px] inset-y-[15%] -rotate-1 rounded-sm bg-gradient-to-b from-amber-300 to-orange-500 opacity-90" />
+                      <span className="relative text-sm sm:text-base font-black uppercase tracking-tight text-black">
+                        {gfx.heroWord}
+                      </span>
+                    </div>
+                    {gfx.suffixText && (
+                      <div className="text-[10px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] mt-1">
+                        {gfx.suffixText}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              if (effectiveStyle === 'top-hero') {
+                return (
+                  <div className="max-w-[90%] text-center pointer-events-none">
+                    <div className="text-lg sm:text-xl font-black uppercase tracking-tight bg-gradient-to-b from-amber-200 via-orange-400 to-orange-600 bg-clip-text text-transparent drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
+                      {gfx.heroWord}
+                    </div>
+                    {gfx.prefixText && (
+                      <div className="text-[10px] font-extrabold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] mt-1">
+                        {gfx.prefixText}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              if (effectiveStyle === 'thought-bubble') {
+                return (
+                  <div className="max-w-[90%] px-3.5 py-2.5 rounded-3xl bg-white text-center shadow-2xl animate-fadeIn">
+                    <div className="text-xs sm:text-sm font-black text-zinc-900">
+                      “{gfx.prefixText ? `${gfx.prefixText} ` : ''}{gfx.heroWord}”
+                    </div>
+                  </div>
+                );
+              }
+
+              // Default: stacked-kinetic
               return (
                 <div className="max-w-[90%] px-3.5 py-2 rounded-2xl bg-white/95 backdrop-blur-md border border-white/40 text-center shadow-2xl animate-fadeIn">
                   <div className="text-[10px] font-bold text-muted uppercase tracking-wider">

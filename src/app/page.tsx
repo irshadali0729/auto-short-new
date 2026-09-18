@@ -409,6 +409,7 @@ export default function Home() {
           textOverlayMode: mediaSettings.textOverlayMode || (mediaSettings.enableGraphicMotion ? 'graphics' : 'captions'),
           captionPosition: mediaSettings.captionPosition || DEFAULT_MEDIA_SETTINGS.captionPosition,
           enableGraphicMotion: mediaSettings.textOverlayMode === 'graphics',
+          graphicMotionTheme: mediaSettings.graphicMotionTheme || 'auto',
           enableCaptions: mediaSettings.textOverlayMode === 'captions',
           aspectRatio: mediaSettings.aspectRatio || '9:16',
           enableEmojiCaptions: mediaSettings.enableEmojiCaptions !== false,

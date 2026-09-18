@@ -23,6 +23,9 @@ import {
 } from "lucide-react";
 import { useFocusTrap } from "@/app/utils/useFocusTrap";
 import SettingsAccordionSection from "@/app/components/settings/SettingsAccordionSection";
+import type { GraphicMotionThemeOption } from "@/app/types/scene";
+
+export type { GraphicMotionThemeOption } from "@/app/types/scene";
 
 export type MediaSourceKey = "unsplash" | "pixabay" | "pexels" | "local";
 export type MediaTypeFilter = "only_videos" | "only_images" | "both";
@@ -44,6 +47,7 @@ export interface MediaSettings {
   textOverlayMode: TextOverlayMode;
   captionPosition?: CaptionPosition;
   enableGraphicMotion?: boolean;
+  graphicMotionTheme?: GraphicMotionThemeOption;
   zoomSpeed: number;
   transitionDuration: number;
   useRelatableVisualSearch?: boolean;
@@ -68,6 +72,7 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   textOverlayMode: "captions",
   captionPosition: "top",
   enableGraphicMotion: false,
+  graphicMotionTheme: "auto",
   zoomSpeed: 2,
   transitionDuration: 0.3,
   useRelatableVisualSearch: true,
@@ -122,6 +127,12 @@ export default function SettingsModal({
       settings?.captionPosition ||
         DEFAULT_MEDIA_SETTINGS.captionPosition ||
         "bottom",
+    );
+  const [draftGraphicMotionTheme, setDraftGraphicMotionTheme] =
+    useState<GraphicMotionThemeOption>(
+      settings?.graphicMotionTheme ||
+        DEFAULT_MEDIA_SETTINGS.graphicMotionTheme ||
+        "auto",
     );
   const [draftZoomSpeed, setDraftZoomSpeed] = useState<number>(
     typeof settings?.zoomSpeed === "number"
@@ -195,6 +206,11 @@ export default function SettingsModal({
         settings?.captionPosition ||
           DEFAULT_MEDIA_SETTINGS.captionPosition ||
           "bottom",
+      );
+      setDraftGraphicMotionTheme(
+        settings?.graphicMotionTheme ||
+          DEFAULT_MEDIA_SETTINGS.graphicMotionTheme ||
+          "auto",
       );
       setDraftZoomSpeed(
         typeof settings?.zoomSpeed === "number"
@@ -318,6 +334,7 @@ export default function SettingsModal({
       captionPosition:
         draftCaptionPosition || DEFAULT_MEDIA_SETTINGS.captionPosition || "bottom",
       enableGraphicMotion: draftTextOverlayMode === "graphics",
+      graphicMotionTheme: draftGraphicMotionTheme || "auto",
       zoomSpeed:
         typeof draftZoomSpeed === "number"
           ? draftZoomSpeed
@@ -344,6 +361,7 @@ export default function SettingsModal({
     setDraftMediaType(DEFAULT_MEDIA_SETTINGS.mediaType);
     setDraftTextOverlayMode(DEFAULT_MEDIA_SETTINGS.textOverlayMode);
     setDraftCaptionPosition(DEFAULT_MEDIA_SETTINGS.captionPosition || "bottom");
+    setDraftGraphicMotionTheme(DEFAULT_MEDIA_SETTINGS.graphicMotionTheme || "auto");
     setDraftZoomSpeed(DEFAULT_MEDIA_SETTINGS.zoomSpeed);
     setDraftTransitionDuration(DEFAULT_MEDIA_SETTINGS.transitionDuration);
     setDraftRelatableVisualSearch(
@@ -525,6 +543,43 @@ export default function SettingsModal({
     },
   ];
 
+  const graphicMotionThemeOptions: {
+    id: GraphicMotionThemeOption;
+    label: string;
+    tagline: string;
+    badge: string;
+    accentColor: string;
+  }[] = [
+    {
+      id: "auto",
+      label: "Auto (AI Mixed)",
+      tagline: "AI picks stacked/top-hero/quote styles per beat",
+      badge: "Recommended",
+      accentColor: "#F57F17",
+    },
+    {
+      id: "breakdown-card",
+      label: "Breakdown Card",
+      tagline: "Frosted dark card with a gold accent bar",
+      badge: "Editorial",
+      accentColor: "#F57F17",
+    },
+    {
+      id: "neon-underline",
+      label: "Neon Underline",
+      tagline: "Glowing cyan hero word with underline accent",
+      badge: "Modern",
+      accentColor: "#4DE8FF",
+    },
+    {
+      id: "highlight-marker",
+      label: "Highlight Marker",
+      tagline: "Hand-drawn gold highlighter stroke behind text",
+      badge: "Playful",
+      accentColor: "#FDD835",
+    },
+  ];
+
   const overlayModeOptions: {
     id: TextOverlayMode;
     label: string;
@@ -577,9 +632,18 @@ export default function SettingsModal({
     mediaType:
       mediaTypeOptions.find((o) => o.id === draftMediaType)?.label ||
       draftMediaType,
-    overlayMode:
+    overlayMode: `${
       overlayModeOptions.find((o) => o.id === draftTextOverlayMode)?.label ||
-      draftTextOverlayMode,
+      draftTextOverlayMode
+    }${
+      draftTextOverlayMode === "graphics"
+        ? ` · ${
+            graphicMotionThemeOptions.find(
+              (o) => o.id === draftGraphicMotionTheme,
+            )?.label || "Auto"
+          }`
+        : ""
+    }`,
     captions: draftEnableEmojiCaptions
       ? `${
           emojiStyleOptions.find((o) => o.id === draftEmojiStyle)?.label
@@ -1156,6 +1220,65 @@ export default function SettingsModal({
                     </label>
                   );
                 })}
+              </div>
+
+              {/* Graphic Motion Theme Selection (only relevant in Graphic Motion mode) */}
+              <div
+                className={`pt-3 border-t border-hairline-soft mt-3 transition-opacity ${
+                  draftTextOverlayMode === "graphics"
+                    ? "opacity-100"
+                    : "opacity-40 pointer-events-none"
+                }`}
+              >
+                <span className="text-xs font-bold text-ink block mb-1">
+                  Graphic Motion Theme
+                </span>
+                <p className="text-[11px] text-muted mb-2.5">
+                  Choose a fixed visual style for every kinetic-text beat, or
+                  let the AI mix styles automatically per beat.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {graphicMotionThemeOptions.map((opt) => {
+                    const isSelected = draftGraphicMotionTheme === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        disabled={draftTextOverlayMode !== "graphics"}
+                        onClick={() => setDraftGraphicMotionTheme(opt.id)}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                          isSelected && draftTextOverlayMode === "graphics"
+                            ? "bg-[#fff0f2] border-rausch shadow-sm"
+                            : "bg-white border-hairline hover:bg-surface-soft hover:border-border-strong"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1.5">
+                          <span
+                            className="w-4 h-4 rounded-full border border-black/10 shrink-0"
+                            style={{ backgroundColor: opt.accentColor }}
+                          />
+                          <span
+                            className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                              isSelected && draftTextOverlayMode === "graphics"
+                                ? "bg-rausch text-white"
+                                : "bg-surface-soft text-muted"
+                            }`}
+                          >
+                            {opt.badge}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-ink block leading-tight">
+                            {opt.label}
+                          </span>
+                          <span className="text-[10px] text-muted block mt-0.5 leading-tight">
+                            {opt.tagline}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </SettingsAccordionSection>
 
