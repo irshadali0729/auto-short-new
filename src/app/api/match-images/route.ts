@@ -3,7 +3,28 @@ import fs from "fs";
 import path from "path";
 import { getHostVideos, pickRandomHostVideo } from "@/app/utils/host-library";
 import { getCachedLibrary, invalidateLibraryCache } from "@/app/utils/library-cache";
+import { withRetry } from "@/app/utils/retry";
 import type { GraphicBeat, CaptionSlice, DuaInfo, Scene } from "@/app/types/scene";
+
+// Stock media providers (Pexels/Unsplash/Pixabay) occasionally hiccup on a
+// single request (network blip, transient 5xx). Retrying a couple of times
+// beats immediately falling through the whole matching cascade to a random
+// fallback asset. A 4xx (bad key, bad query) is not worth retrying.
+async function fetchWithRetry(url: string, init?: RequestInit): Promise<Response> {
+  return withRetry(
+    async () => {
+      const res = await fetch(url, init);
+      // A 5xx is the upstream's own transient failure — worth a retry. A 4xx
+      // (bad API key, bad query) will fail identically every time, so it's
+      // returned as-is for the caller's existing `!res.ok` handling.
+      if (res.status >= 500) {
+        throw new Error(`Upstream request failed with status ${res.status}`);
+      }
+      return res;
+    },
+    { retries: 2, baseDelayMs: 400 },
+  );
+}
 
 interface SceneInput {
   keyword: string;
@@ -933,7 +954,7 @@ function getFallbackAsset(
 }
 
 async function downloadMedia(url: string, destPath: string): Promise<void> {
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url);
   if (!res.ok) {
     throw new Error(`Failed to download media: ${res.statusText}`);
   }
@@ -961,7 +982,7 @@ async function getPexelsVideo(
       searchQuery,
     )}&orientation=${orientation}&per_page=8`;
 
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       headers: {
         Authorization: apiKey,
       },
@@ -1041,6 +1062,18 @@ async function getPexelsVideo(
   }
 }
 
+interface PexelsPhotoItem {
+  id: number;
+  alt?: string;
+  src: {
+    landscape?: string;
+    large2x?: string;
+    large?: string;
+    original?: string;
+    portrait?: string;
+  };
+}
+
 async function getPexelsPhoto(
   query: string,
   apiKey: string,
@@ -1056,7 +1089,7 @@ async function getPexelsPhoto(
       searchQuery,
     )}&orientation=${orientation}&per_page=8`;
 
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       headers: {
         Authorization: apiKey,
       },
@@ -1072,11 +1105,11 @@ async function getPexelsPhoto(
       return null;
     }
 
-    const chosenPhoto = pickBestScored(
+    const chosenPhoto = pickBestScored<PexelsPhotoItem>(
       data.photos,
       usedPexelsIds,
-      (p: any) => p.id,
-      (p: any) => p.alt || "",
+      (p) => p.id,
+      (p) => p.alt || "",
       tokenizeQuery(searchQuery),
     );
 
@@ -1128,6 +1161,17 @@ async function getPexelsPhoto(
   }
 }
 
+interface UnsplashPhotoItem {
+  id: string | number;
+  alt_description?: string;
+  description?: string;
+  urls?: {
+    raw?: string;
+    regular?: string;
+    small?: string;
+  };
+}
+
 async function getUnsplashPhoto(
   query: string,
   accessKey: string,
@@ -1143,7 +1187,7 @@ async function getUnsplashPhoto(
       searchQuery,
     )}&orientation=${orientation}&per_page=8`;
 
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       headers: {
         Authorization: `Client-ID ${accessKey}`,
       },
@@ -1159,11 +1203,11 @@ async function getUnsplashPhoto(
       return null;
     }
 
-    const chosen = pickBestScored(
+    const chosen = pickBestScored<UnsplashPhotoItem>(
       data.results,
       usedUnsplashIds,
-      (r: any) => String(r.id),
-      (r: any) => `${r.alt_description || ""} ${r.description || ""}`,
+      (r) => String(r.id),
+      (r) => `${r.alt_description || ""} ${r.description || ""}`,
       tokenizeQuery(searchQuery),
     );
 
@@ -1213,6 +1257,16 @@ async function getUnsplashPhoto(
   }
 }
 
+interface PixabayVideoHit {
+  id: number;
+  tags?: string;
+  videos?: {
+    medium?: { url?: string; width: number; height: number };
+    large?: { url?: string; width: number; height: number };
+    small?: { url?: string };
+  };
+}
+
 async function getPixabayVideo(
   query: string,
   apiKey: string,
@@ -1228,7 +1282,7 @@ async function getPixabayVideo(
       apiKey,
     )}&q=${encodeURIComponent(searchQuery)}&per_page=8`;
 
-    const res = await fetch(url);
+    const res = await fetchWithRetry(url);
     if (!res.ok) return null;
     const data = await res.json();
     if (!data.hits || !Array.isArray(data.hits) || data.hits.length === 0) {
@@ -1238,17 +1292,17 @@ async function getPixabayVideo(
     // Prioritize video clips matching target aspect ratio, then pick the best
     // tag-relevance match among those (falling back to the full set if none match).
     const isPortrait = targetRatio === "9:16";
-    const orientedHits = data.hits.filter((hit: { videos?: { medium?: { width: number; height: number }; large?: { width: number; height: number } } }) => {
+    const orientedHits = data.hits.filter((hit: PixabayVideoHit) => {
       const vid = hit.videos?.medium || hit.videos?.large;
       return vid && (isPortrait ? vid.height > vid.width : vid.width > vid.height);
     });
     const candidatePool = orientedHits.length > 0 ? orientedHits : data.hits;
 
-    const chosen = pickBestScored(
+    const chosen = pickBestScored<PixabayVideoHit>(
       candidatePool,
       usedPixabayVideoIds,
-      (h: any) => h.id,
-      (h: any) => h.tags || "",
+      (h) => h.id,
+      (h) => h.tags || "",
       tokenizeQuery(searchQuery),
     );
     usedPixabayVideoIds.add(chosen.id);
@@ -1285,6 +1339,13 @@ async function getPixabayVideo(
   }
 }
 
+interface PixabayPhotoHit {
+  id: number;
+  tags?: string;
+  largeImageURL?: string;
+  webformatURL?: string;
+}
+
 async function getPixabayPhoto(
   query: string,
   apiKey: string,
@@ -1301,18 +1362,18 @@ async function getPixabayPhoto(
       apiKey,
     )}&q=${encodeURIComponent(searchQuery)}&image_type=photo&orientation=${orientation}&per_page=8`;
 
-    const res = await fetch(url);
+    const res = await fetchWithRetry(url);
     if (!res.ok) return null;
     const data = await res.json();
     if (!data.hits || !Array.isArray(data.hits) || data.hits.length === 0) {
       return null;
     }
 
-    const chosen = pickBestScored(
+    const chosen = pickBestScored<PixabayPhotoHit>(
       data.hits,
       usedPixabayPhotoIds,
-      (h: any) => h.id,
-      (h: any) => h.tags || "",
+      (h) => h.id,
+      (h) => h.tags || "",
       tokenizeQuery(searchQuery),
     );
     usedPixabayPhotoIds.add(chosen.id);

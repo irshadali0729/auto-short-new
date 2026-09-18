@@ -28,6 +28,7 @@ import DuaEditModal from '@/app/components/DuaEditModal';
 import SceneLivePreviewPlayer from '@/app/components/SceneLivePreviewPlayer';
 import { getMediaUrl, isVideoAsset } from '@/app/utils/media-url';
 import { rescaleSceneDurations } from '@/app/utils/scene-timing';
+import { VIDEO_PROGRESS_POLL_INTERVAL_MS, MAX_NOT_FOUND_POLLS } from '@/app/config/client-config';
 import type { Scene, TranscriptSegment, DuaInfo } from '@/app/types/scene';
 
 export type { Scene, TranscriptSegment, GraphicBeat, CaptionSlice } from '@/app/types/scene';
@@ -60,7 +61,9 @@ export default function Home() {
   const [generationStep, setGenerationStep] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [pollCount, setPollCount] = useState<number>(0);
+  const [isCancelling, setIsCancelling] = useState(false);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
 
   // Clear any in-flight progress poll on unmount so it doesn't keep calling
   // setState after the component is gone.
@@ -376,6 +379,7 @@ export default function Home() {
     setGenerationStep('Initializing background video compilation worker...');
 
     const runId = 'run_' + Date.now();
+    activeRunIdRef.current = runId;
 
     try {
       const initRes = await fetch('/api/generate-video', {
@@ -408,7 +412,8 @@ export default function Home() {
       setGenerationStep('Processing video clips in background...');
 
       let localPollCount = 0;
-      // Polling interval set to 30 seconds (30000ms)
+      let notFoundStreak = 0;
+      const pollSeconds = VIDEO_PROGRESS_POLL_INTERVAL_MS / 1000;
       pollIntervalRef.current = setInterval(async () => {
         try {
           localPollCount++;
@@ -421,9 +426,27 @@ export default function Home() {
           }
           const progData = await progRes.json();
 
+          if (progData.found === false) {
+            // The job genuinely isn't tracked server-side anymore (e.g. the dev
+            // server restarted mid-generation). Don't poll forever in silence —
+            // give it one more try in case of a transient blip, then surface it.
+            notFoundStreak++;
+            if (notFoundStreak >= MAX_NOT_FOUND_POLLS) {
+              if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+              activeRunIdRef.current = null;
+              setIsGenerating(false);
+              setGenerationStep('');
+              setErrorMessage('Lost track of this generation job (the server may have restarted). Please try generating again.');
+            }
+            return;
+          }
+          notFoundStreak = 0;
+
           if (progData.complete) {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
+            activeRunIdRef.current = null;
             setIsGenerating(false);
             setGenerationStep('');
             if (progData.error) {
@@ -437,25 +460,52 @@ export default function Home() {
           } else {
             // Update UI subtext for each poll count
             if (localPollCount === 1) {
-              setGenerationStep('Check 1 (30s): Still rendering scene clips...');
+              setGenerationStep(`Check 1 (${pollSeconds}s): Still rendering scene clips...`);
             } else if (localPollCount === 2) {
-              setGenerationStep('Check 2 (60s): Merging video tracks...');
+              setGenerationStep(`Check 2 (${pollSeconds * 2}s): Merging video tracks...`);
             } else if (localPollCount === 3) {
-              setGenerationStep('Check 3 (90s): Finalizing compile files...');
+              setGenerationStep(`Check 3 (${pollSeconds * 3}s): Finalizing compile files...`);
             } else {
-              setGenerationStep(`Check ${localPollCount} (${localPollCount * 30}s): Final steps...`);
+              setGenerationStep(`Check ${localPollCount} (${localPollCount * pollSeconds}s): Final steps...`);
             }
           }
         } catch (pollErr) {
           console.error('Error polling background job status:', pollErr);
         }
-      }, 30000);
+      }, VIDEO_PROGRESS_POLL_INTERVAL_MS);
 
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Video generation failed to start.';
       setErrorMessage(errMsg);
       setIsGenerating(false);
       setGenerationStep('');
+      activeRunIdRef.current = null;
+    }
+  };
+
+  const handleCancelGeneration = async () => {
+    const runId = activeRunIdRef.current;
+    if (!runId || isCancelling) return;
+
+    setIsCancelling(true);
+    try {
+      await fetch('/api/generate-video/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId }),
+      });
+    } catch (err) {
+      console.error('Error cancelling generation job:', err);
+    } finally {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      activeRunIdRef.current = null;
+      setIsGenerating(false);
+      setGenerationStep('');
+      setIsCancelling(false);
+      setErrorMessage('Video generation cancelled.');
     }
   };
 
@@ -1113,6 +1163,14 @@ export default function Home() {
                 </div>
 
                 <p className="text-muted text-xs max-w-xs">{generationStep}</p>
+
+                <button
+                  onClick={handleCancelGeneration}
+                  disabled={isCancelling}
+                  className="mt-4 px-4 py-1.5 rounded-lg text-xs font-bold text-muted border border-hairline hover:bg-surface-soft transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {isCancelling ? 'Cancelling...' : 'Cancel'}
+                </button>
               </section>
             )}
 

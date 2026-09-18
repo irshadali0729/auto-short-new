@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Groq } from "groq-sdk";
 import { resolveEmojiForText } from "@/app/utils/emoji-resolver";
 import { rescaleSceneDurations } from "@/app/utils/scene-timing";
+import { withRetry } from "@/app/utils/retry";
 import type {
   GraphicBeat,
   TranscriptSegment,
@@ -10,6 +11,11 @@ import type {
 } from "@/app/types/scene";
 
 export type { GraphicBeat, TranscriptSegment, CaptionSlice } from "@/app/types/scene";
+
+function getGroqErrorStatus(err: unknown): number | undefined {
+  const asRecord = err as { status?: number; response?: { status?: number } } | null;
+  return asRecord?.status ?? asRecord?.response?.status;
+}
 
 function buildGraphicBeats(
   transcript: string,
@@ -274,6 +280,41 @@ function extractAndParseScenes(rawContent: string): GroqScene[] {
   } catch (_) {}
 
   throw new Error("Groq returned invalid or unparseable scene data.");
+}
+
+// Groq's response is free-form JSON from an LLM — before it flows into the video
+// pipeline, clamp it to sane bounds instead of trusting it outright. Individual
+// fields already have ad hoc `|| 5` style fallbacks for missing/NaN values, but
+// those don't catch a technically-valid-but-absurd value (e.g. a 400 second
+// scene, or 60 scenes for a 20 second video).
+const MIN_SCENE_DURATION_SEC = 1;
+const MAX_SCENE_DURATION_SEC = 30;
+const MAX_SCENE_COUNT = 20;
+
+function sanitizeScenes(scenesIn: GroqScene[]): GroqScene[] {
+  if (!Array.isArray(scenesIn) || scenesIn.length === 0) {
+    throw new Error("Groq returned no usable scenes.");
+  }
+
+  let sanitized = scenesIn.map((scene) => ({
+    ...scene,
+    duration: Math.min(
+      MAX_SCENE_DURATION_SEC,
+      Math.max(
+        MIN_SCENE_DURATION_SEC,
+        Number.isFinite(scene.duration) ? scene.duration : 5,
+      ),
+    ),
+  }));
+
+  if (sanitized.length > MAX_SCENE_COUNT) {
+    console.warn(
+      `Groq returned ${sanitized.length} scenes, truncating to ${MAX_SCENE_COUNT}.`,
+    );
+    sanitized = sanitized.slice(0, MAX_SCENE_COUNT);
+  }
+
+  return sanitized;
 }
 
 function buildLegacyPrompt(
@@ -581,23 +622,35 @@ export async function POST(request: Request) {
 
     for (const model of candidateModels) {
       try {
-        const chatCompletion = await groq.chat.completions.create({
-          messages: [
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-          model,
-          response_format: { type: "json_object" },
-          // Low temperature keeps rule-following (e.g. always attaching duaInfo)
-          // consistent across runs instead of varying scene-to-scene by sampling luck.
-          temperature: 0.2,
-          // Raised from 3500: with multiple Duas each needing a full corrected
-          // hindi+arabic duaInfo block, the previous limit could truncate the JSON
-          // mid-scene, silently dropping duaInfo (or whole scenes) near the cutoff.
-          max_tokens: 6500,
-        });
+        // Groq's own rate-limit (429) deserves a short backoff-and-retry on the
+        // SAME model since it's a transient "slow down", not a real failure.
+        // Any other error (bad request, model down, etc.) falls straight through
+        // to the next candidate model instead of wasting retries on it.
+        const chatCompletion = await withRetry(
+          () =>
+            groq.chat.completions.create({
+              messages: [
+                {
+                  role: "user",
+                  content: prompt,
+                },
+              ],
+              model,
+              response_format: { type: "json_object" },
+              // Low temperature keeps rule-following (e.g. always attaching duaInfo)
+              // consistent across runs instead of varying scene-to-scene by sampling luck.
+              temperature: 0.2,
+              // Raised from 3500: with multiple Duas each needing a full corrected
+              // hindi+arabic duaInfo block, the previous limit could truncate the JSON
+              // mid-scene, silently dropping duaInfo (or whole scenes) near the cutoff.
+              max_tokens: 6500,
+            }),
+          {
+            retries: 2,
+            baseDelayMs: 1000,
+            shouldRetry: (err) => getGroqErrorStatus(err) === 429,
+          },
+        );
 
         responseContent = chatCompletion.choices[0]?.message?.content || null;
         if (responseContent) {
@@ -638,6 +691,8 @@ export async function POST(request: Request) {
             }
           : undefined,
     }));
+
+    finalScenes = sanitizeScenes(finalScenes);
 
     if (hasSegments) {
       finalScenes = alignScenesToSegments(finalScenes, segments);

@@ -21,10 +21,12 @@ export async function GET(request: Request) {
     const progressData = progressMap.get(runId);
 
     if (!progressData) {
-      return NextResponse.json({ complete: false, error: 'Job not found or expired', videoPath: null });
+      // `found: false` lets the client tell "job genuinely not started yet"
+      // apart from "still rendering" instead of polling forever in silence.
+      return NextResponse.json({ complete: false, found: false, error: 'Job not found or expired', videoPath: null });
     }
 
-    return NextResponse.json(progressData);
+    return NextResponse.json({ found: true, ...progressData });
   } catch (error: unknown) {
     console.error('Error fetching progress:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

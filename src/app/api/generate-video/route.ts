@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { spawn } from "child_process";
+import { spawn, ChildProcess } from "child_process";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { cleanupAssets } from "@/app/utils/cleanup";
 import { renderGraphicOverlayPng } from "@/app/utils/graphics-renderer";
@@ -11,6 +11,18 @@ import {
 } from "@/app/utils/caption-renderer";
 import { DuaCardTheme, renderDuaOverlayPng } from "@/app/utils/dua-renderer";
 import { isVideoAsset } from "@/app/utils/media-url";
+import { withRetry } from "@/app/utils/retry";
+import {
+  ZOOM_STEP_BASE,
+  ZOOM_CAP,
+  CLEANUP_DELAY_MS,
+  PROGRESS_TTL_MS,
+  SCENE_RENDER_CONCURRENCY,
+  FFMPEG_THREADS_PER_SCENE,
+  OVERLAY_FONT_PATHS,
+  FFMPEG_MAX_ATTEMPTS,
+  FFMPEG_RETRY_BASE_DELAY_MS,
+} from "@/app/config/video-config";
 import type { Scene, GraphicBeat } from "@/app/types/scene";
 
 const ffmpegPath = ffmpegInstaller.path;
@@ -21,15 +33,39 @@ interface ProgressData {
   videoPath: string | null;
 }
 
+export interface JobControl {
+  processes: Set<ChildProcess>;
+  tempDir: string;
+  cancelled: boolean;
+}
+
 interface CustomGlobal {
   videoProgress?: Map<string, ProgressData>;
+  videoJobControl?: Map<string, JobControl>;
 }
 
 const customGlobal = global as unknown as CustomGlobal;
 if (!customGlobal.videoProgress) {
   customGlobal.videoProgress = new Map();
 }
+if (!customGlobal.videoJobControl) {
+  customGlobal.videoJobControl = new Map();
+}
 const progressMap = customGlobal.videoProgress;
+const jobControlMap = customGlobal.videoJobControl;
+
+// Marks a job finished and schedules the eviction of its progress/control
+// entries so the in-memory maps don't grow forever across a long-lived
+// server process (each generation used to leak a Map entry permanently).
+function finishJob(runId: string, data: ProgressData) {
+  progressMap.set(runId, data);
+  setTimeout(() => {
+    progressMap.delete(runId);
+    jobControlMap.delete(runId);
+  }, PROGRESS_TTL_MS);
+}
+
+const CANCELLED_ERROR_MESSAGE = "Video generation cancelled.";
 
 function escapeFilterText(value: string): string {
   return value
@@ -69,15 +105,7 @@ function buildDefaultGraphicBeats(duration: number): GraphicBeat[] {
 }
 
 function getFontFileParam(): string {
-  const fontPaths = [
-    "C:/Windows/Fonts/arialbd.ttf",
-    "C:/Windows/Fonts/segoeuib.ttf",
-    "C:/Windows/Fonts/arial.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-  ];
-  for (const p of fontPaths) {
+  for (const p of OVERLAY_FONT_PATHS) {
     if (fs.existsSync(p)) {
       const escaped = p.replace(/\\/g, "/").replace(/:/g, "\\:");
       return `fontfile='${escaped}'`;
@@ -189,6 +217,11 @@ export async function POST(request: Request) {
       error: null,
       videoPath: null,
     });
+    jobControlMap.set(runId, {
+      processes: new Set(),
+      tempDir: "",
+      cancelled: false,
+    });
 
     compileVideoInBackground(
       runId,
@@ -204,7 +237,7 @@ export async function POST(request: Request) {
       resolvedCaptionPosition,
     ).catch((err) => {
       console.error("Background compilation crash:", err);
-      progressMap.set(runId, {
+      finishJob(runId, {
         complete: true,
         error: err.message || "Background compilation failed.",
         videoPath: null,
@@ -234,6 +267,13 @@ async function compileVideoInBackground(
   captionPosition: CaptionPosition = "bottom",
 ) {
   let tempDir = "";
+  const jobControl: JobControl = jobControlMap.get(runId) || {
+    processes: new Set(),
+    tempDir: "",
+    cancelled: false,
+  };
+  jobControlMap.set(runId, jobControl);
+
   try {
     const projectRoot = process.cwd();
     const imageLibraryDir = path.join(projectRoot, "image-library");
@@ -249,6 +289,7 @@ async function compileVideoInBackground(
     const tempRunId = Date.now();
     tempDir = path.join(generatedDir, `temp_run_${tempRunId}`);
     fs.mkdirSync(tempDir, { recursive: true });
+    jobControl.tempDir = tempDir;
 
     const adjustedScenes = scenes.map((scene) => ({
       ...scene,
@@ -259,7 +300,7 @@ async function compileVideoInBackground(
           : buildDefaultGraphicBeats(Number(scene.duration) || 5),
     }));
 
-    const clipPaths: string[] = [];
+    const clipPaths: string[] = new Array(adjustedScenes.length);
 
 async function resolveSceneAsset(
   assetPathOrUrl: string,
@@ -290,7 +331,9 @@ async function resolveSceneAsset(
   return localPath;
 }
 
-    for (let i = 0; i < adjustedScenes.length; i++) {
+    async function renderSceneClip(i: number): Promise<void> {
+      if (jobControl.cancelled) throw new Error(CANCELLED_ERROR_MESSAGE);
+
       const scene = adjustedScenes[i];
       const imageFilename = scene.image;
       const duration = scene.duration;
@@ -298,13 +341,13 @@ async function resolveSceneAsset(
       const inputImagePath = await resolveSceneAsset(imageFilename, imageLibraryDir, tempDir, `remote_scene_${i}`);
 
       const clipOutputPath = path.join(tempDir, `clip_${i}.mp4`);
-      clipPaths.push(clipOutputPath);
+      clipPaths[i] = clipOutputPath;
 
       const isZoomIn = i % 2 === 0;
-      const speedStep = 0.0006 * zoomSpeedMultiplier;
+      const speedStep = ZOOM_STEP_BASE * zoomSpeedMultiplier;
       const zoomExpression = isZoomIn
-        ? `min(1.0+on*${speedStep},1.15)`
-        : `max(1.15-on*${speedStep},1.0)`;
+        ? `min(1.0+on*${speedStep},${ZOOM_CAP})`
+        : `max(${ZOOM_CAP}-on*${speedStep},1.0)`;
 
       const sceneFade = Math.min(transitionDuration, duration / 2);
 
@@ -579,11 +622,40 @@ async function resolveSceneAsset(
         "-pix_fmt",
         "yuv420p",
         "-threads",
-        "2",
+        FFMPEG_THREADS_PER_SCENE,
         clipOutputPath,
       );
 
-      await runFFmpegProcess(ffmpegArgs);
+      await withRetry(() => runFFmpegProcess(ffmpegArgs, jobControl), {
+        retries: FFMPEG_MAX_ATTEMPTS - 1,
+        baseDelayMs: FFMPEG_RETRY_BASE_DELAY_MS,
+        shouldRetry: (err) =>
+          !(err instanceof Error && err.message === CANCELLED_ERROR_MESSAGE) &&
+          !jobControl.cancelled,
+      });
+    }
+
+    // Render scene clips with bounded concurrency instead of strictly serially —
+    // scenes are independent (each writes its own clip_<i>.mp4), so a few can
+    // run through FFmpeg at once without risking cross-scene interference.
+    let nextSceneIndex = 0;
+    async function sceneWorker(): Promise<void> {
+      while (true) {
+        if (jobControl.cancelled) return;
+        const current = nextSceneIndex++;
+        if (current >= adjustedScenes.length) return;
+        await renderSceneClip(current);
+      }
+    }
+    await Promise.all(
+      Array.from(
+        { length: Math.min(SCENE_RENDER_CONCURRENCY, adjustedScenes.length) },
+        () => sceneWorker(),
+      ),
+    );
+
+    if (jobControl.cancelled) {
+      throw new Error(CANCELLED_ERROR_MESSAGE);
     }
 
     const mergedVideoPath = path.join(tempDir, "merged_video.mp4");
@@ -607,7 +679,13 @@ async function resolveSceneAsset(
       mergedVideoPath,
     ];
 
-    await runFFmpegProcess(concatArgs);
+    await withRetry(() => runFFmpegProcess(concatArgs, jobControl), {
+      retries: FFMPEG_MAX_ATTEMPTS - 1,
+      baseDelayMs: FFMPEG_RETRY_BASE_DELAY_MS,
+      shouldRetry: (err) =>
+        !(err instanceof Error && err.message === CANCELLED_ERROR_MESSAGE) &&
+        !jobControl.cancelled,
+    });
 
     const outputVideoPath = path.join(generatedDir, "output.mp4");
     fs.copyFileSync(mergedVideoPath, outputVideoPath);
@@ -618,7 +696,7 @@ async function resolveSceneAsset(
       console.warn("Temporary directory cleanup failed:", cleanupErr);
     }
 
-    progressMap.set(runId, {
+    finishJob(runId, {
       complete: true,
       error: null,
       videoPath: `/api/video?t=${Date.now()}`,
@@ -628,15 +706,15 @@ async function resolveSceneAsset(
       process.env.NODE_ENV === "production" ||
       process.env.CLEANUP_ASSETS === "true";
     if (isProduction) {
-      setTimeout(
-        () => {
-          cleanupAssets();
-        },
-        10 * 60 * 1000,
-      );
+      setTimeout(() => {
+        cleanupAssets();
+      }, CLEANUP_DELAY_MS);
     }
   } catch (error: unknown) {
-    console.error("Error generating video via FFmpeg in background:", error);
+    const isCancellation = error instanceof Error && error.message === CANCELLED_ERROR_MESSAGE;
+    if (!isCancellation) {
+      console.error("Error generating video via FFmpeg in background:", error);
+    }
     if (tempDir && fs.existsSync(tempDir)) {
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });
@@ -644,7 +722,7 @@ async function resolveSceneAsset(
     }
     const errorMessage =
       error instanceof Error ? error.message : "FFmpeg compilation failed.";
-    progressMap.set(runId, {
+    finishJob(runId, {
       complete: true,
       error: errorMessage,
       videoPath: null,
@@ -652,18 +730,27 @@ async function resolveSceneAsset(
   }
 }
 
-function runFFmpegProcess(args: string[]): Promise<string> {
+function runFFmpegProcess(args: string[], jobControl?: JobControl): Promise<string> {
+  if (jobControl?.cancelled) {
+    return Promise.reject(new Error(CANCELLED_ERROR_MESSAGE));
+  }
+
   return new Promise((resolve, reject) => {
     console.log(`Executing FFmpeg: ${ffmpegPath} ${args.join(" ")}`);
     const proc = spawn(ffmpegPath, args);
+    jobControl?.processes.add(proc);
     let stderr = "";
+    let killedByCancel = false;
 
     proc.stderr.on("data", (data) => {
       stderr += data.toString();
     });
 
     proc.on("close", (code) => {
-      if (code === 0) {
+      jobControl?.processes.delete(proc);
+      if (killedByCancel || jobControl?.cancelled) {
+        reject(new Error(CANCELLED_ERROR_MESSAGE));
+      } else if (code === 0) {
         resolve(stderr);
       } else {
         reject(
@@ -673,7 +760,23 @@ function runFFmpegProcess(args: string[]): Promise<string> {
     });
 
     proc.on("error", (err) => {
+      jobControl?.processes.delete(proc);
       reject(new Error(`FFmpeg start error: ${err.message}`));
     });
+
+    // If cancellation arrives while this process is running, kill it so a
+    // stopped generation doesn't keep FFmpeg burning CPU in the background.
+    if (jobControl) {
+      const cancelCheckInterval = setInterval(() => {
+        if (jobControl.cancelled) {
+          killedByCancel = true;
+          clearInterval(cancelCheckInterval);
+          try {
+            proc.kill("SIGTERM");
+          } catch {}
+        }
+      }, 500);
+      proc.on("close", () => clearInterval(cancelCheckInterval));
+    }
   });
 }
