@@ -404,10 +404,10 @@ export default function Home() {
         body: JSON.stringify({
           scenes,
           runId,
-          zoomSpeed: mediaSettings.zoomSpeed ?? 1.0,
-          transitionDuration: mediaSettings.transitionDuration ?? 0.3,
+          zoomSpeed: mediaSettings.zoomSpeed ?? DEFAULT_MEDIA_SETTINGS.zoomSpeed,
+          transitionDuration: mediaSettings.transitionDuration ?? DEFAULT_MEDIA_SETTINGS.transitionDuration,
           textOverlayMode: mediaSettings.textOverlayMode || (mediaSettings.enableGraphicMotion ? 'graphics' : 'captions'),
-          captionPosition: mediaSettings.captionPosition || 'bottom',
+          captionPosition: mediaSettings.captionPosition || DEFAULT_MEDIA_SETTINGS.captionPosition,
           enableGraphicMotion: mediaSettings.textOverlayMode === 'graphics',
           enableCaptions: mediaSettings.textOverlayMode === 'captions',
           aspectRatio: mediaSettings.aspectRatio || '9:16',
@@ -613,10 +613,10 @@ export default function Home() {
             </span>
             <span className="text-hairline">•</span>
             <span className="font-medium text-ink">Zoom:</span>
-            <span className="font-bold text-ink tabular-nums">{(mediaSettings.zoomSpeed ?? 1.0).toFixed(1)}x</span>
+            <span className="font-bold text-ink tabular-nums">{(mediaSettings.zoomSpeed ?? DEFAULT_MEDIA_SETTINGS.zoomSpeed).toFixed(1)}x</span>
             <span className="text-hairline">•</span>
             <span className="font-medium text-ink">Fade:</span>
-            <span className="font-bold text-ink tabular-nums">{(mediaSettings.transitionDuration ?? 0.3).toFixed(1)}s</span>
+            <span className="font-bold text-ink tabular-nums">{(mediaSettings.transitionDuration ?? DEFAULT_MEDIA_SETTINGS.transitionDuration).toFixed(1)}s</span>
             <button
               type="button"
               onClick={() => setIsSettingsOpen(true)}

@@ -10,7 +10,7 @@ Tracks the findings from the codebase audit and their status. See git history fo
 - Fixed the O(n²) storyboard re-render (`page.tsx`) with a `useMemo` prefix-sum of scene start times.
 - Fixed the generation-progress `setInterval` leaking past unmount (now tracked in a ref and cleared on unmount).
 
-## 2. Reliability — ⬜ Not started
+## 2. Reliability — ✅ Complete
 
 - `global.videoProgress` Map entries are never deleted after a job finishes (memory leak per process lifetime).
 - Lost `runId` (e.g. dev server restart) returns `complete:false` with an error the client never surfaces — client polls forever.
@@ -36,12 +36,12 @@ Tracks the findings from the codebase audit and their status. See git history fo
 - **`cleanupAssets()` never touches `pixabay_*` files** — an actual bug in the existing cleanup feature: Pexels/Unsplash assets get purged, Pixabay assets accumulate forever.
 - `library-cache.ts`'s cache is process-local — in any multi-instance deployment, other instances serve stale `list-images` results for up to 60s after an asset is added elsewhere.
 
-## 5. Performance — ⬜ Not started
+## 5. Performance — ✅ Complete
 
 - `library-cache.ts` does a full recursive `fs.statSync`-per-file scan with no depth limit on cold cache.
 - FFmpeg's `-preset superfast -threads 2` are fixed regardless of host machine or scene resolution.
 
-## 6. UX / Accessibility — ⬜ Not started
+## 6. UX / Accessibility — ✅ Complete
 
 - None of the 3 modals (`SettingsModal`, `ReplaceImageModal`, `DuaEditModal`) implement a focus trap; `DuaEditModal` doesn't set initial focus on open.
 - `DuaEditModal` has no validation — a user can save an empty Dua card silently.
@@ -57,7 +57,7 @@ Tracks the findings from the codebase audit and their status. See git history fo
 - Tailwind pinned at v3.4.1 alongside Next 15/React 19 — a version-skew note for future upgrades.
 - No `engines`/`.nvmrc` Node pin, notable given hardcoded Windows-specific font paths baked into the server route.
 
-## 8. Code quality — ⬜ Not started
+## 8. Code quality — ✅ Complete
 
 - Heavy `any` typing in `match-images/route.ts`'s Pexels/Unsplash/Pixabay response-scoring helpers.
 - `extractAndParseScenes`'s six sequential JSON-repair fallbacks swallow all errors silently with no logging of which strategy succeeded.
