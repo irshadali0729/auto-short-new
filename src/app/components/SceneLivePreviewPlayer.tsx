@@ -29,9 +29,9 @@ export interface StoryboardScene {
   image: string;
   duration: number;
   emoji?: string;
-  isHostScene?: boolean;
+  isAvatarScene?: boolean;
   isSplitScreen?: boolean;
-  hostAsset?: string;
+  avatarAsset?: string;
   isFallback?: boolean;
   matchedTier?: string;
   visualQuery?: string;
@@ -316,21 +316,21 @@ export default function SceneLivePreviewPlayer({
               ⚡ Split Screen
             </span>
           )}
-          {activeScene.isHostScene && (
+          {activeScene.isAvatarScene && (
             <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-600 text-white shadow-xs">
-              🎙️ Host
+              🎙️ Avatar
             </span>
           )}
         </div>
 
         {/* Background Visual Media Layer */}
-        {activeScene.isSplitScreen && activeScene.hostAsset ? (
-          /* Dual Split-Screen (Top: Host Video, Bottom: Stock Asset) */
+        {activeScene.isSplitScreen && activeScene.avatarAsset ? (
+          /* Dual Split-Screen (Top: Avatar Video, Bottom: Stock Asset) */
           <div className="w-full h-full flex flex-col relative">
-            {/* Top Half: Host Video */}
+            {/* Top Half: Avatar Video */}
             <div className="h-1/2 w-full relative overflow-hidden bg-zinc-900 border-b-2 border-white/30">
               <video
-                src={getMediaUrl(activeScene.hostAsset)}
+                src={getMediaUrl(activeScene.avatarAsset)}
                 autoPlay
                 loop
                 muted
@@ -338,7 +338,7 @@ export default function SceneLivePreviewPlayer({
                 className="w-full h-full object-cover"
               />
               <span className="absolute bottom-1.5 right-2 px-1.5 py-0.5 rounded text-[8px] font-bold bg-black/70 text-white backdrop-blur-xs border border-white/10">
-                🎙️ Host Video
+                🎙️ Avatar Video
               </span>
             </div>
 

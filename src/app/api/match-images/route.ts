@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { getHostVideos, pickRandomHostVideo } from "@/app/utils/host-library";
+import { getAvatarVideos, pickRandomAvatarVideo } from "@/app/utils/avatar-library";
 import { getCachedLibrary, addLibraryCacheItem } from "@/app/utils/library-cache";
 import { withRetry } from "@/app/utils/retry";
 import type { GraphicBeat, CaptionSlice, DuaInfo, Scene } from "@/app/types/scene";
@@ -49,8 +49,9 @@ interface MediaSettingsPayload {
   mediaType?: "only_videos" | "only_images" | "both";
   useRelatableVisualSearch?: boolean;
   aspectRatio?: "9:16" | "16:9";
-  enableVideoHost?: boolean;
-  videoHostType?: string;
+  enableAvatarHost?: boolean;
+  avatarCategory?: string;
+  avatarId?: string;
 }
 
 function tokenizeQuery(text: string): string[] {
@@ -194,11 +195,12 @@ export async function POST(request: Request) {
 
     const targetRatio: "9:16" | "16:9" = mediaSettings.aspectRatio || "9:16";
 
-    const isHostEnabled = Boolean(mediaSettings.enableVideoHost);
-    const hostType = mediaSettings.videoHostType || "women_host";
-    const availableHostVideos = isHostEnabled ? getHostVideos(hostType) : [];
-    const hasHostVideos = availableHostVideos.length > 0;
-    let lastHostAsset: string | undefined = undefined;
+    const isAvatarEnabled = Boolean(mediaSettings.enableAvatarHost);
+    const avatarCategory = mediaSettings.avatarCategory || "women_avatars";
+    const avatarId = mediaSettings.avatarId || "Avatar-1";
+    const availableAvatarVideos = isAvatarEnabled ? getAvatarVideos(avatarCategory, avatarId) : [];
+    const hasAvatarVideos = availableAvatarVideos.length > 0;
+    let lastAvatarAsset: string | undefined = undefined;
 
     const matchedScenes: Scene[] = [];
 
@@ -214,20 +216,20 @@ export async function POST(request: Request) {
       const { keyword, duration, graphics, captions, visualQuery, fallbackQuery, moodQuery } = scene;
       const kw = keyword ? keyword.trim() : "";
 
-      const isScene1Host = isHostEnabled && hasHostVideos && sceneIdx === 0;
-      const isSplitScreenScene = isHostEnabled && hasHostVideos && sceneIdx > 0 && sceneIdx % 4 === 3;
+      const isScene1Avatar = isAvatarEnabled && hasAvatarVideos && sceneIdx === 0;
+      const isSplitScreenScene = isAvatarEnabled && hasAvatarVideos && sceneIdx > 0 && sceneIdx % 4 === 3;
 
-      // Handle Scene 1 Full-Screen Host Presenter Hook directly
-      if (isScene1Host) {
-        const chosenHost: string = pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath;
-        lastHostAsset = chosenHost;
+      // Handle Scene 1 Full-Screen Avatar Presenter Hook directly
+      if (isScene1Avatar) {
+        const chosenAvatar: string = pickRandomAvatarVideo(avatarCategory, avatarId, lastAvatarAsset) || availableAvatarVideos[0].relativePath;
+        lastAvatarAsset = chosenAvatar;
         matchedScenes.push({
           keyword,
           duration,
-          image: chosenHost,
+          image: chosenAvatar,
           isFallback: false,
-          isHostScene: true,
-          hostAsset: chosenHost,
+          isAvatarScene: true,
+          avatarAsset: chosenAvatar,
           visualQuery,
           fallbackQuery,
           moodQuery,
@@ -372,11 +374,11 @@ export async function POST(request: Request) {
           matchedQuery = "Fallback Asset";
         }
 
-        const chosenHost: string | undefined = isSplitScreenScene
-          ? pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath
+        const chosenAvatar: string | undefined = isSplitScreenScene
+          ? pickRandomAvatarVideo(avatarCategory, avatarId, lastAvatarAsset) || availableAvatarVideos[0].relativePath
           : undefined;
-        if (chosenHost) {
-          lastHostAsset = chosenHost;
+        if (chosenAvatar) {
+          lastAvatarAsset = chosenAvatar;
         }
 
         matchedScenes.push({
@@ -385,7 +387,7 @@ export async function POST(request: Request) {
           image: chosenAsset,
           isFallback: matchedTier === "random",
           isSplitScreen: isSplitScreenScene,
-          hostAsset: chosenHost,
+          avatarAsset: chosenAvatar,
           stockAsset: isSplitScreenScene ? chosenAsset : undefined,
           visualQuery,
           fallbackQuery,
@@ -414,11 +416,11 @@ export async function POST(request: Request) {
 
         if (localMatches.length > 0) {
           const selected = localMatches[0];
-          const chosenHost: string | undefined = isSplitScreenScene
-            ? pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath
+          const chosenAvatar: string | undefined = isSplitScreenScene
+            ? pickRandomAvatarVideo(avatarCategory, avatarId, lastAvatarAsset) || availableAvatarVideos[0].relativePath
             : undefined;
-          if (chosenHost) {
-            lastHostAsset = chosenHost;
+          if (chosenAvatar) {
+            lastAvatarAsset = chosenAvatar;
           }
 
           matchedScenes.push({
@@ -427,7 +429,7 @@ export async function POST(request: Request) {
             image: selected,
             isFallback: false,
             isSplitScreen: isSplitScreenScene,
-            hostAsset: chosenHost,
+            avatarAsset: chosenAvatar,
             stockAsset: isSplitScreenScene ? selected : undefined,
             matchedTier: "local",
             matchedQuery: isSplitScreenScene ? `${kw} (Split Screen)` : kw,
@@ -446,11 +448,11 @@ export async function POST(request: Request) {
             usedAssets,
             preferVideo,
           );
-          const chosenHost = isSplitScreenScene
-            ? pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath
+          const chosenAvatar = isSplitScreenScene
+            ? pickRandomAvatarVideo(avatarCategory, avatarId, lastAvatarAsset) || availableAvatarVideos[0].relativePath
             : undefined;
-          if (chosenHost) {
-            lastHostAsset = chosenHost;
+          if (chosenAvatar) {
+            lastAvatarAsset = chosenAvatar;
           }
 
           matchedScenes.push({
@@ -459,7 +461,7 @@ export async function POST(request: Request) {
             image: fallback,
             isFallback: true,
             isSplitScreen: isSplitScreenScene,
-            hostAsset: chosenHost,
+            avatarAsset: chosenAvatar,
             stockAsset: isSplitScreenScene ? fallback : undefined,
             matchedTier: "legacy",
             matchedQuery: isSplitScreenScene ? "Fallback (Split Screen)" : "Fallback",
@@ -540,11 +542,11 @@ export async function POST(request: Request) {
           }
         }
 
-        const chosenHost: string | undefined = isSplitScreenScene
-          ? pickRandomHostVideo(hostType, lastHostAsset) || availableHostVideos[0].relativePath
+        const chosenAvatar: string | undefined = isSplitScreenScene
+          ? pickRandomAvatarVideo(avatarCategory, avatarId, lastAvatarAsset) || availableAvatarVideos[0].relativePath
           : undefined;
-        if (chosenHost) {
-          lastHostAsset = chosenHost;
+        if (chosenAvatar) {
+          lastAvatarAsset = chosenAvatar;
         }
 
         // If remote provider found asset, record and continue
@@ -555,7 +557,7 @@ export async function POST(request: Request) {
             image: foundAsset,
             isFallback: false,
             isSplitScreen: isSplitScreenScene,
-            hostAsset: chosenHost,
+            avatarAsset: chosenAvatar,
             stockAsset: isSplitScreenScene ? foundAsset : undefined,
             matchedTier: "legacy",
             matchedQuery: isSplitScreenScene ? `${kw} (Split Screen)` : kw,
@@ -580,7 +582,7 @@ export async function POST(request: Request) {
           image: fallback,
           isFallback: true,
           isSplitScreen: isSplitScreenScene,
-          hostAsset: chosenHost,
+          avatarAsset: chosenAvatar,
           stockAsset: isSplitScreenScene ? fallback : undefined,
           matchedTier: "legacy",
           matchedQuery: isSplitScreenScene ? "Fallback (Split Screen)" : "Fallback",

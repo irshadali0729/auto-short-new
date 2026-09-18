@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useFocusTrap } from "@/app/utils/useFocusTrap";
 import SettingsAccordionSection from "@/app/components/settings/SettingsAccordionSection";
+import { getMediaUrl } from "@/app/utils/media-url";
 import type { GraphicMotionThemeOption } from "@/app/types/scene";
 
 export type { GraphicMotionThemeOption } from "@/app/types/scene";
@@ -34,6 +35,13 @@ export type CaptionPosition = "top" | "middle" | "bottom";
 export type VideoAspectRatio = "9:16" | "16:9";
 export type EmojiStyleOption = "fluent" | "apple" | "twitter";
 export type DuaCardThemeOption = "cream" | "light_grey" | "white";
+
+interface AvatarPickerOption {
+  id: string;
+  category: string;
+  thumbnail: string | null;
+  videoCount: number;
+}
 
 export interface MediaSettings {
   sources: {
@@ -56,8 +64,9 @@ export interface MediaSettings {
   emojiStyle?: EmojiStyleOption;
   enableDuaOverlay?: boolean;
   duaCardTheme?: DuaCardThemeOption;
-  enableVideoHost?: boolean;
-  videoHostType?: string;
+  enableAvatarHost?: boolean;
+  avatarCategory?: string;
+  avatarId?: string;
 }
 
 export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
@@ -81,8 +90,9 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   emojiStyle: "fluent",
   enableDuaOverlay: false,
   duaCardTheme: "cream",
-  enableVideoHost: false,
-  videoHostType: "women_host",
+  enableAvatarHost: false,
+  avatarCategory: "women_avatars",
+  avatarId: "Avatar-1",
 };
 
 
@@ -164,14 +174,19 @@ export default function SettingsModal({
     );
   const [draftSaveOnlineMediaToDisk, setDraftSaveOnlineMediaToDisk] =
     useState<boolean>(settings?.saveOnlineMediaToDisk !== false);
-  const [draftEnableVideoHost, setDraftEnableVideoHost] = useState<boolean>(
-    settings?.enableVideoHost !== false,
+  const [draftEnableAvatarHost, setDraftEnableAvatarHost] = useState<boolean>(
+    settings?.enableAvatarHost !== false,
   );
-  const [draftVideoHostType, setDraftVideoHostType] = useState<string>(
-    settings?.videoHostType ||
-      DEFAULT_MEDIA_SETTINGS.videoHostType ||
-      "women_host",
+  const [draftAvatarCategory, setDraftAvatarCategory] = useState<string>(
+    settings?.avatarCategory ||
+      DEFAULT_MEDIA_SETTINGS.avatarCategory ||
+      "women_avatars",
   );
+  const [draftAvatarId, setDraftAvatarId] = useState<string>(
+    settings?.avatarId || DEFAULT_MEDIA_SETTINGS.avatarId || "Avatar-1",
+  );
+  const [avatarOptions, setAvatarOptions] = useState<AvatarPickerOption[]>([]);
+  const [avatarOptionsLoading, setAvatarOptionsLoading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<Set<string>>(
     new Set(DEFAULT_OPEN_SECTIONS),
@@ -238,11 +253,14 @@ export default function SettingsModal({
           DEFAULT_MEDIA_SETTINGS.duaCardTheme ||
           "cream",
       );
-      setDraftEnableVideoHost(settings?.enableVideoHost !== false);
-      setDraftVideoHostType(
-        settings?.videoHostType ||
-          DEFAULT_MEDIA_SETTINGS.videoHostType ||
-          "women_host",
+      setDraftEnableAvatarHost(settings?.enableAvatarHost !== false);
+      setDraftAvatarCategory(
+        settings?.avatarCategory ||
+          DEFAULT_MEDIA_SETTINGS.avatarCategory ||
+          "women_avatars",
+      );
+      setDraftAvatarId(
+        settings?.avatarId || DEFAULT_MEDIA_SETTINGS.avatarId || "Avatar-1",
       );
       setValidationError(null);
       setOpenSections(new Set(DEFAULT_OPEN_SECTIONS));
@@ -251,6 +269,28 @@ export default function SettingsModal({
       setTimeout(() => closeBtnRef.current?.focus(), 50);
     }
   }, [isOpen, settings]);
+
+  // Fetch the available avatar thumbnails for the picker whenever the modal
+  // opens or the selected avatar category changes.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setAvatarOptionsLoading(true);
+    fetch(`/api/list-avatars?category=${encodeURIComponent(draftAvatarCategory)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setAvatarOptions(data.avatars || []);
+      })
+      .catch(() => {
+        if (!cancelled) setAvatarOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAvatarOptionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, draftAvatarCategory]);
 
   // Keyboard accessibility: Close on Escape key
   useEffect(() => {
@@ -349,8 +389,9 @@ export default function SettingsModal({
       emojiStyle: draftEmojiStyle || "fluent",
       enableDuaOverlay: draftEnableDuaOverlay !== false,
       duaCardTheme: draftDuaCardTheme || "cream",
-      enableVideoHost: draftEnableVideoHost !== false,
-      videoHostType: draftVideoHostType || "women_host",
+      enableAvatarHost: draftEnableAvatarHost !== false,
+      avatarCategory: draftAvatarCategory || "women_avatars",
+      avatarId: draftAvatarId || "Avatar-1",
     });
     onClose();
   };
@@ -374,8 +415,9 @@ export default function SettingsModal({
     setDraftEmojiStyle(DEFAULT_MEDIA_SETTINGS.emojiStyle || "fluent");
     setDraftEnableDuaOverlay(DEFAULT_MEDIA_SETTINGS.enableDuaOverlay !== false);
     setDraftDuaCardTheme(DEFAULT_MEDIA_SETTINGS.duaCardTheme || "cream");
-    setDraftEnableVideoHost(DEFAULT_MEDIA_SETTINGS.enableVideoHost !== false);
-    setDraftVideoHostType(DEFAULT_MEDIA_SETTINGS.videoHostType || "women_host");
+    setDraftEnableAvatarHost(DEFAULT_MEDIA_SETTINGS.enableAvatarHost !== false);
+    setDraftAvatarCategory(DEFAULT_MEDIA_SETTINGS.avatarCategory || "women_avatars");
+    setDraftAvatarId(DEFAULT_MEDIA_SETTINGS.avatarId || "Avatar-1");
     setValidationError(null);
     setOpenSections(new Set(DEFAULT_OPEN_SECTIONS));
     setActiveNavId("sources");
@@ -617,7 +659,7 @@ export default function SettingsModal({
       { id: "overlayMode", label: "Text", icon: Type },
       { id: "captions", label: "Captions", icon: Smile },
       { id: "dua", label: "Dua", icon: BookOpen },
-      { id: "host", label: "Host", icon: UserCheck },
+      { id: "avatar", label: "Avatar", icon: UserCheck },
       { id: "camera", label: "Motion", icon: SlidersHorizontal },
     ];
 
@@ -656,7 +698,9 @@ export default function SettingsModal({
       ? duaThemeOptions.find((o) => o.id === draftDuaCardTheme)?.label ||
         "Enabled"
       : "Disabled",
-    host: draftEnableVideoHost ? "Enabled" : "Disabled",
+    avatar: draftEnableAvatarHost
+      ? avatarOptions.find((a) => a.id === draftAvatarId)?.id || "Enabled"
+      : "Disabled",
     camera: `${draftZoomSpeed.toFixed(1)}x zoom · ${draftTransitionDuration.toFixed(
       1,
     )}s fade`,
@@ -1603,26 +1647,26 @@ export default function SettingsModal({
               </div>
             </SettingsAccordionSection>
 
-            {/* Section: AI Video Host Presenter & Split-Screen */}
+            {/* Section: AI Avatar Presenter & Split-Screen */}
             <SettingsAccordionSection
-              id="host"
-              title="AI Video Host Presenter & Split-Screen"
+              id="avatar"
+              title="AI Avatar Presenter & Split-Screen"
               icon={UserCheck}
-              summary={summaries.host}
-              isOpen={openSections.has("host")}
+              summary={summaries.avatar}
+              isOpen={openSections.has("avatar")}
               onToggle={toggleSection}
-              sectionRef={(el) => (sectionRefs.current.host = el)}
+              sectionRef={(el) => (sectionRefs.current.avatar = el)}
             >
               <p className="text-xs text-muted">
-                Incorporate physical host gesture clips into the short. Scene 1
-                acts as an engaging host intro hook, followed by stock footage,
+                Incorporate a chosen avatar's gesture clips into the short. Scene 1
+                acts as an engaging avatar intro hook, followed by stock footage,
                 and Scene 4 renders a dynamic 50/50 split screen.
               </p>
 
               {/* Toggle Card Container */}
               <div
                 className={`p-4 rounded-xl border transition-all ${
-                  draftEnableVideoHost
+                  draftEnableAvatarHost
                     ? "bg-[#fff8f9] border-rausch shadow-airbnb"
                     : "bg-white border-hairline"
                 }`}
@@ -1631,55 +1675,114 @@ export default function SettingsModal({
                 <div
                   role="button"
                   tabIndex={0}
-                  onClick={() => setDraftEnableVideoHost((prev) => !prev)}
+                  onClick={() => setDraftEnableAvatarHost((prev) => !prev)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      setDraftEnableVideoHost((prev) => !prev);
+                      setDraftEnableAvatarHost((prev) => !prev);
                     }
                   }}
                   className="flex items-start gap-3.5 cursor-pointer select-none"
                 >
                   <div
                     className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
-                      draftEnableVideoHost
+                      draftEnableAvatarHost
                         ? "border-rausch bg-rausch text-white"
                         : "border-hairline bg-white"
                     }`}
                   >
-                    {draftEnableVideoHost && (
+                    {draftEnableAvatarHost && (
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     )}
                   </div>
                   <div className="flex-grow min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-0.5">
                       <span className="text-sm font-bold text-ink flex items-center gap-1.5">
-                        Enable Video Host & Split-Screen Storytelling
+                        Enable Avatar & Split-Screen Storytelling
                       </span>
                       <span
                         className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border ${
-                          draftEnableVideoHost
+                          draftEnableAvatarHost
                             ? "bg-[#fff0f2] text-rausch border-[#ffd1da]"
                             : "bg-surface-soft text-muted border-hairline-soft"
                         }`}
                       >
-                        {draftEnableVideoHost ? "Active" : "Disabled"}
+                        {draftEnableAvatarHost ? "Active" : "Disabled"}
                       </span>
                     </div>
                     <p className="text-xs text-muted leading-tight">
-                      Automatically chooses gesture explanation videos from{" "}
-                      <code className="text-[11px] font-mono bg-surface-soft px-1 rounded">
-                        image-library/host/{draftVideoHostType}
-                      </code>{" "}
-                      and schedules full-screen and split-screen scenes.
+                      Automatically chooses gesture explanation videos from the
+                      selected avatar below and schedules full-screen and
+                      split-screen scenes.
                     </p>
                   </div>
+                </div>
+
+                {/* Avatar Picker Grid */}
+                <div
+                  className={`mt-3 pt-3 border-t border-hairline-soft transition-opacity ${
+                    draftEnableAvatarHost ? "opacity-100" : "opacity-40"
+                  }`}
+                >
+                  <span className="text-[11px] font-bold text-ink uppercase tracking-wide">
+                    Choose Avatar
+                  </span>
+                  {avatarOptionsLoading ? (
+                    <p className="mt-2 text-xs text-muted">Loading avatars…</p>
+                  ) : avatarOptions.length === 0 ? (
+                    <p className="mt-2 text-xs text-muted">
+                      No avatars found in{" "}
+                      <code className="text-[11px] font-mono bg-surface-soft px-1 rounded">
+                        image-library/avatars/{draftAvatarCategory}
+                      </code>
+                      .
+                    </p>
+                  ) : (
+                    <div className="mt-2 grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                      {avatarOptions.map((avatar) => {
+                        const isSelected = draftAvatarId === avatar.id;
+                        return (
+                          <button
+                            key={avatar.id}
+                            type="button"
+                            disabled={!draftEnableAvatarHost}
+                            onClick={() => setDraftAvatarId(avatar.id)}
+                            className={`group relative rounded-xl border overflow-hidden text-left transition-all ${
+                              isSelected
+                                ? "border-rausch ring-2 ring-rausch/40 shadow-airbnb"
+                                : "border-hairline hover:border-hairline-strong"
+                            }`}
+                          >
+                            <div className="aspect-square w-full bg-surface-soft flex items-center justify-center overflow-hidden">
+                              {avatar.thumbnail ? (
+                                <img
+                                  src={getMediaUrl(avatar.thumbnail)}
+                                  alt={avatar.id}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <UserCheck className="w-6 h-6 text-muted" />
+                              )}
+                            </div>
+                            <div className="px-1.5 py-1 bg-white flex items-center justify-between gap-1">
+                              <span className="text-[10px] font-bold text-ink truncate">
+                                {avatar.id}
+                              </span>
+                              {isSelected && (
+                                <Check className="w-3 h-3 text-rausch shrink-0" />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* 3-Scene Cadence Preview (Safely separated from toggle row) */}
                 <div
                   className={`mt-3 pt-3 border-t border-hairline-soft grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] transition-opacity ${
-                    draftEnableVideoHost ? "opacity-100" : "opacity-40"
+                    draftEnableAvatarHost ? "opacity-100" : "opacity-40"
                   }`}
                 >
                   <div className="p-2.5 rounded-lg bg-white border border-hairline flex flex-col gap-1 shadow-xs">
@@ -1688,7 +1791,7 @@ export default function SettingsModal({
                       Scene 1: Hook
                     </span>
                     <span className="text-[10px] text-muted leading-tight">
-                      Full-screen host gesture explaining topic
+                      Full-screen avatar gesture explaining topic
                     </span>
                   </div>
 
@@ -1708,7 +1811,7 @@ export default function SettingsModal({
                       Scene 4: Split-Screen
                     </span>
                     <span className="text-[10px] text-muted leading-tight">
-                      Top 50% Host clip + Bottom 50% Stock
+                      Top 50% Avatar clip + Bottom 50% Stock
                     </span>
                   </div>
                 </div>

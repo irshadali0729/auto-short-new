@@ -499,19 +499,19 @@ async function resolveSceneAsset(
 
       const sceneImageIsVideo = isVideoAsset(imageFilename);
 
-      const isSplitScreenScene = Boolean(scene.isSplitScreen && scene.hostAsset);
-      const hostFilename = scene.hostAsset || "";
-      const inputHostPath = isSplitScreenScene
-        ? await resolveSceneAsset(hostFilename, imageLibraryDir, tempDir, `remote_host_${i}`)
+      const isSplitScreenScene = Boolean(scene.isSplitScreen && scene.avatarAsset);
+      const avatarFilename = scene.avatarAsset || "";
+      const inputAvatarPath = isSplitScreenScene
+        ? await resolveSceneAsset(avatarFilename, imageLibraryDir, tempDir, `remote_avatar_${i}`)
         : "";
-      const hasValidHostFile = isSplitScreenScene && Boolean(inputHostPath && fs.existsSync(inputHostPath));
+      const hasValidAvatarFile = isSplitScreenScene && Boolean(inputAvatarPath && fs.existsSync(inputAvatarPath));
 
 
       let filterGraph = "";
       let overlayBaseInputIdx = 1;
 
-      if (hasValidHostFile) {
-        overlayBaseInputIdx = 2; // Input 0: Host Video, Input 1: Stock Media
+      if (hasValidAvatarFile) {
+        overlayBaseInputIdx = 2; // Input 0: Avatar Video, Input 1: Stock Media
         const isStockVideo = isVideoAsset(imageFilename);
 
         if (targetRatio === "16:9") {
@@ -630,9 +630,9 @@ async function resolveSceneAsset(
       }
 
       const ffmpegArgs = ["-y"];
-      if (hasValidHostFile) {
-        // Input 0: Host video clip
-        ffmpegArgs.push("-stream_loop", "-1", "-i", inputHostPath);
+      if (hasValidAvatarFile) {
+        // Input 0: Avatar video clip
+        ffmpegArgs.push("-stream_loop", "-1", "-i", inputAvatarPath);
         // Input 1: Stock media (video or still photo)
         if (isVideoAsset(imageFilename)) {
           ffmpegArgs.push("-stream_loop", "-1", "-i", inputImagePath);

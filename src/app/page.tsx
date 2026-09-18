@@ -416,8 +416,9 @@ export default function Home() {
           emojiStyle: mediaSettings.emojiStyle || 'fluent',
           enableDuaOverlay: mediaSettings.enableDuaOverlay !== false,
           duaCardTheme: mediaSettings.duaCardTheme || 'cream',
-          enableVideoHost: mediaSettings.enableVideoHost !== false,
-          videoHostType: mediaSettings.videoHostType || 'women_host',
+          enableAvatarHost: mediaSettings.enableAvatarHost !== false,
+          avatarCategory: mediaSettings.avatarCategory || 'women_avatars',
+          avatarId: mediaSettings.avatarId || 'Avatar-1',
         }),
       });
 
@@ -609,8 +610,8 @@ export default function Home() {
             </span>
             <span className="text-hairline">•</span>
             <span className="font-medium text-ink">Host:</span>
-            <span className={`font-bold ${mediaSettings.enableVideoHost !== false ? 'text-emerald-700' : 'text-muted'}`}>
-              {mediaSettings.enableVideoHost !== false ? 'Active' : 'Off'}
+            <span className={`font-bold ${mediaSettings.enableAvatarHost !== false ? 'text-emerald-700' : 'text-muted'}`}>
+              {mediaSettings.enableAvatarHost !== false ? 'Active' : 'Off'}
             </span>
             <span className="text-hairline">•</span>
             <span className="font-medium text-ink">Zoom:</span>
@@ -855,12 +856,12 @@ export default function Home() {
 
                         {/* Scene Media Preview (Video or Image or Dual Split Screen) */}
                         <div className="relative h-44 bg-surface-soft flex items-center justify-center overflow-hidden">
-                          {scene.isSplitScreen && scene.hostAsset ? (
-                            /* Dual Split-Screen Preview (Top: Host Video, Bottom: Stock Media) */
+                          {scene.isSplitScreen && scene.avatarAsset ? (
+                            /* Dual Split-Screen Preview (Top: Avatar Video, Bottom: Stock Media) */
                             <div className="w-full h-full flex flex-col relative">
                               <div className="h-1/2 w-full relative overflow-hidden bg-black/40 border-b border-white/40">
                                 <video
-                                  src={getMediaUrl(scene.hostAsset)}
+                                  src={getMediaUrl(scene.avatarAsset)}
                                   autoPlay
                                   loop
                                   muted
@@ -945,9 +946,9 @@ export default function Home() {
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-900/80 text-white shadow-sm border border-white/20 backdrop-blur-md">
                                 {mediaSettings.aspectRatio === '16:9' ? '16:9' : '9:16'}
                               </span>
-                              {scene.isHostScene ? (
+                              {scene.isAvatarScene ? (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-700 text-white shadow-sm flex items-center gap-1">
-                                  🎙️ Host Hook
+                                  🎙️ Avatar Hook
                                 </span>
                               ) : scene.isSplitScreen ? (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-600 text-white shadow-sm flex items-center gap-1">

@@ -75,9 +75,9 @@ export interface Scene {
   duration: number;
   image: string;
   isFallback: boolean;
-  isHostScene?: boolean;
+  isAvatarScene?: boolean;
   isSplitScreen?: boolean;
-  hostAsset?: string;
+  avatarAsset?: string;
   stockAsset?: string;
   visualQuery?: string;
   fallbackQuery?: string;

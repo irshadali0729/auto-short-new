@@ -36,8 +36,15 @@ async function scanDirectoryRecursively(dir: string, baseDir: string): Promise<C
       const fullPath = path.join(dir, entry.name);
 
       if (entry.isDirectory()) {
-        // Skip hidden folders, temp directories, or node_modules
-        if (!entry.name.startsWith('.') && entry.name !== 'temp' && entry.name !== 'node_modules') {
+        // Skip hidden folders, temp directories, node_modules, and the avatar
+        // presenter library (avatar clips are resolved via avatar-library.ts,
+        // not the general stock-media matching cascade).
+        if (
+          !entry.name.startsWith('.') &&
+          entry.name !== 'temp' &&
+          entry.name !== 'node_modules' &&
+          entry.name !== 'avatars'
+        ) {
           subdirScans.push(scanDirectoryRecursively(fullPath, baseDir));
         }
       } else if (entry.isFile()) {

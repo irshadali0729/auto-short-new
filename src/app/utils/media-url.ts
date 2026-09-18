@@ -20,7 +20,7 @@ export function getMediaUrl(mediaPath?: string): string {
     return mediaPath;
   }
 
-  // Clean relative or nested paths (e.g., "host/women_host/gesture-1.mp4" or "pexels-123.jpg")
+  // Clean relative or nested paths (e.g., "avatars/women_avatars/Avatar-1/gesture-1.mp4" or "pexels-123.jpg")
   const normalized = mediaPath.replace(/\\/g, '/').replace(/^\/+/, '');
   const encodedSegments = normalized.split('/').map(segment => encodeURIComponent(segment)).join('/');
   
