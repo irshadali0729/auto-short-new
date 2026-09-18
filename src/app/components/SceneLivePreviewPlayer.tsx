@@ -192,8 +192,9 @@ export default function SceneLivePreviewPlayer({
   if (!activeScene) return null;
 
   // Generate Dua Card SVG for live overlay
+  const duaOverlayEnabled = mediaSettings.enableDuaOverlay !== false;
   let liveDuaCardSvg = '';
-  if (activeScene.duaInfo?.isDua) {
+  if (duaOverlayEnabled && activeScene.duaInfo?.isDua) {
     const targetW = isLandscape ? 1920 : 1080;
     const targetH = isLandscape ? 1080 : 1920;
     liveDuaCardSvg = generateDuaCardSvg(
@@ -549,7 +550,7 @@ export default function SceneLivePreviewPlayer({
         )}
 
         {/* --- LIVE OVERLAY LAYER 3: DUA CARD --- */}
-        {activeScene.duaInfo?.isDua && liveDuaCardSvg && (
+        {duaOverlayEnabled && activeScene.duaInfo?.isDua && liveDuaCardSvg && (
           <div
             className="absolute inset-0 z-20 flex items-center justify-center p-2 pointer-events-none"
             dangerouslySetInnerHTML={{ __html: liveDuaCardSvg }}
