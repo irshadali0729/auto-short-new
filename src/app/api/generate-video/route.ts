@@ -95,6 +95,13 @@ function escapeFilterText(value: string): string {
     .replace(/\\/g, "\\\\")
     .replace(/'/g, "\\'")
     .replace(/:/g, "\\:")
+    // '%' triggers drawtext's text-expansion syntax (e.g. %{expr:...}) and
+    // '[' / ']' are filtergraph link-label delimiters — this text can
+    // originate from uncontrolled LLM output, so all three need escaping
+    // the same way ':' already was, not just quotes/backslashes.
+    .replace(/%/g, "\\%")
+    .replace(/\[/g, "\\[")
+    .replace(/\]/g, "\\]")
     .replace(/\n/g, "\\\n");
 }
 
@@ -127,14 +134,23 @@ function buildDefaultGraphicBeats(duration: number): GraphicBeat[] {
   ];
 }
 
+// The font path list never changes at runtime, so the fs.existsSync() probe
+// only needs to run once per process instead of once per graphics-overlay
+// scene (a video with 10 scenes was doing this filesystem probe 10x over).
+let cachedFontFileParam: string | null = null;
+
 function getFontFileParam(): string {
+  if (cachedFontFileParam !== null) return cachedFontFileParam;
+
   for (const p of OVERLAY_FONT_PATHS) {
     if (fs.existsSync(p)) {
       const escaped = p.replace(/\\/g, "/").replace(/:/g, "\\:");
-      return `fontfile='${escaped}'`;
+      cachedFontFileParam = `fontfile='${escaped}'`;
+      return cachedFontFileParam;
     }
   }
-  return "font='Arial'";
+  cachedFontFileParam = "font='Arial'";
+  return cachedFontFileParam;
 }
 
 function buildGraphicsFilter(scene: Scene): { filterChain: string; lastLabel: string } {

@@ -230,9 +230,12 @@ function extractAndParseScenes(rawContent: string): GroqScene[] {
   try {
     const data = JSON.parse(cleaned);
     if (data.scenes && Array.isArray(data.scenes) && data.scenes.length > 0) {
+      console.log("[analyze-transcript] Parsed scenes via strategy 3 (direct JSON.parse).");
       return data.scenes;
     }
-  } catch (_) {}
+  } catch (err) {
+    console.warn("[analyze-transcript] Strategy 3 (direct JSON.parse) failed:", (err as Error).message);
+  }
 
   // 4. Sanitize unescaped control chars / literal newlines in strings
   try {
@@ -244,9 +247,12 @@ function extractAndParseScenes(rawContent: string): GroqScene[] {
     });
     const data = JSON.parse(sanitized);
     if (data.scenes && Array.isArray(data.scenes) && data.scenes.length > 0) {
+      console.log("[analyze-transcript] Parsed scenes via strategy 4 (control-char sanitize).");
       return data.scenes;
     }
-  } catch (_) {}
+  } catch (err) {
+    console.warn("[analyze-transcript] Strategy 4 (control-char sanitize) failed:", (err as Error).message);
+  }
 
   // 5. Regex extraction of valid completed scene objects if truncated
   const sceneObjects: GroqScene[] = [];
@@ -256,9 +262,12 @@ function extractAndParseScenes(rawContent: string): GroqScene[] {
     try {
       const sc = JSON.parse(match[0]);
       if (sc.keyword) sceneObjects.push(sc);
-    } catch (_) {}
+    } catch (err) {
+      console.warn("[analyze-transcript] Strategy 5 (regex scene extraction) skipped a malformed match:", (err as Error).message);
+    }
   }
   if (sceneObjects.length > 0) {
+    console.log(`[analyze-transcript] Parsed ${sceneObjects.length} scene(s) via strategy 5 (regex extraction).`);
     return sceneObjects;
   }
 
@@ -275,10 +284,14 @@ function extractAndParseScenes(rawContent: string): GroqScene[] {
     for (let i = 0; i < openBraces - closeBraces; i++) repaired += "}";
     const data = JSON.parse(repaired);
     if (data.scenes && Array.isArray(data.scenes) && data.scenes.length > 0) {
+      console.log("[analyze-transcript] Parsed scenes via strategy 6 (auto-closing brace repair).");
       return data.scenes;
     }
-  } catch (_) {}
+  } catch (err) {
+    console.warn("[analyze-transcript] Strategy 6 (auto-closing brace repair) failed:", (err as Error).message);
+  }
 
+  console.error("[analyze-transcript] All 6 JSON-repair strategies failed to parse Groq's response.");
   throw new Error("Groq returned invalid or unparseable scene data.");
 }
 
@@ -316,6 +329,22 @@ function sanitizeScenes(scenesIn: GroqScene[]): GroqScene[] {
 
   return sanitized;
 }
+
+// Shared verbatim between buildLegacyPrompt and buildRelatableVisualPrompt —
+// previously copy-pasted in both, which meant a fix or new correction example
+// (like the ones added for specific misheard Duas) had to be applied twice.
+const DUA_DETECTION_RULE_BLOCK = `* DUA / ZIKR DETECTION & AUTOMATIC CORRECTION RULE (CRITICAL):
+  - Speech-to-text transcripts frequently contain imperfect, phonetic, incomplete, or misspelled Hindi/Urdu Duas (e.g. "ला हौला वला कुता", "हसबुन वल वकील", "ला इलाहा इल्ला अता सुभान का", "अस्तगफिरुल्ला", "अल्लाह इन असलका हुब्बक व्हि व अमलदी हुब्बक", etc.).
+  - NEVER copy or output the broken/imperfect text from the transcript into "duaInfo"!
+  - You MUST identify the intended authentic Dua/Zikr from Islamic tradition and respond with the 100% complete, verified, and grammatically perfect version:
+    * "hindi" (string): The complete, 100% correct authentic Hindi (Devanagari) pronunciation (e.g. if transcript says "ला हौला वला कुता", correct it to "ला हौल वला क़ुव्वत इल्ला बिल्लाहिल 'अलिय्यिल 'अज़ीम"; if transcript says "हसबुन वल वकील", correct it to "हसबुनल्लाहु व निअमल वकील"; if transcript says "अल्लाह इन असलका हुब्बक व्हि व अमलदी हुब्बक", correct it to "अल्लाहुम्मा इन्नी अस्अलुका हुब्बक, व हुब्ब मन युहिब्बुक, वल अमलल्लज़ी युबल्लिग़ुनी हुब्बक" — the Tirmidhi Dua for the love of Allah).
+    * "arabic" (string): The authentic, complete Arabic text with full Tashkeel / Harakat (e.g. "حَسْبُنَا اللَّهُ وَنِعْمَ الْوَكِيلُ" / "لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ" / "اللَّهُمَّ إِنِّي أَسْأَلُكَ حُبَّكَ، وَحُبَّ مَنْ يُحِبُّكَ، وَالْعَمَلَ الَّذِي يُبَلِّغُنِي حُبَّكَ").
+    * "title" (string, optional): Short spiritual title (e.g. "हिफ़ाज़त की दुआ / Protection Dua").
+    * "reference" (string, optional): Authentic Quran or Hadith source (e.g. "Sahih Bukhari / Abu Dawud").
+    * "isDua" (boolean): true
+  - If a scene contains a Dua, you MUST include this "duaInfo" object on that scene. This is a strict rule with ZERO exceptions: never silently skip "duaInfo" for a scene that recites/discusses a Dua, no matter how short the video, how many other scenes exist, or how limited the output length is. If you are running low on output space, shorten "caption"/"prompt" text rather than dropping any "duaInfo".
+  - MULTIPLE DUAS RULE: If the transcript lists more than one Dua (e.g. "नंबर एक...", "नंबर दो...", "नंबर तीन...", "पहली दुआ", "दूसरी दुआ", or any enumerated/numbered list of Duas), you MUST create a SEPARATE scene for EACH individual Dua, and EVERY one of those scenes MUST have its own corrected "duaInfo" object. Do NOT merge multiple Duas into a single scene, and do NOT leave any listed Dua without a "duaInfo" object — apply the same imperfect-to-authentic correction to each one independently.
+  - SELF-CHECK BEFORE RESPONDING: Count how many distinct Duas/Zikr are recited in the transcript. Before finalizing your JSON, verify that the exact same number of scenes contain a "duaInfo" object. If the counts don't match, fix your output before returning it.`;
 
 function buildLegacyPrompt(
   transcript: string,
@@ -371,18 +400,7 @@ CRITICAL TIMELINE SYNCHRONIZATION RULES:
       : "* Total duration of all scenes combined should ideally be between 15 to 45 seconds."
 }
 
-* DUA / ZIKR DETECTION & AUTOMATIC CORRECTION RULE (CRITICAL):
-  - Speech-to-text transcripts frequently contain imperfect, phonetic, incomplete, or misspelled Hindi/Urdu Duas (e.g. "ला हौला वला कुता", "हसबुन वल वकील", "ला इलाहा इल्ला अता सुभान का", "अस्तगफिरुल्ला", "अल्लाह इन असलका हुब्बक व्हि व अमलदी हुब्बक", etc.).
-  - NEVER copy or output the broken/imperfect text from the transcript into "duaInfo"!
-  - You MUST identify the intended authentic Dua/Zikr from Islamic tradition and respond with the 100% complete, verified, and grammatically perfect version:
-    * "hindi" (string): The complete, 100% correct authentic Hindi (Devanagari) pronunciation (e.g. if transcript says "ला हौला वला कुता", correct it to "ला हौल वला क़ुव्वत इल्ला बिल्लाहिल 'अलिय्यिल 'अज़ीम"; if transcript says "हसबुन वल वकील", correct it to "हसबुनल्लाहु व निअमल वकील"; if transcript says "अल्लाह इन असलका हुब्बक व्हि व अमलदी हुब्बक", correct it to "अल्लाहुम्मा इन्नी अस्अलुका हुब्बक, व हुब्ब मन युहिब्बुक, वल अमलल्लज़ी युबल्लिग़ुनी हुब्बक" — the Tirmidhi Dua for the love of Allah).
-    * "arabic" (string): The authentic, complete Arabic text with full Tashkeel / Harakat (e.g. "حَسْبُنَا اللَّهُ وَنِعْمَ الْوَكِيلُ" / "لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ" / "اللَّهُمَّ إِنِّي أَسْأَلُكَ حُبَّكَ، وَحُبَّ مَنْ يُحِبُّكَ، وَالْعَمَلَ الَّذِي يُبَلِّغُنِي حُبَّكَ").
-    * "title" (string, optional): Short spiritual title (e.g. "हिफ़ाज़त की दुआ / Protection Dua").
-    * "reference" (string, optional): Authentic Quran or Hadith source (e.g. "Sahih Bukhari / Abu Dawud").
-    * "isDua" (boolean): true
-  - If a scene contains a Dua, you MUST include this "duaInfo" object on that scene. This is a strict rule with ZERO exceptions: never silently skip "duaInfo" for a scene that recites/discusses a Dua, no matter how short the video, how many other scenes exist, or how limited the output length is. If you are running low on output space, shorten "caption"/"prompt" text rather than dropping any "duaInfo".
-  - MULTIPLE DUAS RULE: If the transcript lists more than one Dua (e.g. "नंबर एक...", "नंबर दो...", "नंबर तीन...", "पहली दुआ", "दूसरी दुआ", or any enumerated/numbered list of Duas), you MUST create a SEPARATE scene for EACH individual Dua, and EVERY one of those scenes MUST have its own corrected "duaInfo" object. Do NOT merge multiple Duas into a single scene, and do NOT leave any listed Dua without a "duaInfo" object — apply the same imperfect-to-authentic correction to each one independently.
-  - SELF-CHECK BEFORE RESPONDING: Count how many distinct Duas/Zikr are recited in the transcript. Before finalizing your JSON, verify that the exact same number of scenes contain a "duaInfo" object. If the counts don't match, fix your output before returning it.
+${DUA_DETECTION_RULE_BLOCK}
 
 Example output:
 {
@@ -451,18 +469,7 @@ CRITICAL VISUAL METAPHOR & STOCK SEARCH RULES:
     * Fire / Punishment -> "🔥"
     * Light / Mercy / Noor -> "✨"
 
-* DUA / ZIKR DETECTION & AUTOMATIC CORRECTION RULE (CRITICAL):
-  - Speech-to-text transcripts frequently contain imperfect, phonetic, incomplete, or misspelled Hindi/Urdu Duas (e.g. "ला हौला वला कुता", "हसबुन वल वकील", "ला इलाहा इल्ला अता सुभान का", "अस्तगफिरुल्ला", "अल्लाह इन असलका हुब्बक व्हि व अमलदी हुब्बक", etc.).
-  - NEVER copy or output the broken/imperfect text from the transcript into "duaInfo"!
-  - You MUST identify the intended authentic Dua/Zikr from Islamic tradition and respond with the 100% complete, verified, and grammatically perfect version:
-    * "hindi" (string): The complete, 100% correct authentic Hindi (Devanagari) pronunciation (e.g. if transcript says "ला हौला वला कुता", correct it to "ला हौल वला क़ुव्वत इल्ला बिल्लाहिल 'अलिय्यिल 'अज़ीम"; if transcript says "हसबुन वल वकील", correct it to "हसबुनल्लाहु व निअमल वकील"; if transcript says "अल्लाह इन असलका हुब्बक व्हि व अमलदी हुब्बक", correct it to "अल्लाहुम्मा इन्नी अस्अलुका हुब्बक, व हुब्ब मन युहिब्बुक, वल अमलल्लज़ी युबल्लिग़ुनी हुब्बक" — the Tirmidhi Dua for the love of Allah).
-    * "arabic" (string): The authentic, complete Arabic text with full Tashkeel / Harakat (e.g. "حَسْبُنَا اللَّهُ وَنِعْمَ الْوَكِيلُ" / "لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ" / "اللَّهُمَّ إِنِّي أَسْأَلُكَ حُبَّكَ، وَحُبَّ مَنْ يُحِبُّكَ، وَالْعَمَلَ الَّذِي يُبَلِّغُنِي حُبَّكَ").
-    * "title" (string, optional): Short spiritual title (e.g. "हिफ़ाज़त की दुआ / Protection Dua").
-    * "reference" (string, optional): Authentic Quran or Hadith source (e.g. "Sahih Bukhari / Abu Dawud").
-    * "isDua" (boolean): true
-  - If a scene contains a Dua, you MUST include this "duaInfo" object on that scene. This is a strict rule with ZERO exceptions: never silently skip "duaInfo" for a scene that recites/discusses a Dua, no matter how short the video, how many other scenes exist, or how limited the output length is. If you are running low on output space, shorten "caption"/"prompt" text rather than dropping any "duaInfo".
-  - MULTIPLE DUAS RULE: If the transcript lists more than one Dua (e.g. "नंबर एक...", "नंबर दो...", "नंबर तीन...", "पहली दुआ", "दूसरी दुआ", or any enumerated/numbered list of Duas), you MUST create a SEPARATE scene for EACH individual Dua, and EVERY one of those scenes MUST have its own corrected "duaInfo" object. Do NOT merge multiple Duas into a single scene, and do NOT leave any listed Dua without a "duaInfo" object — apply the same imperfect-to-authentic correction to each one independently.
-  - SELF-CHECK BEFORE RESPONDING: Count how many distinct Duas/Zikr are recited in the transcript. Before finalizing your JSON, verify that the exact same number of scenes contain a "duaInfo" object. If the counts don't match, fix your output before returning it.
+${DUA_DETECTION_RULE_BLOCK}
 
 General Rules:
 * Return valid JSON only without markdown or code fences.
