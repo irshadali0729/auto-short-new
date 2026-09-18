@@ -9,6 +9,7 @@ import {
   Download,
   AlertCircle,
   RefreshCw,
+  RotateCcw,
   Film,
   CheckCircle2,
   Clock,
@@ -106,6 +107,8 @@ export default function Home() {
   // Image replacement state
   const [allLibraryImages, setAllLibraryImages] = useState<string[]>([]);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
+  const [replacingTarget, setReplacingTarget] = useState<'image' | 'host'>('image');
+  const [hostVideos, setHostVideos] = useState<string[]>([]);
   // Scene indices whose stock image failed to load (broken/expired remote URL),
   // so we can show an explicit "replace this" message instead of a silent fade.
   const [brokenImageIndices, setBrokenImageIndices] = useState<Set<number>>(new Set());
@@ -343,6 +346,14 @@ export default function Home() {
     }
   };
 
+  const handleResetInput = () => {
+    setYoutubeLink('');
+    setTranscript('');
+    setTranscriptSegments([]);
+    setErrorMessage('');
+    setInfoMessage('');
+  };
+
   const handleTargetLengthChange = (val: string) => {
     if (val === '') {
       setTargetVideoLength('');
@@ -363,20 +374,40 @@ export default function Home() {
 
   const handleReplaceClick = (index: number) => {
     setReplacingIndex(index);
+    setReplacingTarget('image');
     setIsModalOpen(true);
+  };
+
+  const handleReplaceHostClick = async (index: number) => {
+    setReplacingIndex(index);
+    setReplacingTarget('host');
+    setIsModalOpen(true);
+    // The general library scan skips avatars/, so load host clips separately.
+    try {
+      const category = mediaSettings.avatarCategory || DEFAULT_MEDIA_SETTINGS.avatarCategory || 'women_avatars';
+      const res = await fetch(`/api/list-avatars?videos=1&category=${encodeURIComponent(category)}`);
+      const data = await res.json();
+      if (Array.isArray(data.videos)) setHostVideos(data.videos);
+    } catch (err) {
+      console.error('Failed to load host videos:', err);
+    }
   };
 
   const handleSelectImage = (filename: string) => {
     if (replacingIndex !== null) {
       const updatedScenes = [...scenes];
-      updatedScenes[replacingIndex] = {
-        ...updatedScenes[replacingIndex],
-        image: filename,
-        isFallback: false // Reset fallback status since it is manually selected
-      };
+      updatedScenes[replacingIndex] =
+        replacingTarget === 'host'
+          ? { ...updatedScenes[replacingIndex], avatarAsset: filename }
+          : {
+              ...updatedScenes[replacingIndex],
+              image: filename,
+              isFallback: false // Reset fallback status since it is manually selected
+            };
       setScenes(updatedScenes);
       setIsModalOpen(false);
       setReplacingIndex(null);
+      setReplacingTarget('image');
     }
   };
 
@@ -681,6 +712,19 @@ export default function Home() {
                     )}
                   </button>
                 </div>
+
+                {(youtubeLink || transcript || transcriptSegments.length > 0) && (
+                  <button
+                    type="button"
+                    onClick={handleResetInput}
+                    disabled={isFetchingTranscript || isAnalyzing || isGenerating}
+                    className="mt-2 ml-4 inline-flex items-center gap-1 text-[11px] font-semibold text-muted hover:text-rausch transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Clear the YouTube link and transcript"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Reset
+                  </button>
+                )}
               </div>
 
               {/* Target Video Length Input */}
@@ -872,6 +916,16 @@ export default function Home() {
                                 <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-bold bg-black/60 text-white backdrop-blur-xs">
                                   Avatar Top
                                 </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleReplaceHostClick(idx);
+                                  }}
+                                  className="absolute top-1 right-1 z-10 px-2 py-1 rounded-md bg-white/90 text-ink text-[10px] font-bold hover:bg-white shadow-sm flex items-center gap-1"
+                                >
+                                  <RefreshCw className="w-3 h-3" /> Change Host
+                                </button>
                               </div>
                               <div className="h-1/2 w-full relative overflow-hidden bg-black/40">
                                 {isVideoAsset(scene.image) ? (
@@ -1154,6 +1208,15 @@ export default function Home() {
                             <RefreshCw className="w-3.5 h-3.5" />
                             Replace Image
                           </button>
+                          {scene.isSplitScreen && scene.avatarAsset && (
+                            <button
+                              onClick={() => handleReplaceHostClick(idx)}
+                              className="w-full mt-2 py-2 rounded-lg border border-hairline bg-white text-xs font-bold text-ink hover:bg-surface-soft hover:border-border-strong transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              Replace Host
+                            </button>
+                          )}
                         </div>
 
                       </div>
@@ -1336,10 +1399,20 @@ export default function Home() {
           onClose={() => {
             setIsModalOpen(false);
             setReplacingIndex(null);
+            setReplacingTarget('image');
           }}
           onSelectImage={handleSelectImage}
-          allImages={allLibraryImages}
-          currentImage={replacingIndex !== null && scenes[replacingIndex] ? scenes[replacingIndex].image : undefined}
+          allImages={
+            replacingTarget === 'host' ? hostVideos : allLibraryImages
+          }
+          title={replacingTarget === 'host' ? 'Select Replacement Host' : undefined}
+          currentImage={
+            replacingIndex !== null && scenes[replacingIndex]
+              ? replacingTarget === 'host'
+                ? scenes[replacingIndex].avatarAsset
+                : scenes[replacingIndex].image
+              : undefined
+          }
           sceneIndex={replacingIndex}
           sceneKeyword={replacingIndex !== null && scenes[replacingIndex] ? scenes[replacingIndex].keyword : undefined}
         />

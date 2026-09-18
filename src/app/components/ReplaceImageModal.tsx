@@ -27,6 +27,7 @@ export interface ReplaceImageModalProps {
   currentImage?: string;
   sceneIndex?: number | null;
   sceneKeyword?: string;
+  title?: string;
 }
 
 type MediaTypeFilter = 'all' | 'videos' | 'images';
@@ -36,7 +37,11 @@ export function parseMediaMetadata(filename: string) {
   const isVideo = /\.(mp4|webm|mov)$/i.test(filename);
   const cleanPath = filename.replace(/\\/g, '/');
   const segments = cleanPath.split('/');
-  const category = segments.length > 1 ? segments[0] : 'General';
+  const isAvatar = /^(avatars|host)\//i.test(cleanPath);
+  // Avatar clips live in avatars/<group>/<Avatar-N>/file.mp4 — use the Avatar-N folder as the category
+  const category = isAvatar && segments.length > 2
+    ? segments[segments.length - 2]
+    : segments.length > 1 ? segments[0] : 'General';
   const baseFilename = segments[segments.length - 1] || cleanPath;
   const lastDot = baseFilename.lastIndexOf('.');
   const ext = lastDot !== -1 ? baseFilename.slice(lastDot).toLowerCase() : '';
@@ -46,7 +51,7 @@ export function parseMediaMetadata(filename: string) {
   let sourceKey: SourceFilter = 'local';
   let cleanName = nameWithoutExt;
 
-  if (cleanPath.startsWith('host/')) {
+  if (isAvatar) {
     source = 'Host';
     sourceKey = 'local';
     cleanName = nameWithoutExt.replace(/^(women-girl-gesture|gesture|host)[_-]?/i, 'Host Gesture ');
@@ -81,6 +86,7 @@ export default function ReplaceImageModal({
   currentImage,
   sceneIndex,
   sceneKeyword,
+  title = 'Select Replacement Asset',
 }: ReplaceImageModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [mediaTypeFilter, setMediaTypeFilter] = useState<MediaTypeFilter>('all');
@@ -226,7 +232,7 @@ export default function ReplaceImageModal({
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 id="replace-modal-title" className="text-base sm:text-lg font-bold text-ink tracking-tight">
-                  Select Replacement Asset
+                  {title}
                 </h2>
                 {typeof sceneIndex === 'number' && (
                   <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#fff0f2] text-rausch border border-[#ffd1da]">
