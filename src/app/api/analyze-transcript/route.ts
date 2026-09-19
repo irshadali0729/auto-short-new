@@ -20,7 +20,6 @@ function getGroqErrorStatus(err: unknown): number | undefined {
 function buildGraphicBeats(
   transcript: string,
   duration: number,
-  segments?: TranscriptSegment[],
 ): GraphicBeat[] {
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 6;
   const cleanedTranscript = transcript.replace(/\s+/g, " ").trim();
@@ -770,7 +769,7 @@ export async function POST(request: Request) {
                 end,
               };
             })
-          : buildGraphicBeats(transcript, duration, hasSegments ? segments : undefined);
+          : buildGraphicBeats(transcript, duration);
 
       const sceneSpokenText =
         (scene.captions || []).map((c) => c.text).join(" ") ||

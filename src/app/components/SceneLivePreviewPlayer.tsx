@@ -6,22 +6,16 @@ import {
   Pause,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
-  BookOpen,
-  Film,
   Video,
-  Layers,
-  Sliders,
   AlignVerticalJustifyStart,
   AlignVerticalJustifyCenter,
   AlignVerticalJustifyEnd,
   RefreshCw,
-  Clock,
-  Volume2,
 } from 'lucide-react';
 import { MediaSettings } from '@/app/components/SettingsModal';
 import { getMediaUrl, isVideoAsset } from '@/app/utils/media-url';
 import { generateDuaCardSvg } from '@/app/utils/dua-card-svg';
+import type { DuaCardTheme, DuaCardPosition, DuaCardStyle } from '@/app/types/scene';
 import { CaptionPosition } from '@/app/utils/caption-renderer';
 
 export interface StoryboardScene {
@@ -51,9 +45,9 @@ export interface StoryboardScene {
     arabic: string;
     title?: string;
     reference?: string;
-    theme?: any;
-    position?: any;
-    cardStyle?: any;
+    theme?: DuaCardTheme;
+    position?: DuaCardPosition;
+    cardStyle?: DuaCardStyle;
   };
 }
 
@@ -74,14 +68,13 @@ export default function SceneLivePreviewPlayer({
   onSelectScene,
   mediaSettings,
   onChangeCaptionPosition,
-  onOpenDuaEditor,
   onGenerateVideo,
   isGenerating = false,
 }: SceneLivePreviewPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [sceneProgress, setSceneProgress] = useState(0); // 0 to 100% within active scene
   const [activeCaptionText, setActiveCaptionText] = useState<string>('');
-  const [activeGraphic, setActiveGraphic] = useState<StoryboardScene['graphics'] extends (infer U)[] | undefined ? U : undefined>(undefined);
+  const [activeGraphic, setActiveGraphic] = useState<NonNullable<StoryboardScene['graphics']>[number] | undefined>(undefined);
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const playbackStartTimeRef = useRef<number>(Date.now());

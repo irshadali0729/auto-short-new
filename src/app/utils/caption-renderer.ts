@@ -2,7 +2,6 @@ import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import { EmojiStyle, resolveEmojiDataUri } from "@/app/utils/emoji-resolver";
-import type { CaptionSlice } from "@/app/types/scene";
 
 export type { CaptionSlice } from "@/app/types/scene";
 

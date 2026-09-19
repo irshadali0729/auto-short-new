@@ -15,8 +15,6 @@ import {
   Clock,
   Sliders,
   Settings,
-  MessageSquareText,
-  Type,
   BookOpen,
   Edit3
 } from 'lucide-react';
@@ -627,7 +625,7 @@ export default function Home() {
             <span className="font-medium text-ink">Sources:</span>
             <span className="font-bold text-ink">
               {Object.entries(mediaSettings?.sources || DEFAULT_MEDIA_SETTINGS.sources)
-                .filter(([_, enabled]) => enabled)
+                .filter(([, enabled]) => enabled)
                 .map(([name]) => name.charAt(0).toUpperCase() + name.slice(1))
                 .join(', ')}
             </span>

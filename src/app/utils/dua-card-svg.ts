@@ -129,7 +129,7 @@ export function generateDuaCardSvg(
   // Card dimensions - expanded for wider presentation
   let cardWidth = isLandscape ? Math.min(targetWidth - 200, 1160) : Math.min(targetWidth - 60, 1020);
   let cardX = (targetWidth - cardWidth) / 2;
-  let cardRadius = activeStyle === "floating_pill" ? 40 : activeStyle === "full_banner" ? 0 : 28;
+  const cardRadius = activeStyle === "floating_pill" ? 40 : activeStyle === "full_banner" ? 0 : 28;
 
   if (activeStyle === "full_banner") {
     cardWidth = targetWidth;

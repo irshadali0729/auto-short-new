@@ -6,7 +6,6 @@ import {
   Check,
   BookOpen,
   Eye,
-  Sparkles,
   Smartphone,
   Monitor,
   AlignVerticalJustifyCenter,

@@ -404,7 +404,7 @@ export async function POST(request: Request) {
         // ==========================================
         // LEGACY KEYWORD MATCHING
         // ==========================================
-        let localMatches = allowLocal
+        const localMatches = allowLocal
           ? matchLocalAssets(
               availableAssets,
               kw,

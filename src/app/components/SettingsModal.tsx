@@ -1766,7 +1766,7 @@ export default function SettingsModal({
               sectionRef={(el) => (sectionRefs.current.avatar = el)}
             >
               <p className="text-xs text-muted">
-                Incorporate a chosen avatar's gesture clips into the short. Scene 1
+                Incorporate a chosen avatar&apos;s gesture clips into the short. Scene 1
                 acts as an engaging avatar intro hook, followed by stock footage,
                 and Scene 4 renders a dynamic 50/50 split screen.
               </p>
