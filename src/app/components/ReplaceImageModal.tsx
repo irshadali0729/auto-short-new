@@ -11,6 +11,8 @@ import {
   Play,
   RotateCcw,
   CheckCircle2,
+  Upload,
+  Loader2,
 } from 'lucide-react';
 import { getMediaUrl } from '@/app/utils/media-url';
 import { useFocusTrap } from '@/app/utils/useFocusTrap';
@@ -24,6 +26,10 @@ export interface ReplaceImageModalProps {
   sceneIndex?: number | null;
   sceneKeyword?: string;
   title?: string;
+  // Called after a device file finishes uploading into the local library, so
+  // the parent can refresh its cached image list (the modal applies the
+  // upload to the current scene itself via onSelectImage).
+  onLibraryRefresh?: () => void;
 }
 
 type MediaTypeFilter = 'all' | 'videos' | 'images';
@@ -83,16 +89,49 @@ export default function ReplaceImageModal({
   sceneIndex,
   sceneKeyword,
   title = 'Select Replacement Asset',
+  onLibraryRefresh,
 }: ReplaceImageModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [mediaTypeFilter, setMediaTypeFilter] = useState<MediaTypeFilter>('all');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [hoveredVideo, setHoveredVideo] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const modalContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadClick = () => {
+    setUploadError('');
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setIsUploading(true);
+    setUploadError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/upload-image', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to upload file.');
+      }
+      onLibraryRefresh?.();
+      onSelectImage(data.filename);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Failed to upload file.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   // Keep Tab/Shift+Tab cycling inside the dialog while it's open. Initial
   // focus is handled separately below (searchInputRef).
@@ -106,6 +145,7 @@ export default function ReplaceImageModal({
       setSourceFilter('all');
       setCategoryFilter('all');
       setHoveredVideo(null);
+      setUploadError('');
 
       // Accessibility: focus search input on open
       setTimeout(() => {
@@ -305,7 +345,34 @@ export default function ReplaceImageModal({
                 <span>Search &ldquo;{sceneKeyword}&rdquo;</span>
               </button>
             )}
+
+            {/* Upload a photo/video from the user's own device into the local library */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+              className="hidden"
+              onChange={handleFileSelected}
+            />
+            <button
+              type="button"
+              onClick={handleUploadClick}
+              disabled={isUploading}
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-ink hover:bg-ink/90 text-white border border-ink text-xs font-bold transition-colors shrink-0 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              title="Upload a photo or video from your device"
+            >
+              {isUploading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <Upload className="w-3.5 h-3.5" aria-hidden="true" />
+              )}
+              <span>{isUploading ? 'Uploading…' : 'Upload from Device'}</span>
+            </button>
           </div>
+
+          {uploadError && (
+            <p className="text-xs font-semibold text-red-600 -mt-1">{uploadError}</p>
+          )}
 
           {/* Quick Filter Pills Row (Mobile Scrollable) */}
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 text-xs">

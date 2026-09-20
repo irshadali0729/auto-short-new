@@ -23,10 +23,18 @@ export async function POST(request: Request) {
     }
 
     const url = `https://transcriptapi.com/api/v2/youtube/transcript?video_url=${encodeURIComponent(youtubeUrl)}&format=json`;
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      cache: "no-store",
-    });
+    const metadataUrl = `https://transcriptapi.com/api/v2/youtube/video/metadata?video_url=${encodeURIComponent(youtubeUrl)}`;
+
+    const [response, metadataResponse] = await Promise.all([
+      fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        cache: "no-store",
+      }),
+      fetch(metadataUrl, {
+        headers: { Authorization: `Bearer ${apiKey}`, accept: "*/*" },
+        cache: "no-store",
+      }).catch(() => null),
+    ]);
     const data = await response.json();
 
     if (!response.ok) {
@@ -38,7 +46,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: detail }, { status: response.status });
     }
 
-    return NextResponse.json(data);
+    // The metadata call is best-effort — a failure here shouldn't block the
+    // transcript result, since the title/channel are supplementary.
+    let videoTitle: string | null = null;
+    let channelName: string | null = null;
+    if (metadataResponse && metadataResponse.ok) {
+      try {
+        const metadata = await metadataResponse.json();
+        videoTitle = metadata?.title || null;
+        channelName = metadata?.channel?.name || null;
+      } catch {
+        // ignore malformed metadata payload
+      }
+    }
+
+    return NextResponse.json({ ...data, videoTitle, channelName });
   } catch (error) {
     console.error("Error fetching transcript:", error);
     return NextResponse.json(

@@ -7,6 +7,7 @@ interface ProgressData {
   stage?: "preparing" | "rendering_scenes" | "merging" | "done";
   scenesCompleted?: number;
   totalScenes?: number;
+  savedFilename?: string;
 }
 
 interface CustomGlobal {

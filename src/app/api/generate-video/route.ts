@@ -26,6 +26,7 @@ import {
   FFMPEG_RETRY_BASE_DELAY_MS,
 } from "@/app/config/video-config";
 import type { Scene, GraphicBeat, GraphicMotionThemeOption } from "@/app/types/scene";
+import { buildSavedVideoFilename } from "@/app/utils/filename";
 
 const ffmpegPath = ffmpegInstaller.path;
 
@@ -42,6 +43,7 @@ interface ProgressData {
   stage?: GenerationStage;
   scenesCompleted?: number;
   totalScenes?: number;
+  savedFilename?: string;
 }
 
 export interface JobControl {
@@ -206,6 +208,8 @@ export async function POST(request: Request) {
     const {
       scenes,
       runId,
+      videoTitle,
+      channelName,
       zoomSpeed,
       transitionDuration,
       textOverlayMode,
@@ -288,6 +292,8 @@ export async function POST(request: Request) {
       resolvedCaptionPosition,
       graphicMotionTheme || "auto",
       resolvedCaptionTheme,
+      typeof videoTitle === "string" ? videoTitle : "",
+      typeof channelName === "string" ? channelName : "",
     ).catch((err) => {
       console.error("Background compilation crash:", err);
       finishJob(runId, {
@@ -320,6 +326,8 @@ async function compileVideoInBackground(
   captionPosition: CaptionPosition = "bottom",
   graphicMotionTheme: GraphicMotionThemeOption = "auto",
   captionTheme: CaptionTheme = "pill",
+  videoTitle: string = "",
+  channelName: string = "",
 ) {
   let tempDir = "";
   const jobControl: JobControl = jobControlMap.get(runId) || {
@@ -751,6 +759,10 @@ async function resolveSceneAsset(
       concatTxtPath,
       "-c",
       "copy",
+      "-metadata",
+      `title=${videoTitle || "Auto Short"}`,
+      "-metadata",
+      `artist=${channelName || "Unknown Channel"}`,
       mergedVideoPath,
     ];
 
@@ -765,6 +777,16 @@ async function resolveSceneAsset(
     const outputVideoPath = path.join(generatedDir, "output.mp4");
     fs.copyFileSync(mergedVideoPath, outputVideoPath);
 
+    // Also save a copy named after the source video's title/channel so the
+    // file on disk (and the suggested download name) carries that context
+    // instead of every generation overwriting a single generic filename.
+    const savedFilename = buildSavedVideoFilename(videoTitle, channelName);
+    const savedVideosDir = path.join(generatedDir, "saved");
+    if (!fs.existsSync(savedVideosDir)) {
+      fs.mkdirSync(savedVideosDir, { recursive: true });
+    }
+    fs.copyFileSync(mergedVideoPath, path.join(savedVideosDir, savedFilename));
+
     try {
       fs.rmSync(tempDir, { recursive: true, force: true });
     } catch (cleanupErr) {
@@ -778,6 +800,7 @@ async function resolveSceneAsset(
       stage: "done",
       scenesCompleted: adjustedScenes.length,
       totalScenes: adjustedScenes.length,
+      savedFilename,
     });
 
     const isProduction =

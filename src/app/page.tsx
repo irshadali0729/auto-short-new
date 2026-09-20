@@ -16,7 +16,9 @@ import {
   Sliders,
   Settings,
   BookOpen,
-  Edit3
+  Edit3,
+  Plus,
+  Loader2
 } from 'lucide-react';
 import SettingsModal, {
   MediaSettings,
@@ -25,7 +27,7 @@ import SettingsModal, {
 import ReplaceImageModal from '@/app/components/ReplaceImageModal';
 import DuaEditModal from '@/app/components/DuaEditModal';
 import SceneLivePreviewPlayer from '@/app/components/SceneLivePreviewPlayer';
-import { getMediaUrl, isVideoAsset } from '@/app/utils/media-url';
+import { getMediaUrl, isVideoAsset, isRemoteUrl } from '@/app/utils/media-url';
 import { rescaleSceneDurations } from '@/app/utils/scene-timing';
 import { VIDEO_PROGRESS_POLL_INTERVAL_MS, MAX_NOT_FOUND_POLLS } from '@/app/config/client-config';
 import type { Scene, TranscriptSegment, DuaInfo } from '@/app/types/scene';
@@ -36,6 +38,9 @@ export default function Home() {
   const [transcript, setTranscript] = useState('');
   const [transcriptSegments, setTranscriptSegments] = useState<TranscriptSegment[]>([]);
   const [youtubeLink, setYoutubeLink] = useState('');
+  const [videoTitle, setVideoTitle] = useState('');
+  const [channelName, setChannelName] = useState('');
+  const [savingLocallyIndices, setSavingLocallyIndices] = useState<Set<number>>(new Set());
   const [isFetchingTranscript, setIsFetchingTranscript] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [scenes, setScenes] = useState<Scene[]>([]);
@@ -59,6 +64,7 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
+  const [savedVideoFilename, setSavedVideoFilename] = useState('hadith_shorts.mp4');
   const [pollCount, setPollCount] = useState<number>(0);
   const [isCancelling, setIsCancelling] = useState(false);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -207,6 +213,9 @@ export default function Home() {
         throw new Error(data.error || data.message || 'Failed to fetch transcript from the API.');
       }
 
+      setVideoTitle(typeof data.videoTitle === 'string' ? data.videoTitle : '');
+      setChannelName(typeof data.channelName === 'string' ? data.channelName : '');
+
       if (data.transcript && Array.isArray(data.transcript)) {
         const rawSegments = data.transcript;
         const tempSegments: { text: string; start: number; rawEnd: number }[] = [];
@@ -348,6 +357,8 @@ export default function Home() {
     setYoutubeLink('');
     setTranscript('');
     setTranscriptSegments([]);
+    setVideoTitle('');
+    setChannelName('');
     setErrorMessage('');
     setInfoMessage('');
   };
@@ -374,6 +385,40 @@ export default function Home() {
     setReplacingIndex(index);
     setReplacingTarget('image');
     setIsModalOpen(true);
+  };
+
+  const handleSaveImageLocally = async (index: number) => {
+    const scene = scenes[index];
+    if (!scene || !isRemoteUrl(scene.image) || savingLocallyIndices.has(index)) return;
+
+    setSavingLocallyIndices((prev) => new Set(prev).add(index));
+    try {
+      const res = await fetch('/api/save-remote-media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: scene.image }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to save media locally.');
+      }
+      setScenes((prev) => {
+        const updated = [...prev];
+        if (updated[index]) {
+          updated[index] = { ...updated[index], image: data.filename };
+        }
+        return updated;
+      });
+      fetchLibraryImages();
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to save media locally.');
+    } finally {
+      setSavingLocallyIndices((prev) => {
+        const next = new Set(prev);
+        next.delete(index);
+        return next;
+      });
+    }
   };
 
   const handleReplaceHostClick = async (index: number) => {
@@ -420,6 +465,7 @@ export default function Home() {
     setErrorMessage('');
     setIsGenerating(true);
     setVideoUrl('');
+    setSavedVideoFilename('hadith_shorts.mp4');
     setPollCount(0);
     setGenerationStep('Initializing background video compilation worker...');
 
@@ -433,6 +479,8 @@ export default function Home() {
         body: JSON.stringify({
           scenes,
           runId,
+          videoTitle,
+          channelName,
           zoomSpeed: mediaSettings.zoomSpeed ?? DEFAULT_MEDIA_SETTINGS.zoomSpeed,
           transitionDuration: mediaSettings.transitionDuration ?? DEFAULT_MEDIA_SETTINGS.transitionDuration,
           textOverlayMode: mediaSettings.textOverlayMode || (mediaSettings.enableGraphicMotion ? 'graphics' : 'captions'),
@@ -501,6 +549,7 @@ export default function Home() {
               setErrorMessage(progData.error);
             } else if (progData.videoPath) {
               setVideoUrl(progData.videoPath);
+              if (progData.savedFilename) setSavedVideoFilename(progData.savedFilename);
               setActiveRightPanelTab('compiled');
             } else {
               setErrorMessage('Video generation completed, but output path was not returned.');
@@ -1198,6 +1247,23 @@ export default function Home() {
                             )}
                           </div>
 
+                          {/* Save-locally button for scenes still pointing at a live remote (Pexels/Unsplash/Pixabay) URL */}
+                          {isRemoteUrl(scene.image) && (
+                            <button
+                              onClick={() => handleSaveImageLocally(idx)}
+                              disabled={savingLocallyIndices.has(idx)}
+                              className="w-full mb-2 py-2 rounded-lg border border-[#ffd1da] bg-[#fff8f9] text-xs font-bold text-rausch hover:bg-[#fff0f2] transition-colors flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                              title="Download this online media into your local library"
+                            >
+                              {savingLocallyIndices.has(idx) ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Plus className="w-3.5 h-3.5" />
+                              )}
+                              {savingLocallyIndices.has(idx) ? 'Saving Locally…' : 'Save Locally'}
+                            </button>
+                          )}
+
                           {/* Secondary Button: Replace Image */}
                           <button
                             onClick={() => handleReplaceClick(idx)}
@@ -1357,13 +1423,13 @@ export default function Home() {
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                     <div className="overflow-hidden">
                       <p className="text-xs font-bold text-emerald-900">Video successfully generated!</p>
-                      <p className="text-[10px] text-emerald-700 truncate mt-0.5">/generated/output.mp4</p>
+                      <p className="text-[10px] text-emerald-700 truncate mt-0.5">{savedVideoFilename}</p>
                     </div>
                   </div>
 
                   <a
                     href={videoUrl ? `${videoUrl}&download=true` : ''}
-                    download="hadith_shorts.mp4"
+                    download={savedVideoFilename}
                     className="w-full py-3.5 rounded-lg font-bold text-sm bg-rausch hover:bg-rausch-active text-white flex items-center justify-center gap-2 transition-all shadow-sm active:scale-98"
                   >
                     <Download className="w-4 h-4" />
@@ -1413,6 +1479,7 @@ export default function Home() {
           }
           sceneIndex={replacingIndex}
           sceneKeyword={replacingIndex !== null && scenes[replacingIndex] ? scenes[replacingIndex].keyword : undefined}
+          onLibraryRefresh={fetchLibraryImages}
         />
 
         {/* Settings Configuration Modal */}

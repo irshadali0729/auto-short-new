@@ -31,3 +31,11 @@ export function isVideoAsset(mediaPath?: string): boolean {
   if (!mediaPath) return false;
   return /\.(mp4|webm|mov)(\?.*)?$/i.test(mediaPath);
 }
+
+// True for a scene asset that's still a live remote URL (Pexels/Unsplash/
+// Pixabay CDN link) rather than a path inside image-library — happens when
+// "Save online media to disk" is disabled in settings.
+export function isRemoteUrl(mediaPath?: string): boolean {
+  if (!mediaPath) return false;
+  return mediaPath.startsWith('http://') || mediaPath.startsWith('https://');
+}
