@@ -43,3 +43,6 @@ next-env.d.ts
 # local assets & generated videos
 /image-library/
 /generated/
+
+# generation history (server-side storage mode)
+/data/history.json

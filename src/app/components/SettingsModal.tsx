@@ -20,6 +20,9 @@ import {
   Smile,
   BookOpen,
   UserCheck,
+  History,
+  Server,
+  Laptop,
 } from "lucide-react";
 import { useFocusTrap } from "@/app/utils/useFocusTrap";
 import SettingsAccordionSection from "@/app/components/settings/SettingsAccordionSection";
@@ -40,6 +43,7 @@ export type CaptionThemeOption =
 export type VideoAspectRatio = "9:16" | "16:9";
 export type EmojiStyleOption = "fluent" | "apple" | "twitter";
 export type DuaCardThemeOption = "cream" | "light_grey" | "white";
+export type HistoryStorageMode = "server" | "local";
 
 interface AvatarPickerOption {
   id: string;
@@ -73,6 +77,8 @@ export interface MediaSettings {
   enableAvatarHost?: boolean;
   avatarCategory?: string;
   avatarId?: string;
+  saveHistoryEnabled?: boolean;
+  historyStorageMode?: HistoryStorageMode;
 }
 
 export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
@@ -100,6 +106,8 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   enableAvatarHost: false,
   avatarCategory: "women_avatars",
   avatarId: "Avatar-1",
+  saveHistoryEnabled: true,
+  historyStorageMode: "server",
 };
 
 
@@ -196,6 +204,14 @@ export default function SettingsModal({
   const [draftAvatarId, setDraftAvatarId] = useState<string>(
     settings?.avatarId || DEFAULT_MEDIA_SETTINGS.avatarId || "Avatar-1",
   );
+  const [draftSaveHistoryEnabled, setDraftSaveHistoryEnabled] =
+    useState<boolean>(settings?.saveHistoryEnabled !== false);
+  const [draftHistoryStorageMode, setDraftHistoryStorageMode] =
+    useState<HistoryStorageMode>(
+      settings?.historyStorageMode ||
+        DEFAULT_MEDIA_SETTINGS.historyStorageMode ||
+        "server",
+    );
   const [avatarOptions, setAvatarOptions] = useState<AvatarPickerOption[]>([]);
   const [avatarOptionsLoading, setAvatarOptionsLoading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -275,6 +291,12 @@ export default function SettingsModal({
       );
       setDraftAvatarId(
         settings?.avatarId || DEFAULT_MEDIA_SETTINGS.avatarId || "Avatar-1",
+      );
+      setDraftSaveHistoryEnabled(settings?.saveHistoryEnabled !== false);
+      setDraftHistoryStorageMode(
+        settings?.historyStorageMode ||
+          DEFAULT_MEDIA_SETTINGS.historyStorageMode ||
+          "server",
       );
       setValidationError(null);
       setOpenSections(new Set(DEFAULT_OPEN_SECTIONS));
@@ -407,6 +429,8 @@ export default function SettingsModal({
       enableAvatarHost: draftEnableAvatarHost !== false,
       avatarCategory: draftAvatarCategory || "women_avatars",
       avatarId: draftAvatarId || "Avatar-1",
+      saveHistoryEnabled: draftSaveHistoryEnabled !== false,
+      historyStorageMode: draftHistoryStorageMode || "server",
     });
     onClose();
   };
@@ -434,6 +458,8 @@ export default function SettingsModal({
     setDraftEnableAvatarHost(DEFAULT_MEDIA_SETTINGS.enableAvatarHost !== false);
     setDraftAvatarCategory(DEFAULT_MEDIA_SETTINGS.avatarCategory || "women_avatars");
     setDraftAvatarId(DEFAULT_MEDIA_SETTINGS.avatarId || "Avatar-1");
+    setDraftSaveHistoryEnabled(DEFAULT_MEDIA_SETTINGS.saveHistoryEnabled !== false);
+    setDraftHistoryStorageMode(DEFAULT_MEDIA_SETTINGS.historyStorageMode || "server");
     setValidationError(null);
     setOpenSections(new Set(DEFAULT_OPEN_SECTIONS));
     setActiveNavId("sources");
@@ -718,6 +744,7 @@ export default function SettingsModal({
       { id: "dua", label: "Dua", icon: BookOpen },
       { id: "avatar", label: "Avatar", icon: UserCheck },
       { id: "camera", label: "Motion", icon: SlidersHorizontal },
+      { id: "history", label: "History", icon: History },
     ];
 
   const summaries: Record<string, string> = {
@@ -761,6 +788,9 @@ export default function SettingsModal({
     camera: `${draftZoomSpeed.toFixed(1)}x zoom · ${draftTransitionDuration.toFixed(
       1,
     )}s fade`,
+    history: draftSaveHistoryEnabled
+      ? `Saving · ${draftHistoryStorageMode === "local" ? "Browser storage" : "Server file"}`
+      : "Disabled",
   };
 
   return (
@@ -2018,6 +2048,123 @@ export default function SettingsModal({
                   </div>
                 </div>
               </div>
+            </SettingsAccordionSection>
+
+            {/* Section: Generation History */}
+            <SettingsAccordionSection
+              id="history"
+              title="Generation History"
+              icon={History}
+              summary={summaries.history}
+              isOpen={openSections.has("history")}
+              onToggle={toggleSection}
+              sectionRef={(el) => (sectionRefs.current.history = el)}
+            >
+              <p className="text-xs text-muted">
+                Keep a running log of your last 10 compiled videos (title,
+                channel, and an SEO-ready title/hashtags/description you can
+                copy for your own upload).
+              </p>
+
+              {/* Toggle: Save Generation History */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setDraftSaveHistoryEnabled((prev) => !prev)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setDraftSaveHistoryEnabled((prev) => !prev);
+                  }
+                }}
+                className={`relative flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer select-none ${
+                  draftSaveHistoryEnabled
+                    ? "bg-[#fff8f9] border-rausch shadow-airbnb"
+                    : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
+                }`}
+              >
+                <div className="pt-0.5 shrink-0">
+                  <div
+                    className={`w-11 h-6 rounded-full transition-colors flex items-center p-0.5 ${
+                      draftSaveHistoryEnabled ? "bg-rausch" : "bg-zinc-300"
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${
+                        draftSaveHistoryEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex-grow min-w-0">
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                    <span className="text-sm font-bold text-ink flex items-center gap-1.5">
+                      <History className={`w-4 h-4 ${draftSaveHistoryEnabled ? "text-rausch" : "text-muted"}`} />
+                      Save Generation History
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                        draftSaveHistoryEnabled
+                          ? "bg-[#fff0f2] text-rausch border border-[#ffd1da]"
+                          : "bg-surface-soft text-muted border border-hairline"
+                      }`}
+                    >
+                      {draftSaveHistoryEnabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted leading-relaxed">
+                    When enabled, every completed video adds an entry (capped
+                    at the last 10) with an AI-generated SEO title, hashtags,
+                    and description for that video.
+                  </p>
+                </div>
+              </div>
+
+              {/* Storage Mode Picker */}
+              {draftSaveHistoryEnabled && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {(
+                    [
+                      {
+                        id: "server" as HistoryStorageMode,
+                        label: "Server File",
+                        icon: Server,
+                        desc: "Saved to generated/history.json on this machine. Persists across browsers.",
+                      },
+                      {
+                        id: "local" as HistoryStorageMode,
+                        label: "Browser Storage",
+                        icon: Laptop,
+                        desc: "Kept in this browser's local storage only. Nothing written to disk.",
+                      },
+                    ] as const
+                  ).map((opt) => {
+                    const OptIcon = opt.icon;
+                    const isActive = draftHistoryStorageMode === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setDraftHistoryStorageMode(opt.id)}
+                        className={`text-left p-3.5 rounded-xl border transition-all ${
+                          isActive
+                            ? "bg-[#fff8f9] border-rausch shadow-airbnb"
+                            : "bg-white border-hairline hover:border-border-strong hover:bg-surface-soft"
+                        }`}
+                      >
+                        <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                          <OptIcon className={`w-3.5 h-3.5 ${isActive ? "text-rausch" : "text-muted"}`} />
+                          {opt.label}
+                        </span>
+                        <p className="text-[11px] text-muted mt-1 leading-relaxed">
+                          {opt.desc}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </SettingsAccordionSection>
           </div>
         </div>

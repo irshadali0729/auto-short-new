@@ -18,7 +18,8 @@ import {
   BookOpen,
   Edit3,
   Plus,
-  Loader2
+  Loader2,
+  History
 } from 'lucide-react';
 import SettingsModal, {
   MediaSettings,
@@ -27,10 +28,13 @@ import SettingsModal, {
 import ReplaceImageModal from '@/app/components/ReplaceImageModal';
 import DuaEditModal from '@/app/components/DuaEditModal';
 import SceneLivePreviewPlayer from '@/app/components/SceneLivePreviewPlayer';
+import HistoryModal from '@/app/components/HistoryModal';
 import { getMediaUrl, isVideoAsset, isRemoteUrl } from '@/app/utils/media-url';
 import { rescaleSceneDurations } from '@/app/utils/scene-timing';
+import { addLocalHistoryEntry } from '@/app/utils/history-client';
 import { VIDEO_PROGRESS_POLL_INTERVAL_MS, MAX_NOT_FOUND_POLLS } from '@/app/config/client-config';
 import type { Scene, TranscriptSegment, DuaInfo } from '@/app/types/scene';
+import type { HistoryEntry } from '@/app/types/history';
 
 export type { Scene, TranscriptSegment, GraphicBeat, CaptionSlice } from '@/app/types/scene';
 
@@ -41,6 +45,7 @@ export default function Home() {
   const [videoTitle, setVideoTitle] = useState('');
   const [channelName, setChannelName] = useState('');
   const [savingLocallyIndices, setSavingLocallyIndices] = useState<Set<number>>(new Set());
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isFetchingTranscript, setIsFetchingTranscript] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [scenes, setScenes] = useState<Scene[]>([]);
@@ -454,6 +459,54 @@ export default function Home() {
     }
   };
 
+  // Generates SEO metadata for the just-compiled video and appends it to the
+  // generation history (server file or browser storage, per settings) —
+  // best-effort: a failure here shouldn't surface as a generation error since
+  // the video itself already compiled successfully.
+  const recordGenerationHistory = async (savedFilename?: string) => {
+    if (mediaSettings.saveHistoryEnabled === false) return;
+    try {
+      const seoRes = await fetch('/api/generate-seo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcript,
+          videoTitle,
+          channelName,
+          keywords: scenes.map((s) => s.keyword).filter(Boolean),
+        }),
+      });
+      const seoData = await seoRes.json();
+      if (!seoRes.ok) {
+        throw new Error(seoData.error || 'Failed to generate SEO metadata.');
+      }
+
+      const entryPayload = {
+        videoTitle: videoTitle || 'Untitled Video',
+        channelName: channelName || 'Unknown Channel',
+        seo: seoData.seo,
+        savedFilename,
+      };
+
+      if ((mediaSettings.historyStorageMode || 'server') === 'local') {
+        const entry: HistoryEntry = {
+          id: `hist_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          createdAt: Date.now(),
+          ...entryPayload,
+        };
+        addLocalHistoryEntry(entry);
+      } else {
+        await fetch('/api/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entryPayload),
+        });
+      }
+    } catch (err) {
+      console.error('Failed to record generation history:', err);
+    }
+  };
+
   const handleGenerateVideo = async () => {
     if (scenes.length === 0) return;
 
@@ -551,6 +604,7 @@ export default function Home() {
               setVideoUrl(progData.videoPath);
               if (progData.savedFilename) setSavedVideoFilename(progData.savedFilename);
               setActiveRightPanelTab('compiled');
+              recordGenerationHistory(progData.savedFilename);
             } else {
               setErrorMessage('Video generation completed, but output path was not returned.');
             }
@@ -632,13 +686,27 @@ export default function Home() {
           <span className="text-ink border-b-2 border-ink py-2 cursor-pointer">
             Shorts Studio
           </span>
-          <span className="text-muted hover:text-ink py-2 cursor-pointer transition-colors">
-            Media Library
-          </span>
+          <button
+            type="button"
+            onClick={() => setIsHistoryModalOpen(true)}
+            className="text-muted hover:text-ink py-2 cursor-pointer transition-colors"
+          >
+            History
+          </button>
           <span className="text-muted hover:text-ink py-2 cursor-pointer transition-colors">
             Render Pipeline
           </span>
         </div>
+
+        {/* Mobile-only History Icon Button (desktop uses the tab in Center Product Tabs) */}
+        <button
+          type="button"
+          onClick={() => setIsHistoryModalOpen(true)}
+          className="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-full border border-hairline bg-white hover:bg-surface-soft text-ink transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-ink cursor-pointer"
+          aria-label="Open Generation History"
+        >
+          <History className="w-4 h-4 text-rausch" />
+        </button>
 
         {/* Right Settings Pill Button */}
         <button
@@ -1503,6 +1571,13 @@ export default function Home() {
           cardTheme={mediaSettings.duaCardTheme || 'cream'}
           aspectRatio={mediaSettings.aspectRatio || '9:16'}
           onSaveDua={handleSaveDua}
+        />
+
+        {/* Generation History Panel */}
+        <HistoryModal
+          isOpen={isHistoryModalOpen}
+          onClose={() => setIsHistoryModalOpen(false)}
+          storageMode={mediaSettings.historyStorageMode || 'server'}
         />
       </main>
     </div>
