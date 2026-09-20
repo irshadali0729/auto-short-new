@@ -30,3 +30,16 @@ export function addHistoryEntry(entry: HistoryEntry): HistoryEntry[] {
 
   return updated;
 }
+
+export function deleteHistoryEntry(id: string): HistoryEntry[] {
+  const current = readHistory();
+  const updated = current.filter((entry) => entry.id !== id);
+
+  const dataDir = path.dirname(HISTORY_FILE);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  fs.writeFileSync(HISTORY_FILE, JSON.stringify(updated, null, 2));
+
+  return updated;
+}

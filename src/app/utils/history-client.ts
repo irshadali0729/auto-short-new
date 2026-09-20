@@ -24,3 +24,14 @@ export function addLocalHistoryEntry(entry: HistoryEntry): HistoryEntry[] {
   }
   return updated;
 }
+
+export function deleteLocalHistoryEntry(id: string): HistoryEntry[] {
+  const current = readLocalHistory();
+  const updated = current.filter((entry) => entry.id !== id);
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+  } catch {
+    // localStorage unavailable — best-effort only
+  }
+  return updated;
+}

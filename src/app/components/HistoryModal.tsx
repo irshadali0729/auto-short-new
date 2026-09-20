@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { X, History as HistoryIcon, ChevronDown, Copy, Check, Loader2, Inbox } from 'lucide-react';
+import { X, History as HistoryIcon, ChevronDown, Copy, Check, Loader2, Inbox, Trash2 } from 'lucide-react';
 import { useFocusTrap } from '@/app/utils/useFocusTrap';
-import { readLocalHistory } from '@/app/utils/history-client';
+import { readLocalHistory, deleteLocalHistoryEntry } from '@/app/utils/history-client';
 import type { HistoryEntry } from '@/app/types/history';
 import type { HistoryStorageMode } from '@/app/components/SettingsModal';
 
@@ -43,6 +43,8 @@ export default function HistoryModal({ isOpen, onClose, storageMode }: HistoryMo
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const modalContainerRef = useRef<HTMLDivElement>(null);
@@ -51,6 +53,7 @@ export default function HistoryModal({ isOpen, onClose, storageMode }: HistoryMo
   useEffect(() => {
     if (!isOpen) return;
     setExpandedId(null);
+    setConfirmingId(null);
     setLoadError('');
 
     if (storageMode === 'local') {
@@ -73,6 +76,27 @@ export default function HistoryModal({ isOpen, onClose, storageMode }: HistoryMo
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      if (storageMode === 'local') {
+        setEntries(deleteLocalHistoryEntry(id));
+      } else {
+        const res = await fetch(`/api/history?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.history)) {
+          setEntries(data.history);
+        }
+      }
+      if (expandedId === id) setExpandedId(null);
+      setConfirmingId(null);
+    } catch (err) {
+      console.error('Failed to delete history entry:', err);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -148,24 +172,61 @@ export default function HistoryModal({ isOpen, onClose, storageMode }: HistoryMo
                     key={entry.id}
                     className="rounded-xl border border-hairline overflow-hidden bg-white"
                   >
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId(isExpanded ? null : entry.id)}
-                      className="w-full flex items-center justify-between gap-3 p-3.5 text-left hover:bg-surface-soft transition-colors"
-                      aria-expanded={isExpanded}
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-ink truncate">{entry.videoTitle}</p>
-                        <p className="text-xs text-muted truncate mt-0.5">
-                          {entry.channelName} · {new Date(entry.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                      <ChevronDown
-                        className={`w-4 h-4 text-muted shrink-0 transition-transform duration-200 ${
-                          isExpanded ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </button>
+                    <div className="w-full flex items-center gap-1 p-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(isExpanded ? null : entry.id)}
+                        className="flex-grow min-w-0 flex items-center justify-between gap-3 p-2 rounded-lg text-left hover:bg-surface-soft transition-colors"
+                        aria-expanded={isExpanded}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-ink truncate">{entry.videoTitle}</p>
+                          <p className="text-xs text-muted truncate mt-0.5">
+                            {entry.channelName} · {new Date(entry.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <ChevronDown
+                          className={`w-4 h-4 text-muted shrink-0 transition-transform duration-200 ${
+                            isExpanded ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </button>
+                      {confirmingId === entry.id ? (
+                        <div className="flex items-center gap-1 shrink-0 pr-1">
+                          <span className="text-[10px] font-bold text-muted hidden sm:inline">Delete?</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(entry.id)}
+                            disabled={deletingId === entry.id}
+                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold uppercase bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-60 flex items-center gap-1"
+                          >
+                            {deletingId === entry.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              'Yes'
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmingId(null)}
+                            disabled={deletingId === entry.id}
+                            className="px-2 py-1.5 rounded-lg text-[10px] font-bold uppercase bg-surface-soft hover:bg-hairline-soft text-ink transition-colors disabled:opacity-60"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingId(entry.id)}
+                          className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                          aria-label={`Delete history entry for ${entry.videoTitle}`}
+                          title="Delete this history entry"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
 
                     {isExpanded && (
                       <div className="px-3.5 pb-3.5 pt-1 space-y-3 border-t border-hairline-soft bg-surface-soft/40 animate-in fade-in duration-150">

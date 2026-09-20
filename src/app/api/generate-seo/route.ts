@@ -30,11 +30,13 @@ Transcript:
 ${transcript.slice(0, 4000)}
 """
 
+IMPORTANT: Write the "title" and "description" in the SAME language as the transcript above (do not translate them to English). Only the "hashtags" must be in English.
+
 Return ONLY a JSON object with this exact shape:
 {
-  "title": "a catchy, SEO-optimized YouTube Shorts title, under 100 characters",
-  "hashtags": ["#Example1", "#Example2", ...], // 8 to 15 relevant hashtags, each starting with #, no spaces
-  "description": "a 2-4 paragraph YouTube description summarizing the video, naturally including relevant keywords, ending with the same hashtags on their own line"
+  "title": "a catchy, SEO-optimized YouTube Shorts title, under 100 characters, in the transcript's original language",
+  "hashtags": ["#Example1", "#Example2", ...], // 8 to 15 relevant hashtags in English, each starting with #, no spaces
+  "description": "a 2-4 paragraph YouTube description in the transcript's original language, naturally including relevant keywords, ending with the same hashtags on their own line"
 }`;
 }
 

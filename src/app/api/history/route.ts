@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readHistory, addHistoryEntry } from '@/app/utils/history-store';
+import { readHistory, addHistoryEntry, deleteHistoryEntry } from '@/app/utils/history-store';
 import type { HistoryEntry } from '@/app/types/history';
 
 export async function GET() {
@@ -39,6 +39,23 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     console.error('Error saving history entry:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to save history entry.';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ error: 'id is required.' }, { status: 400 });
+    }
+
+    const history = deleteHistoryEntry(id);
+    return NextResponse.json({ history });
+  } catch (error: unknown) {
+    console.error('Error deleting history entry:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete history entry.';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
