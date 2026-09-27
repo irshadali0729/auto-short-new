@@ -191,7 +191,10 @@ export default function SceneLivePreviewPlayer({
     const targetW = isLandscape ? 1920 : 1080;
     const targetH = isLandscape ? 1080 : 1920;
     liveDuaCardSvg = generateDuaCardSvg(
-      activeScene.duaInfo,
+      {
+        ...activeScene.duaInfo,
+        position: activeScene.duaInfo.position || mediaSettings.duaCardPosition || 'center',
+      },
       targetW,
       targetH,
       mediaSettings.duaCardTheme || 'cream'

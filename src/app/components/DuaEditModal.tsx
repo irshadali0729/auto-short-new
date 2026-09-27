@@ -32,6 +32,7 @@ interface DuaEditModalProps {
   sceneKeyword?: string;
   initialDua?: DuaInfo;
   cardTheme?: DuaCardTheme;
+  cardPosition?: DuaCardPosition;
   aspectRatio?: '9:16' | '16:9';
   onSaveDua: (sceneIndex: number, updatedDua: DuaInfo | undefined) => void;
 }
@@ -43,6 +44,7 @@ export default function DuaEditModal({
   sceneKeyword,
   initialDua,
   cardTheme = 'cream',
+  cardPosition = 'center',
   aspectRatio = '9:16',
   onSaveDua,
 }: DuaEditModalProps) {
@@ -74,7 +76,7 @@ export default function DuaEditModal({
         setDraftReference(initialDua.reference || '');
         setDraftIsDua(initialDua.isDua !== false);
         setActiveTheme(initialDua.theme || cardTheme || 'cream');
-        setActivePosition(initialDua.position || 'center');
+        setActivePosition(initialDua.position || cardPosition || 'center');
         setActiveStyle(initialDua.cardStyle || 'classic');
       } else {
         setDraftHindi('ला इलाहा इल्लल्लाहु वह्दहू ला शरी-क लहू, लहुल-मुल्कु व लहुल-हम्दु, व हुवा \'अला कुल्लि शैइन क़दीर');
@@ -83,12 +85,12 @@ export default function DuaEditModal({
         setDraftReference('तिर्मिज़ी / Abu Dawud');
         setDraftIsDua(true);
         setActiveTheme(cardTheme || 'cream');
-        setActivePosition('center');
+        setActivePosition(cardPosition || 'center');
         setActiveStyle('classic');
       }
       setPreviewAspectRatio(aspectRatio);
     }
-  }, [isOpen, initialDua, cardTheme, aspectRatio]);
+  }, [isOpen, initialDua, cardTheme, cardPosition, aspectRatio]);
 
   // Keyboard accessibility: Escape to close
   useEffect(() => {

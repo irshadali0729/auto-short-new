@@ -11,6 +11,7 @@ import {
   renderCaptionOverlayPng,
 } from "@/app/utils/caption-renderer";
 import { DuaCardTheme, renderDuaOverlayPng } from "@/app/utils/dua-renderer";
+import type { DuaCardPosition } from "@/app/types/scene";
 import { isVideoAsset } from "@/app/utils/media-url";
 import { withRetry } from "@/app/utils/retry";
 import {
@@ -222,6 +223,7 @@ export async function POST(request: Request) {
       emojiStyle,
       enableDuaOverlay,
       duaCardTheme,
+      duaCardPosition,
       graphicMotionTheme,
     } = await request.json();
 
@@ -294,6 +296,7 @@ export async function POST(request: Request) {
       resolvedCaptionTheme,
       typeof videoTitle === "string" ? videoTitle : "",
       typeof channelName === "string" ? channelName : "",
+      duaCardPosition === "top" || duaCardPosition === "bottom" ? duaCardPosition : "center",
     ).catch((err) => {
       console.error("Background compilation crash:", err);
       finishJob(runId, {
@@ -328,6 +331,7 @@ async function compileVideoInBackground(
   captionTheme: CaptionTheme = "pill",
   videoTitle: string = "",
   channelName: string = "",
+  duaCardPosition: DuaCardPosition = "center",
 ) {
   let tempDir = "";
   const jobControl: JobControl = jobControlMap.get(runId) || {
@@ -434,7 +438,8 @@ async function resolveSceneAsset(
         const duaOverlayPath = path.join(tempDir, `dua_card_${i}.png`);
         try {
           await renderDuaOverlayPng(
-            scene.duaInfo!,
+            // A position set per scene in the Dua editor beats the global default.
+            { ...scene.duaInfo!, position: scene.duaInfo?.position || duaCardPosition },
             duaOverlayPath,
             targetWidth,
             targetHeight,

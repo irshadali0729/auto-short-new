@@ -547,6 +547,7 @@ export default function Home() {
           emojiStyle: mediaSettings.emojiStyle || 'fluent',
           enableDuaOverlay: mediaSettings.enableDuaOverlay !== false,
           duaCardTheme: mediaSettings.duaCardTheme || 'cream',
+          duaCardPosition: mediaSettings.duaCardPosition || 'center',
           enableAvatarHost: mediaSettings.enableAvatarHost !== false,
           avatarCategory: mediaSettings.avatarCategory || 'women_avatars',
           avatarId: mediaSettings.avatarId || 'Avatar-1',
@@ -1569,6 +1570,7 @@ export default function Home() {
           sceneKeyword={editingDuaSceneIdx !== null && scenes[editingDuaSceneIdx] ? scenes[editingDuaSceneIdx].keyword : undefined}
           initialDua={editingDuaSceneIdx !== null && scenes[editingDuaSceneIdx] ? scenes[editingDuaSceneIdx].duaInfo : undefined}
           cardTheme={mediaSettings.duaCardTheme || 'cream'}
+          cardPosition={mediaSettings.duaCardPosition || 'center'}
           aspectRatio={mediaSettings.aspectRatio || '9:16'}
           onSaveDua={handleSaveDua}
         />
