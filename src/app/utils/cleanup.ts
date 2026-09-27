@@ -5,14 +5,16 @@ export function cleanupAssets() {
   try {
     const projectRoot = process.cwd();
     
-    // 1. Delete output.mp4
-    const outputVideoPath = path.join(projectRoot, 'generated', 'output.mp4');
-    if (fs.existsSync(outputVideoPath)) {
-      try {
-        fs.unlinkSync(outputVideoPath);
-        console.log('Successfully cleaned up output.mp4');
-      } catch (err) {
-        console.error('Failed to delete output.mp4:', err);
+    // 1. Delete output.mp4 (and its cached 720p export)
+    for (const name of ['output.mp4', 'output_720.mp4']) {
+      const outputVideoPath = path.join(projectRoot, 'generated', name);
+      if (fs.existsSync(outputVideoPath)) {
+        try {
+          fs.unlinkSync(outputVideoPath);
+          console.log(`Successfully cleaned up ${name}`);
+        } catch (err) {
+          console.error(`Failed to delete ${name}:`, err);
+        }
       }
     }
 

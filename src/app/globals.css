@@ -8,27 +8,56 @@
   --foreground: #222222;
   --card: #ffffff;
   --card-foreground: #222222;
-  
+
   --primary: #ff385c;
   --primary-active: #e00b41;
   --primary-disabled: #ffd1da;
   --primary-foreground: #ffffff;
-  
+
   --ink: #222222;
   --body: #3f3f3f;
   --muted: #6a6a6a;
   --muted-soft: #929292;
-  
+
   --hairline: #dddddd;
   --hairline-soft: #ebebeb;
   --border-strong: #c1c1c1;
-  
+
   --canvas: #ffffff;
   --surface-soft: #f7f7f7;
   --surface-card: #ffffff;
   --surface-strong: #f2f2f2;
-  
+
   --border: #dddddd;
+
+  /* RGB channels consumed by tailwind.config.ts (supports bg-ink/80 etc.) */
+  --ink-rgb: 34 34 34;
+  --body-rgb: 63 63 63;
+  --muted-rgb: 106 106 106;
+  --hairline-rgb: 221 221 221;
+  --hairline-soft-rgb: 235 235 235;
+  --surface-soft-rgb: 247 247 247;
+  --surface-strong-rgb: 242 242 242;
+  --canvas-rgb: 255 255 255;
+  --border-strong-rgb: 193 193 193;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #141414;
+  --foreground: #ededed;
+  --card: #1c1c1c;
+  --card-foreground: #ededed;
+
+  --ink-rgb: 237 237 237;
+  --body-rgb: 214 214 214;
+  --muted-rgb: 163 163 163;
+  --hairline-rgb: 64 64 64;
+  --hairline-soft-rgb: 46 46 46;
+  --surface-soft-rgb: 30 30 30;
+  --surface-strong-rgb: 40 40 40;
+  --canvas-rgb: 22 22 22;
+  --border-strong-rgb: 96 96 96;
 }
 
 body {
@@ -51,8 +80,8 @@ body {
 
 /* Airbnb Surface Cards */
 .airbnb-card {
-  background: #ffffff;
-  border: 1px solid #ebebeb;
+  background: rgb(var(--canvas-rgb));
+  border: 1px solid rgb(var(--hairline-soft-rgb));
   border-radius: 16px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -63,15 +92,15 @@ body {
 
 /* Airbnb Form Inputs */
 .airbnb-input {
-  background: #ffffff;
-  border: 1px solid #dddddd;
-  color: #222222;
+  background: rgb(var(--canvas-rgb));
+  border: 1px solid rgb(var(--hairline-rgb));
+  color: rgb(var(--ink-rgb));
   border-radius: 8px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .airbnb-input:focus {
-  border-color: #222222;
+  border-color: rgb(var(--ink-rgb));
   outline: none;
 }
 
@@ -82,16 +111,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f7f7f7;
+  background: rgb(var(--surface-soft-rgb));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #dddddd;
+  background: rgb(var(--hairline-rgb));
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #c1c1c1;
+  background: rgb(var(--border-strong-rgb));
 }
 
 /* Utility to hide scrollbars */
@@ -104,3 +133,58 @@ body {
   scrollbar-width: none;
 }
 
+/*
+ * Dark-mode overrides for light colors hardcoded across older components
+ * (bg-white surfaces, pink/green/amber tints). New components should use the
+ * tokens (bg-canvas, bg-surface-soft, text-ink) instead of adding rules here.
+ */
+.dark .bg-white,
+.dark .hover\:bg-white:hover {
+  background-color: rgb(var(--canvas-rgb));
+}
+.dark .bg-white\/90 {
+  background-color: rgb(var(--canvas-rgb) / 0.9);
+}
+/* bg-ink is used as a dark "inverse" surface under white text. */
+.dark .bg-ink {
+  background-color: rgb(245 245 245);
+}
+.dark .bg-ink.text-white,
+.dark .bg-ink .text-white {
+  color: rgb(20 20 20);
+}
+.dark .bg-ink\/80 {
+  background-color: rgb(0 0 0 / 0.8);
+}
+.dark .bg-\[\#fff0f2\],
+.dark .bg-\[\#fff8f9\],
+.dark .hover\:bg-\[\#fff0f2\]:hover {
+  background-color: rgb(255 56 92 / 0.14);
+}
+.dark .border-\[\#ffd1da\] {
+  border-color: rgb(255 56 92 / 0.4);
+}
+.dark .bg-\[\#fff5f5\] {
+  background-color: rgb(239 68 68 / 0.14);
+}
+.dark .text-\[\#c13515\] {
+  color: #fca5a5;
+}
+.dark .bg-\[\#ecfdf5\] {
+  background-color: rgb(16 185 129 / 0.14);
+}
+.dark .border-\[\#a7f3d0\] {
+  border-color: rgb(16 185 129 / 0.4);
+}
+.dark .text-\[\#065f46\],
+.dark .text-emerald-900,
+.dark .text-emerald-700 {
+  color: #6ee7b7;
+}
+.dark .bg-\[\#fffbeb\] {
+  background-color: rgb(245 158 11 / 0.14);
+}
+.dark .text-\[\#92400e\],
+.dark .text-amber-900 {
+  color: #fcd34d;
+}

@@ -55,7 +55,7 @@ export function generateDuaCardSvg(
   let cardBorder = "#E2D3B3"; // Soft gold hairline
   let cardHeaderBg = "#F0E4CA";
   let cardHeaderBorder = "#D4BE92";
-  let cardBadgeText = "#8C682A";
+  let cardBadgeText = "#6B4A12"; // Deep bronze (readable on the cream header)
   let dividerColor = "#D4BE92";
   let hindiColor = "#1E293B"; // Deep slate / Charcoal
   let arabicColor = "#064E3B"; // Rich Islamic deep emerald
@@ -68,7 +68,7 @@ export function generateDuaCardSvg(
     cardBorder = "#E5E7EB";
     cardHeaderBg = "#F9FAFB";
     cardHeaderBorder = "#E5E7EB";
-    cardBadgeText = "#B45309"; // Warm amber
+    cardBadgeText = "#92400E"; // Deep amber
     dividerColor = "#E5E7EB";
     hindiColor = "#111827";
     arabicColor = "#047857"; // Emerald green
@@ -78,7 +78,7 @@ export function generateDuaCardSvg(
     cardBorder = "#CBD5E1";
     cardHeaderBg = "#E2E8F0";
     cardHeaderBorder = "#CBD5E1";
-    cardBadgeText = "#1E293B";
+    cardBadgeText = "#0F172A";
     dividerColor = "#CBD5E1";
     hindiColor = "#0F172A";
     arabicColor = "#1E3A8A"; // Deep royal navy

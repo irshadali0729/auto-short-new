@@ -250,11 +250,12 @@ export const DUA_THEME_OPTIONS: {
   border: string;
   accent: string;
   text: string;
+  badge: string;
 }[] = [
-  // Colors mirror utils/dua-card-svg.ts (card bg / border / Arabic / Hindi).
-  { id: "cream", label: "Cream Ivory", description: "Warm parchment, emerald script", background: "#FAF6ED", border: "#E2D3B3", accent: "#064E3B", text: "#1E293B" },
-  { id: "white", label: "Pure White", description: "Crisp high contrast", background: "#FFFFFF", border: "#E5E7EB", accent: "#047857", text: "#111827" },
-  { id: "light_grey", label: "Slate Grey", description: "Soft slate, navy script", background: "#F4F6F8", border: "#CBD5E1", accent: "#1E3A8A", text: "#0F172A" },
-  { id: "emerald_dark", label: "Emerald Night", description: "Deep emerald, gold script", background: "#06281E", border: "#D4AF37", accent: "#FCD34D", text: "#F8FAFC" },
-  { id: "midnight_gold", label: "Midnight Gold", description: "Obsidian black, amber script", background: "#0F1117", border: "#F59E0B", accent: "#FBBF24", text: "#FFFFFF" },
+  // Colors mirror utils/dua-card-svg.ts (card bg / border / Arabic / Hindi / header label).
+  { id: "cream", label: "Cream Ivory", description: "Warm parchment, emerald script", background: "#FAF6ED", border: "#E2D3B3", accent: "#064E3B", text: "#1E293B", badge: "#6B4A12" },
+  { id: "white", label: "Pure White", description: "Crisp high contrast", background: "#FFFFFF", border: "#E5E7EB", accent: "#047857", text: "#111827", badge: "#92400E" },
+  { id: "light_grey", label: "Slate Grey", description: "Soft slate, navy script", background: "#F4F6F8", border: "#CBD5E1", accent: "#1E3A8A", text: "#0F172A", badge: "#0F172A" },
+  { id: "emerald_dark", label: "Emerald Night", description: "Deep emerald, gold script", background: "#06281E", border: "#D4AF37", accent: "#FCD34D", text: "#F8FAFC", badge: "#FDE68A" },
+  { id: "midnight_gold", label: "Midnight Gold", description: "Obsidian black, amber script", background: "#0F1117", border: "#F59E0B", accent: "#FBBF24", text: "#FFFFFF", badge: "#FDE68A" },
 ];

@@ -6,6 +6,7 @@ export default {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
@@ -16,13 +17,17 @@ export default {
           active: "#e00b41",
           disabled: "#ffd1da",
         },
-        ink: "#222222",
-        body: "#3f3f3f",
-        muted: "#6a6a6a",
-        hairline: "#dddddd",
-        "hairline-soft": "#ebebeb",
-        "surface-soft": "#f7f7f7",
-        "surface-strong": "#f2f2f2",
+        // Neutral tokens are RGB channel variables (see globals.css) so they
+        // flip in dark mode and still support opacity modifiers (bg-ink/80).
+        ink: "rgb(var(--ink-rgb) / <alpha-value>)",
+        body: "rgb(var(--body-rgb) / <alpha-value>)",
+        muted: "rgb(var(--muted-rgb) / <alpha-value>)",
+        hairline: "rgb(var(--hairline-rgb) / <alpha-value>)",
+        "hairline-soft": "rgb(var(--hairline-soft-rgb) / <alpha-value>)",
+        "surface-soft": "rgb(var(--surface-soft-rgb) / <alpha-value>)",
+        "surface-strong": "rgb(var(--surface-strong-rgb) / <alpha-value>)",
+        canvas: "rgb(var(--canvas-rgb) / <alpha-value>)",
+        "border-strong": "rgb(var(--border-strong-rgb) / <alpha-value>)",
       },
       boxShadow: {
         airbnb: "rgba(0, 0, 0, 0.02) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 6px 0, rgba(0, 0, 0, 0.1) 0 4px 8px 0",

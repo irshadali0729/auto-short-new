@@ -117,7 +117,7 @@ function DuaCard({ dua, compact }: { dua: (typeof DUA_THEME_OPTIONS)[number]; co
       className={`rounded-lg border text-center ${compact ? "px-2 py-1.5" : "px-2.5 py-2"}`}
       style={{ background: dua.background, borderColor: dua.border }}
     >
-      <div className="text-[7px] font-bold tracking-wide mb-0.5" style={{ color: dua.border }}>
+      <div className="text-[7px] font-bold tracking-wide mb-0.5" style={{ color: dua.badge }}>
         DUA • دعاء
       </div>
       <div className={`${compact ? "text-[11px]" : "text-sm"} font-bold`} style={{ color: dua.accent }} dir="rtl">

@@ -71,6 +71,8 @@ export type MatchedTier = "visual" | "fallback" | "mood" | "local" | "random" | 
 
 /** A scene after image/video matching has resolved its media asset. */
 export interface Scene {
+  /** Client-assigned stable id so reorder/delete keep per-scene UI state attached. */
+  id?: string;
   keyword: string;
   duration: number;
   image: string;

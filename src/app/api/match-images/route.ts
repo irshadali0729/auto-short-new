@@ -211,6 +211,23 @@ export async function POST(request: Request) {
     const usedPixabayPhotoIds = new Set<number>();
     const usedPixabayVideoIds = new Set<number>();
 
+    // "Find another" on a single scene sends the assets it already tried so
+    // the cascade skips them (local paths directly, stock ids parsed from the
+    // saved filenames).
+    const excludeAssets: string[] = Array.isArray(body.excludeAssets)
+      ? body.excludeAssets.filter((a: unknown): a is string => typeof a === "string")
+      : [];
+    for (const asset of excludeAssets) {
+      usedAssets.add(asset);
+      const base = asset.split(/[\\/]/).pop() || "";
+      let m: RegExpMatchArray | null;
+      if ((m = base.match(/^pexels_video_(\d+)_/))) usedPexelsVideoIds.add(Number(m[1]));
+      else if ((m = base.match(/^pexels_(\d+)_/))) usedPexelsPhotoIds.add(Number(m[1]));
+      else if ((m = base.match(/^pixabay_video_(\d+)_/))) usedPixabayVideoIds.add(Number(m[1]));
+      else if ((m = base.match(/^pixabay_photo_(\d+)_/))) usedPixabayPhotoIds.add(Number(m[1]));
+      else if ((m = base.match(/^unsplash_([A-Za-z0-9_-]{11})_/))) usedUnsplashIds.add(m[1]);
+    }
+
     for (let sceneIdx = 0; sceneIdx < scenes.length; sceneIdx++) {
       const scene: SceneInput = scenes[sceneIdx];
       const { keyword, duration, graphics, captions, visualQuery, fallbackQuery, moodQuery } = scene;

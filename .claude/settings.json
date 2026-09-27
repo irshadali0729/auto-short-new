@@ -4,7 +4,8 @@
       "PowerShell(Remove-Item \"src\\\\app\\\\components\\\\settings\\\\SettingsAccordionSection.tsx\" -Confirm:$false)",
       "PowerShell(npx tsc --noEmit -p . 2>&1)",
       "PowerShell(npx next lint --dir src/app/components --dir src/app/api/provider-status 2>&1)",
-      "WebSearch"
+      "WebSearch",
+      "PowerShell(npx next lint 2>&1)"
     ]
   }
 }

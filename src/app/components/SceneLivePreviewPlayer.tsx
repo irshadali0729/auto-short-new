@@ -58,7 +58,8 @@ interface SceneLivePreviewPlayerProps {
   mediaSettings: MediaSettings;
   onChangeCaptionPosition?: (position: CaptionPosition) => void;
   onOpenDuaEditor?: (index: number) => void;
-  onGenerateVideo: () => void;
+  /** Optional inline CTA; the dashboard's sticky action bar owns this now. */
+  onGenerateVideo?: () => void;
   isGenerating?: boolean;
 }
 
@@ -161,6 +162,21 @@ export default function SceneLivePreviewPlayer({
   const handleTogglePlay = () => {
     setIsPlaying((prev) => !prev);
   };
+
+  // Space toggles play/pause, unless the user is typing, focused on a
+  // control that already handles Space, or a modal dialog is open.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest('input, textarea, select, button, a, [contenteditable="true"], video')) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+      e.preventDefault();
+      setIsPlaying((prev) => !prev);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const handlePrevScene = () => {
     sceneElapsedRef.current = 0;
@@ -642,6 +658,7 @@ export default function SceneLivePreviewPlayer({
         </div>
 
         {/* Primary CTA: Compile Shorts Video */}
+        {onGenerateVideo && (
         <div className="pt-2 border-t border-hairline-soft">
           <button
             type="button"
@@ -666,6 +683,7 @@ export default function SceneLivePreviewPlayer({
             )}
           </button>
         </div>
+        )}
 
       </div>
 
