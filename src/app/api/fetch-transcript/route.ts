@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchFreeTranscript } from "@/app/utils/free-transcript";
 
 export async function POST(request: Request) {
   try {
@@ -11,6 +12,19 @@ export async function POST(request: Request) {
       );
     }
 
+    // 1. Free source first (no key, no quota). Any failure falls through to
+    //    the TranscriptAPI path below, which is unchanged.
+    try {
+      const free = await fetchFreeTranscript(youtubeUrl);
+      return NextResponse.json({ ...free, source: "free" });
+    } catch (freeErr) {
+      console.warn(
+        "Free transcript lookup failed, falling back to TranscriptAPI:",
+        freeErr instanceof Error ? freeErr.message : freeErr,
+      );
+    }
+
+    // 2. Fallback: TranscriptAPI (paid).
     const apiKey = process.env.TRANSCRIPT_API_KEY;
     if (!apiKey) {
       return NextResponse.json(

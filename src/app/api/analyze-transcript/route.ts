@@ -196,8 +196,9 @@ function alignScenesToSegments(
           accurateDuration,
           Math.max(relStart + 0.5, segments[s].end - sceneStartTime),
         );
-        const sliceEmoji =
-          resolveEmojiForText(segments[s].text) || scene.emoji;
+        // Keyword match only; lines without one get the scene's final
+        // (de-duplicated) emoji later in the POST handler.
+        const sliceEmoji = resolveEmojiForText(segments[s].text) || undefined;
         sceneCaptions.push({
           text: segments[s].text,
           start: Number(relStart.toFixed(2)),
@@ -389,7 +390,7 @@ Rules:
 * Return a JSON object with a single key "scenes" which contains an array of objects.
 * Each scene object must have:
   - "keyword" (string): Simple visual keyword (max 2 words).
-  - "emoji" (string): A single high-impact emotional/spiritual emoji (e.g. "🤲", "💔", "✨", "⏳", "🔥", "⚠️", "💰").
+  - "emoji" (string): A single emoji that literally matches the scene's main subject or emotion (e.g. snake -> "🐍", dream -> "💭", enemy -> "😠", protection -> "🛡️", victory -> "🏆", dua -> "🤲", heartbreak -> "💔", time -> "⏳"). Use a different emoji for every scene.
   - "duration" (number): Scene duration in seconds.
   - "prompt" (string): A detailed text-to-image prompt. It must describe a clean, beautiful scene in "cinematic anime style" reflecting the transcript beat, and end with the exact words: "vertical 9:16 aspect ratio, soft lighting, highly detailed, 1k".
   - "tags" (array of strings): 3-5 short visual keywords or synonyms (order by relevance). These will be used to expand image search queries (e.g., ["muslim_woman", "hijab", "prayer"]).
@@ -494,6 +495,7 @@ CRITICAL VISUAL METAPHOR & STOCK SEARCH RULES:
     * Time / Urgency / Delay -> "⏳"
     * Fire / Punishment -> "🔥"
     * Light / Mercy / Noor -> "✨"
+  - These are only examples. Prefer the most LITERAL emoji for the scene's main subject when there is one (e.g. snake -> "🐍", dream -> "💭", enemy / envy -> "😠", attack / harm -> "⚠️", protection / refuge -> "🛡️", victory -> "🏆", fear -> "😨", sharing -> "📤").
 
 ${DUA_DETECTION_RULE_BLOCK}
 
@@ -712,6 +714,9 @@ export async function POST(request: Request) {
       moodQuery: scene.moodQuery ? String(scene.moodQuery).trim() : undefined,
       tags: Array.isArray(scene.tags) ? scene.tags : undefined,
       caption: scene.caption ? String(scene.caption) : undefined,
+      // Previously dropped here, so the AI's emoji never reached the
+      // selection step below and scenes fell through to keyword/backup picks.
+      emoji: typeof scene.emoji === "string" && scene.emoji.trim() ? scene.emoji.trim() : undefined,
       graphics: Array.isArray(scene.graphics) ? scene.graphics : undefined,
       duaInfo:
         scene.duaInfo && typeof scene.duaInfo === "object" && scene.duaInfo.isDua
@@ -737,7 +742,9 @@ export async function POST(request: Request) {
     }
 
     const usedSceneEmojis = new Set<string>();
-    const diverseFallbacks = ["🤲", "📿", "🎁", "❤️", "💫", "✨", "💡", "⏳", "🕊️", "📖"];
+    // Neutral last resort: never implies a meaning (gift, dua, beads) the
+    // scene doesn't have.
+    const diverseFallbacks = ["✨", "💭", "👀", "💡", "⭐", "🎯", "📌", "🔔", "🧭", "📣"];
 
     finalScenes = finalScenes.map((scene, sIdx) => {
       const duration = Number(scene.duration) || 6;
@@ -787,8 +794,6 @@ export async function POST(request: Request) {
       if (!sceneEmoji) {
         const textMatch = resolveEmojiForText(sceneSpokenText);
         if (textMatch && !usedSceneEmojis.has(textMatch)) {
-          sceneEmoji = textMatch;
-        } else if (textMatch && !sceneEmoji) {
           sceneEmoji = textMatch;
         }
       }
