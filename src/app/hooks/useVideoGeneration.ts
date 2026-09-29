@@ -47,6 +47,7 @@ function buildRequestBody(runId: string, o: StartOptions) {
     channelName: o.channelName,
     zoomSpeed: s.zoomSpeed ?? DEFAULT_MEDIA_SETTINGS.zoomSpeed,
     transitionDuration: s.transitionDuration ?? DEFAULT_MEDIA_SETTINGS.transitionDuration,
+    optimizedGeneration: s.optimizedGeneration === true,
     textOverlayMode: s.textOverlayMode || (s.enableGraphicMotion ? "graphics" : "captions"),
     captionPosition: s.captionPosition || DEFAULT_MEDIA_SETTINGS.captionPosition,
     captionTheme: s.captionTheme || DEFAULT_MEDIA_SETTINGS.captionTheme,

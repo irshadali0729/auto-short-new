@@ -1,8 +1,9 @@
 "use client";
 
 import React from "react";
+import { Zap } from "lucide-react";
 import { ASPECT_RATIO_OPTIONS } from "../settings-options";
-import { AdvancedSection, ChoiceCard, ChoiceGroup, Field, RangeField } from "../SettingsControls";
+import { AdvancedSection, ChoiceCard, ChoiceGroup, Field, RangeField, ToggleCard } from "../SettingsControls";
 import type { SettingsTabProps } from "./types";
 
 export default function VideoTab({ settings, update }: SettingsTabProps) {
@@ -26,6 +27,18 @@ export default function VideoTab({ settings, update }: SettingsTabProps) {
           })}
         </ChoiceGroup>
       </Field>
+
+      <ToggleCard
+        checked={settings.optimizedGeneration}
+        onChange={(v) => update({ optimizedGeneration: v })}
+        icon={Zap}
+        title="Optimized video generation"
+        description={
+          settings.optimizedGeneration
+            ? "Faster render: pre-baked photo backgrounds, low-res blur, cropped overlays."
+            : "Original render pipeline."
+        }
+      />
 
       <AdvancedSection>
         <RangeField

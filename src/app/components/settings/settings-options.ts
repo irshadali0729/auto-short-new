@@ -57,7 +57,7 @@ export const SETTINGS_TABS: {
     id: "video",
     label: "Format",
     icon: Smartphone,
-    fields: ["aspectRatio", "zoomSpeed", "transitionDuration"],
+    fields: ["aspectRatio", "zoomSpeed", "transitionDuration", "optimizedGeneration"],
   },
   {
     id: "text",

@@ -37,6 +37,8 @@ export interface MediaSettings {
   graphicMotionTheme?: GraphicMotionThemeOption;
   zoomSpeed: number;
   transitionDuration: number;
+  // Faster render path (pre-baked stills, low-res blur, cropped overlays).
+  optimizedGeneration?: boolean;
   useRelatableVisualSearch?: boolean;
   aspectRatio: VideoAspectRatio;
   enableEmojiCaptions?: boolean;
@@ -68,6 +70,7 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   graphicMotionTheme: "auto",
   zoomSpeed: 2,
   transitionDuration: 0.3,
+  optimizedGeneration: false,
   useRelatableVisualSearch: true,
   aspectRatio: "9:16",
   enableEmojiCaptions: false,

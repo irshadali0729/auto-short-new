@@ -28,6 +28,13 @@ import {
 } from "@/app/config/video-config";
 import type { Scene, GraphicBeat, GraphicMotionThemeOption } from "@/app/types/scene";
 import { buildSavedVideoFilename } from "@/app/utils/filename";
+import {
+  VIDEO_BG_BOXBLUR,
+  blurBackgroundSize,
+  cropOverlayToContent,
+  prepareStillComposite,
+  prepareStillCover,
+} from "@/app/utils/optimized-render";
 
 const ffmpegPath = ffmpegInstaller.path;
 
@@ -225,6 +232,7 @@ export async function POST(request: Request) {
       duaCardTheme,
       duaCardPosition,
       graphicMotionTheme,
+      optimizedGeneration,
     } = await request.json();
 
     if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
@@ -297,6 +305,7 @@ export async function POST(request: Request) {
       typeof videoTitle === "string" ? videoTitle : "",
       typeof channelName === "string" ? channelName : "",
       duaCardPosition === "top" || duaCardPosition === "bottom" ? duaCardPosition : "center",
+      optimizedGeneration === true,
     ).catch((err) => {
       console.error("Background compilation crash:", err);
       finishJob(runId, {
@@ -332,6 +341,9 @@ async function compileVideoInBackground(
   videoTitle: string = "",
   channelName: string = "",
   duaCardPosition: DuaCardPosition = "center",
+  // Opt-in fast path (see utils/optimized-render.ts); false keeps the
+  // original filter graphs untouched.
+  optimized: boolean = false,
 ) {
   let tempDir = "";
   const jobControl: JobControl = jobControlMap.get(runId) || {
@@ -424,8 +436,10 @@ async function resolveSceneAsset(
           ? scene.graphics
           : buildDefaultGraphicBeats(duration);
 
-      const overlayPngList: Array<{ path: string; start: number; end: number }> = [];
-      const captionPngList: Array<{ path: string; start: number; end: number }> = [];
+      // x/y are only set on the optimized path (overlay cropped to content).
+      type OverlayPng = { path: string; start: number; end: number; x?: number; y?: number };
+      const overlayPngList: OverlayPng[] = [];
+      const captionPngList: OverlayPng[] = [];
 
       const isDuaScene =
         enableDuaOverlay &&
@@ -530,6 +544,46 @@ async function resolveSceneAsset(
         : "";
       const hasValidAvatarFile = isSplitScreenScene && Boolean(inputAvatarPath && fs.existsSync(inputAvatarPath));
 
+      // Optimized path: bake the static still into one pre-sized frame so
+      // zoompan is the only per-frame work, and crop overlay PNGs to their
+      // visible pixels. Any prep failure falls back to the legacy graph.
+      const frameCount = Math.ceil(duration * 30) + 2;
+      const videoFps = optimized ? "fps=30," : "";
+      let preparedStillPath = "";
+      if (optimized && !sceneImageIsVideo && inputImagePath) {
+        const preparedPath = path.join(tempDir, `still_${i}.jpg`);
+        try {
+          if (hasValidAvatarFile) {
+            const [w, h] =
+              targetRatio === "16:9"
+                ? [Math.floor(targetWidth / 2), targetHeight]
+                : [targetWidth, Math.floor(targetHeight / 2)];
+            await prepareStillCover(inputImagePath, preparedPath, w, h);
+          } else {
+            await prepareStillComposite(inputImagePath, preparedPath, targetWidth, targetHeight);
+          }
+          preparedStillPath = preparedPath;
+        } catch (prepErr) {
+          console.warn(`Optimized still prep failed for scene ${i}, using legacy graph:`, prepErr);
+        }
+      }
+      if (optimized) {
+        for (const list of [captionPngList, overlayPngList]) {
+          const cropped = await Promise.all(
+            list.map(async (ov): Promise<OverlayPng | null> => {
+              try {
+                const c = await cropOverlayToContent(ov.path, ov.path.replace(/\.png$/, "_crop.png"));
+                return c ? { ...ov, path: c.path, x: c.x, y: c.y } : null;
+              } catch (cropErr) {
+                console.warn(`Overlay crop failed for ${ov.path}, using full frame:`, cropErr);
+                return ov;
+              }
+            }),
+          );
+          list.splice(0, list.length, ...cropped.filter((ov): ov is OverlayPng => ov !== null));
+        }
+      }
+
 
       let filterGraph = "";
       let overlayBaseInputIdx = 1;
@@ -545,7 +599,9 @@ async function resolveSceneAsset(
 
           let stockChain = "";
           if (isStockVideo) {
-            stockChain = `[1:v]scale=${halfWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${halfWidth}:${targetHeight},setpts=PTS-STARTPTS[right];`;
+            stockChain = `[1:v]${videoFps}scale=${halfWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${halfWidth}:${targetHeight},setpts=PTS-STARTPTS[right];`;
+          } else if (preparedStillPath) {
+            stockChain = `[1:v]zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':d=${frameCount}:s=${halfWidth}x${targetHeight}:fps=30[right];`;
           } else {
             stockChain =
               `[1:v]scale=${halfWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${halfWidth}:${targetHeight}[r_still];` +
@@ -553,7 +609,7 @@ async function resolveSceneAsset(
           }
 
           filterGraph =
-            `[0:v]scale=${halfWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${halfWidth}:${targetHeight},setpts=PTS-STARTPTS[left];` +
+            `[0:v]${videoFps}scale=${halfWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${halfWidth}:${targetHeight},setpts=PTS-STARTPTS[left];` +
             stockChain +
             `[left][right]hstack=inputs=2[split_raw];` +
             `[split_raw]drawbox=x=${dividerX}:y=0:w=4:h=${targetHeight}:color=white@0.35:t=fill[zoomed];` +
@@ -565,7 +621,9 @@ async function resolveSceneAsset(
 
           let stockChain = "";
           if (isStockVideo) {
-            stockChain = `[1:v]scale=${targetWidth}:${halfHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${halfHeight},setpts=PTS-STARTPTS[bottom];`;
+            stockChain = `[1:v]${videoFps}scale=${targetWidth}:${halfHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${halfHeight},setpts=PTS-STARTPTS[bottom];`;
+          } else if (preparedStillPath) {
+            stockChain = `[1:v]zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':d=${frameCount}:s=${targetWidth}x${halfHeight}:fps=30[bottom];`;
           } else {
             stockChain =
               `[1:v]scale=${targetWidth}:${halfHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${halfHeight}[b_still];` +
@@ -576,17 +634,31 @@ async function resolveSceneAsset(
           // dead-centering it) so the avatar's head isn't clipped when a tall
           // 9:16 clip gets squeezed into this short half-height split panel.
           filterGraph =
-            `[0:v]scale=${targetWidth}:${halfHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${halfHeight}:(in_w-out_w)/2:(in_h-out_h)*0.25,setpts=PTS-STARTPTS[top];` +
+            `[0:v]${videoFps}scale=${targetWidth}:${halfHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${halfHeight}:(in_w-out_w)/2:(in_h-out_h)*0.25,setpts=PTS-STARTPTS[top];` +
             stockChain +
             `[top][bottom]vstack=inputs=2[split_raw];` +
             `[split_raw]drawbox=x=0:y=${dividerY}:w=${targetWidth}:h=4:color=white@0.35:t=fill[zoomed];` +
             `[zoomed]drawgrid=width=100:height=100:thickness=1:color=white@0.04[grid];`;
         }
+      } else if (sceneImageIsVideo && optimized) {
+        // Background blur at 1/4 resolution, input capped to 30fps before filtering.
+        const bgSize = blurBackgroundSize(targetWidth, targetHeight);
+        filterGraph =
+          `[0:v]fps=30,split=2[src_bg][src_fg];` +
+          `[src_bg]scale=${bgSize.w}:${bgSize.h}:force_original_aspect_ratio=increase,crop=${bgSize.w}:${bgSize.h},${VIDEO_BG_BOXBLUR},scale=${targetWidth}:${targetHeight},setpts=PTS-STARTPTS[bg];` +
+          `[src_fg]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,setpts=PTS-STARTPTS[fg_scaled];` +
+          `[bg][fg_scaled]overlay=(W-w)/2:(H-h)/2[zoomed];` +
+          `[zoomed]drawgrid=width=100:height=100:thickness=1:color=white@0.04[grid];`;
       } else if (sceneImageIsVideo) {
         filterGraph =
           `[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${targetHeight},boxblur=20:5,setpts=PTS-STARTPTS[bg];` +
           `[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,setpts=PTS-STARTPTS[fg_scaled];` +
           `[bg][fg_scaled]overlay=(W-w)/2:(H-h)/2[zoomed];` +
+          `[zoomed]drawgrid=width=100:height=100:thickness=1:color=white@0.04[grid];`;
+      } else if (preparedStillPath) {
+        // Composite already baked by sharp; zoompan emits every frame from one decoded image.
+        filterGraph =
+          `[0:v]zoompan=z='${zoomExpression}':x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':d=${frameCount}:s=${targetWidth}x${targetHeight}:fps=30[zoomed];` +
           `[zoomed]drawgrid=width=100:height=100:thickness=1:color=white@0.04[grid];`;
       } else {
         filterGraph =
@@ -612,8 +684,12 @@ async function resolveSceneAsset(
           const fadeOut = Math.min(0.15, capDur / 4).toFixed(2);
           const fadeOutStart = Math.max(ov.start, ov.end - Number(fadeOut)).toFixed(2);
 
-          filterGraph += `[${inputIdx}:v]format=rgba,fade=t=in:st=${st}:d=${fadeIn}:alpha=1,fade=t=out:st=${fadeOutStart}:d=${fadeOut}:alpha=1[${fadedLabel}];`;
-          filterGraph += `[${currentLabel}][${fadedLabel}]overlay=x=0:y=0:enable='between(t\\,${st}\\,${et})'[${nextLabel}];`;
+          // Optimized inputs only run for the overlay's own window, so shift
+          // them to start at st; eof_action=pass keeps the scene going after.
+          const srcShift = optimized ? `setpts=PTS-STARTPTS+${st}/TB,` : "";
+          const placement = optimized ? `x=${ov.x ?? 0}:y=${ov.y ?? 0}:eof_action=pass` : "x=0:y=0";
+          filterGraph += `[${inputIdx}:v]${srcShift}format=rgba,fade=t=in:st=${st}:d=${fadeIn}:alpha=1,fade=t=out:st=${fadeOutStart}:d=${fadeOut}:alpha=1[${fadedLabel}];`;
+          filterGraph += `[${currentLabel}][${fadedLabel}]overlay=${placement}:enable='between(t\\,${st}\\,${et})'[${nextLabel}];`;
           currentLabel = nextLabel;
         });
       } else if (textOverlayMode === "graphics") {
@@ -633,11 +709,15 @@ async function resolveSceneAsset(
             ).toFixed(2);
 
             // Smooth alpha fade-in and fade-out applied directly to the RGBA overlay stream
-            filterGraph += `[${inputIdx}:v]format=rgba,fade=t=in:st=${st}:d=${fadeInDur}:alpha=1,fade=t=out:st=${fadeOutStart}:d=${fadeOutDur}:alpha=1[${fadedLabel}];`;
+            const srcShift = optimized ? `setpts=PTS-STARTPTS+${st}/TB,` : "";
+            filterGraph += `[${inputIdx}:v]${srcShift}format=rgba,fade=t=in:st=${st}:d=${fadeInDur}:alpha=1,fade=t=out:st=${fadeOutStart}:d=${fadeOutDur}:alpha=1[${fadedLabel}];`;
 
             // Kinetic slide-up 35px into rest position, evaluated per frame with escaped commas
-            const yExpr = `'if(lt(t\\,${st})\\,35\\,if(lt(t\\,${st}+0.25)\\,35*(1-(t-${st})/0.25)\\,0))'`;
-            filterGraph += `[${currentLabel}][${fadedLabel}]overlay=x=0:y=${yExpr}:eval=frame:enable='between(t\\,${st}\\,${et})'[${nextLabel}];`;
+            const yBase = optimized ? `${ov.y ?? 0}+` : "";
+            const yExpr = `'${yBase}if(lt(t\\,${st})\\,35\\,if(lt(t\\,${st}+0.25)\\,35*(1-(t-${st})/0.25)\\,0))'`;
+            const xPos = optimized ? `${ov.x ?? 0}` : "0";
+            const eofPass = optimized ? ":eof_action=pass" : "";
+            filterGraph += `[${currentLabel}][${fadedLabel}]overlay=x=${xPos}:y=${yExpr}:eval=frame${eofPass}:enable='between(t\\,${st}\\,${et})'[${nextLabel}];`;
             currentLabel = nextLabel;
           });
         } else {
@@ -663,11 +743,15 @@ async function resolveSceneAsset(
         // Input 1: Stock media (video or still photo)
         if (isVideoAsset(imageFilename)) {
           ffmpegArgs.push("-stream_loop", "-1", "-i", inputImagePath);
+        } else if (preparedStillPath) {
+          ffmpegArgs.push("-i", preparedStillPath);
         } else {
           ffmpegArgs.push("-loop", "1", "-i", inputImagePath);
         }
       } else if (sceneImageIsVideo) {
         ffmpegArgs.push("-stream_loop", "-1", "-i", inputImagePath);
+      } else if (preparedStillPath) {
+        ffmpegArgs.push("-i", preparedStillPath);
       } else {
         ffmpegArgs.push("-loop", "1", "-i", inputImagePath);
       }
@@ -680,7 +764,13 @@ async function resolveSceneAsset(
             : [];
 
       for (const ov of activePngList) {
-        ffmpegArgs.push("-loop", "1", "-i", ov.path);
+        if (optimized) {
+          // Only produce overlay frames for the overlay's visible window.
+          const windowDur = Math.max(0.1, ov.end - ov.start).toFixed(2);
+          ffmpegArgs.push("-loop", "1", "-framerate", "30", "-t", windowDur, "-i", ov.path);
+        } else {
+          ffmpegArgs.push("-loop", "1", "-i", ov.path);
+        }
       }
 
       ffmpegArgs.push(

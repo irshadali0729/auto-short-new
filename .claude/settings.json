@@ -5,7 +5,10 @@
       "PowerShell(npx tsc --noEmit -p . 2>&1)",
       "PowerShell(npx next lint --dir src/app/components --dir src/app/api/provider-status 2>&1)",
       "WebSearch",
-      "PowerShell(npx next lint 2>&1)"
+      "PowerShell(npx next lint 2>&1)",
+      "Bash(node -e ' *)",
+      "Bash(DEBUG=1 YT_CAPTION_DEBUG=1 node -e ' *)",
+      "Bash(grep -v \"^\\\\s*$\")"
     ]
   }
 }
