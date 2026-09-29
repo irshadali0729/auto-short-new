@@ -8,7 +8,10 @@
       "PowerShell(npx next lint 2>&1)",
       "Bash(node -e ' *)",
       "Bash(DEBUG=1 YT_CAPTION_DEBUG=1 node -e ' *)",
-      "Bash(grep -v \"^\\\\s*$\")"
+      "Bash(grep -v \"^\\\\s*$\")",
+      "PowerShell($files = Get-ChildItem generated/saved -File | Sort-Object LastWriteTime -Descending; $keep = $files[0]; \"Keeping: $\\($keep.Name\\) \\($\\($keep.LastWriteTime\\)\\)\"; $del = $files | Select-Object -Skip 1; $mb = [math]::Round\\(\\($del | Measure-Object Length -Sum\\).Sum / 1MB, 1\\); $del | Remove-Item -Force -Confirm:$false; \"Deleted $\\($del.Count\\) files, freed $mb MB\"; \\(Get-ChildItem generated/saved\\).Name)",
+      "PowerShell(npx eslint src/app/page.tsx src/app/components/dashboard/InputPanel.tsx src/app/api/translate-transcript/route.ts src/app/utils/transcript-language.ts 2>&1)",
+      "PowerShell($body = @{ targetLanguage = \"roman-hindi\"; segments = @\\(@{text=\"Ask only Allah, because He alone is the giver.\"; start=0; duration=3.2; end=3.2}, @{text=\"When everyone is asleep, pour your heart out to Him.\"; start=3.2; duration=4; end=7.2}\\) } | ConvertTo-Json -Depth 5; try { Invoke-RestMethod -Uri http://localhost:3000/api/translate-transcript -Method Post -ContentType \"application/json; charset=utf-8\" -Body \\([Text.Encoding]::UTF8.GetBytes\\($body\\)\\) -TimeoutSec 90 | ConvertTo-Json -Depth 5 } catch { \"ERR: $\\($_.Exception.Message\\)\" })"
     ]
   }
 }

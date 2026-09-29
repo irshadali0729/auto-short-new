@@ -1,8 +1,15 @@
 "use client";
 
 import React, { forwardRef } from "react";
-import { Clock, Link2, Loader2, RotateCcw, Sparkles, Wand2 } from "lucide-react";
+import { Clock, Languages, Link2, Loader2, RotateCcw, Sparkles, Wand2 } from "lucide-react";
 import type { TranscriptSegment } from "@/app/types/scene";
+import {
+  TRANSCRIPT_LANGUAGE_LABELS,
+  TRANSLATION_OPTIONS,
+  TRANSLATION_TARGET_LABELS,
+  type TranscriptLanguage,
+  type TranslationTarget,
+} from "@/app/utils/transcript-language";
 
 const YOUTUBE_URL_RE =
   /^(https?:\/\/)?(www\.|m\.)?(youtube\.com\/(watch\?v=|shorts\/|live\/|embed\/)|youtu\.be\/)[\w-]{6,}\S*$/i;
@@ -32,6 +39,14 @@ interface InputPanelProps {
   onTargetLengthChange: (value: string) => void;
   /** Shown once scenes exist (the sticky bar then offers Generate instead). */
   onReanalyze?: () => void;
+  /** Language of the original transcript (detected from its script). */
+  sourceLanguage: TranscriptLanguage;
+  /** Language currently shown, or null when showing the original. */
+  translatedTo: TranslationTarget | null;
+  /** Target being fetched right now, or null. */
+  translatingTo: TranslationTarget | null;
+  onTranslate: (target: TranslationTarget) => void;
+  onShowOriginal: () => void;
 }
 
 // One box for both input paths: paste a YouTube link (auto-imports its
@@ -51,12 +66,23 @@ const InputPanel = forwardRef<HTMLTextAreaElement, InputPanelProps>(function Inp
     targetVideoLength,
     onTargetLengthChange,
     onReanalyze,
+    sourceLanguage,
+    translatedTo,
+    translatingTo,
+    onTranslate,
+    onShowOriginal,
   },
   ref,
 ) {
   const looksLikeUrl = isYoutubeUrl(value);
   const isEmpty = !value.trim();
   const audioLength = transcriptSegments[transcriptSegments.length - 1]?.end;
+  const isTranslating = translatingTo !== null;
+
+  const chipClass = (active: boolean) =>
+    `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors disabled:opacity-50 ${
+      active ? "border-ink bg-ink text-white" : "border-hairline bg-canvas text-ink hover:bg-surface-soft"
+    }`;
 
   return (
     <section id="step-transcript" className="airbnb-card p-5 sm:p-6 scroll-mt-28">
@@ -130,6 +156,38 @@ const InputPanel = forwardRef<HTMLTextAreaElement, InputPanelProps>(function Inp
         <p className="mt-2 text-xs text-muted truncate">
           <span className="font-semibold text-ink">From YouTube:</span> {sourceTitle}
         </p>
+      )}
+
+      {!isEmpty && !looksLikeUrl && (
+        <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Transcript language">
+          <span className="inline-flex items-center gap-2 text-xs font-semibold text-ink mr-1">
+            <Languages className="w-4 h-4 text-rausch" />
+            Language
+          </span>
+          <button
+            type="button"
+            onClick={onShowOriginal}
+            disabled={isBusy || isTranslating || translatedTo === null}
+            aria-pressed={translatedTo === null}
+            className={chipClass(translatedTo === null)}
+          >
+            {TRANSCRIPT_LANGUAGE_LABELS[sourceLanguage]} (original)
+          </button>
+          {TRANSLATION_OPTIONS[sourceLanguage].map((target) => (
+            <button
+              key={target}
+              type="button"
+              onClick={() => onTranslate(target)}
+              disabled={isBusy || isTranslating || translatedTo === target}
+              aria-pressed={translatedTo === target}
+              className={chipClass(translatedTo === target)}
+            >
+              {translatingTo === target && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {TRANSLATION_TARGET_LABELS[target]}
+            </button>
+          ))}
+          {isTranslating && <span className="text-[11px] text-muted">Translating… timings stay the same</span>}
+        </div>
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

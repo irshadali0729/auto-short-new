@@ -86,6 +86,34 @@ function finishJob(runId: string, data: ProgressData) {
   }, PROGRESS_TTL_MS);
 }
 
+// Removes every generated/temp_run_* folder not owned by a still-running job.
+// Catches leftovers the per-job cleanup missed (server restarted mid-run, or
+// Windows file locks making the earlier rmSync fail).
+function sweepStaleTempDirs(generatedDir: string) {
+  const activeTempDirs = new Set<string>();
+  for (const [id, control] of jobControlMap) {
+    if (control.tempDir && progressMap.get(id)?.complete === false) {
+      activeTempDirs.add(path.resolve(control.tempDir));
+    }
+  }
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(generatedDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith("temp_run_")) continue;
+    const dirPath = path.resolve(generatedDir, entry.name);
+    if (activeTempDirs.has(dirPath)) continue;
+    try {
+      fs.rmSync(dirPath, { recursive: true, force: true });
+    } catch (err) {
+      console.warn(`Failed to delete stale temp folder ${entry.name}:`, err);
+    }
+  }
+}
+
 // Merges a stage/scene-count update into the job's progress entry instead of
 // replacing it, so the client can show real backend state ("Scene 3/8
 // rendering") instead of the old fabricated "Check N (30s): ..." copy that
@@ -880,6 +908,14 @@ async function resolveSceneAsset(
     if (!fs.existsSync(savedVideosDir)) {
       fs.mkdirSync(savedVideosDir, { recursive: true });
     }
+    // Keep only the most recent video: clear previous saves before copying.
+    for (const oldFile of fs.readdirSync(savedVideosDir)) {
+      try {
+        fs.rmSync(path.join(savedVideosDir, oldFile), { recursive: true, force: true });
+      } catch (err) {
+        console.warn(`Failed to delete old saved video ${oldFile}:`, err);
+      }
+    }
     fs.copyFileSync(mergedVideoPath, path.join(savedVideosDir, savedFilename));
 
     try {
@@ -897,6 +933,7 @@ async function resolveSceneAsset(
       totalScenes: adjustedScenes.length,
       savedFilename,
     });
+    sweepStaleTempDirs(generatedDir);
 
     const isProduction =
       process.env.NODE_ENV === "production" ||
@@ -923,6 +960,7 @@ async function resolveSceneAsset(
       error: errorMessage,
       videoPath: null,
     });
+    sweepStaleTempDirs(path.join(process.cwd(), "generated"));
   }
 }
 

@@ -23,6 +23,12 @@ import { clearDraft, loadDraft, useDraftAutosave } from '@/app/hooks/useDraftAut
 import { isRemoteUrl } from '@/app/utils/media-url';
 import { rescaleSceneDurations } from '@/app/utils/scene-timing';
 import { addLocalHistoryEntry } from '@/app/utils/history-client';
+import {
+  detectTranscriptLanguage,
+  TRANSLATION_TARGET_LABELS,
+  type TranscriptLanguage,
+  type TranslationTarget,
+} from '@/app/utils/transcript-language';
 import type { Scene, TranscriptSegment, DuaInfo } from '@/app/types/scene';
 import type { HistoryEntry } from '@/app/types/history';
 
@@ -91,6 +97,17 @@ export default function Home() {
 
   const [isFetchingTranscript, setIsFetchingTranscript] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Transcript translation: the original is kept so the user can switch back,
+  // and each translation is cached so switching languages doesn't re-call Groq.
+  const [originalTranscript, setOriginalTranscript] = useState<{
+    text: string;
+    segments: TranscriptSegment[];
+    language: TranscriptLanguage;
+  } | null>(null);
+  const [translatedTo, setTranslatedTo] = useState<TranslationTarget | null>(null);
+  const [translatingTo, setTranslatingTo] = useState<TranslationTarget | null>(null);
+  const translationCache = useRef(new Map<TranslationTarget, { text: string; segments: TranscriptSegment[] }>());
 
   const [videoUrl, setVideoUrl] = useState('');
   const [savedVideoFilename, setSavedVideoFilename] = useState(DEFAULT_VIDEO_FILENAME);
@@ -161,10 +178,17 @@ export default function Home() {
     [scenes],
   );
 
+  const clearTranslation = useCallback(() => {
+    setOriginalTranscript(null);
+    setTranslatedTo(null);
+    translationCache.current.clear();
+  }, []);
+
   // ---- Draft autosave / restore ---------------------------------------------
   const resetProject = useCallback(() => {
     setTranscript('');
     setTranscriptSegments([]);
+    clearTranslation();
     setYoutubeLink('');
     setVideoTitle('');
     setChannelName('');
@@ -174,7 +198,7 @@ export default function Home() {
     setBrokenIds(new Set());
     triedAssets.current.clear();
     clearDraft();
-  }, []);
+  }, [clearTranslation]);
 
   useEffect(() => {
     const draft = loadDraft();
@@ -248,6 +272,7 @@ export default function Home() {
       setChannelName(typeof data.channelName === 'string' ? data.channelName : '');
       setTranscript(text);
       setTranscriptSegments(segments);
+      clearTranslation();
 
       const audioEnd = segments.length ? segments[segments.length - 1].end : Number(data.length_seconds) || 0;
       if (audioEnd > 0) setTargetVideoLength(Math.round(audioEnd));
@@ -271,6 +296,87 @@ export default function Home() {
   };
 
   const hasTranscript = Boolean(transcript.trim()) && !isYoutubeUrl(transcript);
+
+  const sourceLanguage = useMemo<TranscriptLanguage>(
+    () => originalTranscript?.language ?? detectTranscriptLanguage(transcript),
+    [originalTranscript, transcript],
+  );
+
+  const handleTranslate = async (target: TranslationTarget) => {
+    if (!hasTranscript || translatingTo) return;
+    // Always translate from the original so errors don't compound.
+    const base = originalTranscript ?? {
+      text: transcript,
+      segments: transcriptSegments,
+      language: sourceLanguage,
+    };
+    const hadScenes = scenes.length > 0;
+
+    const applyTranslation = (result: { text: string; segments: TranscriptSegment[] }) => {
+      setOriginalTranscript(base);
+      setTranscript(result.text);
+      setTranscriptSegments(result.segments);
+      setTranslatedTo(target);
+      if (hadScenes) {
+        notify({
+          kind: 'info',
+          title: `Transcript switched to ${TRANSLATION_TARGET_LABELS[target]}`,
+          message: 'Re-analyze to rebuild the scenes in this language.',
+        });
+      }
+    };
+
+    const cached = translationCache.current.get(target);
+    if (cached) {
+      applyTranslation(cached);
+      return;
+    }
+
+    setTranslatingTo(target);
+    try {
+      const res = await fetch('/api/translate-transcript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetLanguage: target,
+          segments: base.segments.length > 0 ? base.segments : undefined,
+          text: base.segments.length > 0 ? undefined : base.text,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Translation failed.');
+
+      const result = {
+        text: String(data.text || ''),
+        segments: Array.isArray(data.segments) ? (data.segments as TranscriptSegment[]) : [],
+      };
+      translationCache.current.set(target, result);
+      applyTranslation(result);
+      if (data.untranslated > 0) {
+        notify({
+          kind: 'info',
+          title: `${data.untranslated} line(s) kept in the original language`,
+          message: 'The model skipped them — you can edit those lines by hand.',
+        });
+      }
+    } catch (err) {
+      notify({
+        kind: 'error',
+        title: "Couldn't translate the transcript",
+        message: err instanceof Error ? err.message : 'Unknown error.',
+        action: { label: 'Retry', onClick: () => handleTranslate(target) },
+      });
+    } finally {
+      setTranslatingTo(null);
+    }
+  };
+
+  const handleShowOriginal = () => {
+    if (!originalTranscript) return;
+    setTranscript(originalTranscript.text);
+    setTranscriptSegments(originalTranscript.segments);
+    setTranslatedTo(null);
+  };
 
   const handleAnalyze = async () => {
     if (!hasTranscript || isAnalyzing) return;
@@ -623,7 +729,7 @@ export default function Home() {
 
   const editingDuaIndex = scenes.findIndex((s) => s.id === editingDuaId);
   const replacingScene = replacing ? scenes.find((s) => s.id === replacing.id) : undefined;
-  const isBusy = isAnalyzing || isFetchingTranscript;
+  const isBusy = isAnalyzing || isFetchingTranscript || translatingTo !== null;
 
   return (
     <div className="min-h-screen bg-canvas text-ink font-sans antialiased">
@@ -653,11 +759,13 @@ export default function Home() {
                 setTranscript(v);
                 // Editing the text breaks the link to YouTube's timing.
                 if (transcriptSegments.length && !v.trim()) setTranscriptSegments([]);
+                if (!v.trim()) clearTranslation();
               }}
               onImportYoutube={handleImportYoutube}
               onUseSample={() => {
                 setTranscript(SAMPLE_TRANSCRIPT);
                 setTranscriptSegments([]);
+                clearTranslation();
                 setTargetVideoLength(30);
               }}
               onReset={resetProject}
@@ -672,6 +780,11 @@ export default function Home() {
               targetVideoLength={targetVideoLength}
               onTargetLengthChange={handleTargetLengthChange}
               onReanalyze={scenes.length ? handleAnalyze : undefined}
+              sourceLanguage={sourceLanguage}
+              translatedTo={translatedTo}
+              translatingTo={translatingTo}
+              onTranslate={handleTranslate}
+              onShowOriginal={handleShowOriginal}
             />
           </div>
 
