@@ -121,6 +121,33 @@ const ISLAMIC_KEYWORDS = [
   "dua",
 ];
 
+// Stock libraries tag Islamic subjects with Christian/other-faith words
+// (a tasbih is usually "rosary"), so searches for them surface crucifixes,
+// churches, etc. Rewrite those terms before searching...
+const QUERY_REWRITES: [RegExp, string][] = [
+  [/\brosary( beads)?\b/gi, "tasbih prayer beads"],
+  [/\b(church|chapel|cathedral)\b/gi, "mosque"],
+  [/\bbible\b/gi, "quran"],
+];
+
+// ...and never pick a result whose description shows content inappropriate
+// for Islamic videos. Matched against alt text / tags / URL slugs / filenames.
+const UNSAFE_CONTENT =
+  /\b(cross|crosses|crucifix|church|chapel|cathedral|christian|christianity|christ|jesus|bible|nun|nuns|priest|pastor|catholic|christmas|easter|santa|hindu|idol|idols|buddha|buddhist|pagoda|shrine|wine|beer|alcohol|whiskey|whisky|vodka|cocktail|champagne|casino|gambling|bikini|lingerie|pork|halloween|tarot|zodiac)\b/i;
+const ISLAMIC_CONTEXT = /\b(muslim|islam|islamic|tasbih|tasbeeh|misbaha|mosque|masjid|quran|hijab|dua|allah)\b/i;
+
+function isContentSafe(text: string): boolean {
+  const t = text.replace(/[_\-/.]+/g, " ");
+  if (UNSAFE_CONTENT.test(t)) return false;
+  // "Rosary" is fine when the photo is clearly a Muslim tasbih.
+  if (/\brosary\b/i.test(t) && !ISLAMIC_CONTEXT.test(t)) return false;
+  return true;
+}
+
+function rewriteSearchTerms(query: string): string {
+  return QUERY_REWRITES.reduce((q, [pattern, replacement]) => q.replace(pattern, replacement), query);
+}
+
 function buildIslamicQuery(query: string): string {
   const q = query.trim();
   const lower = q.toLowerCase();
@@ -129,7 +156,7 @@ function buildIslamicQuery(query: string): string {
 }
 
 function resolveSearchQuery(query: string, isRelatableMode: boolean = false): string {
-  const q = query.trim();
+  const q = rewriteSearchTerms(query.trim());
   if (!isRelatableMode) {
     return buildIslamicQuery(q);
   }
@@ -178,7 +205,9 @@ export async function POST(request: Request) {
 
     // Use fast In-Memory Cache (0ms) indexing all categorized subfolders
     const cachedItems = await getCachedLibrary();
-    const availableAssets = cachedItems.map((item) => item.relativePath);
+    const availableAssets = cachedItems
+      .map((item) => item.relativePath)
+      .filter((p) => isContentSafe(p));
 
     const mediaFilter = mediaSettings.mediaType || "both";
     const allowPexels =
@@ -1027,12 +1056,16 @@ async function getPexelsVideo(
     }
 
     const data = await res.json();
-    if (!data.videos || !Array.isArray(data.videos) || data.videos.length === 0) {
+    // Pexels videos have no alt text; the page URL slug describes the clip.
+    const safeVideos = Array.isArray(data.videos)
+      ? data.videos.filter((v: { url?: string }) => isContentSafe(v.url || ""))
+      : [];
+    if (safeVideos.length === 0) {
       return null;
     }
 
-    let chosenVideo = data.videos[0];
-    for (const v of data.videos) {
+    let chosenVideo = safeVideos[0];
+    for (const v of safeVideos) {
       if (!usedPexelsVideoIds.has(v.id)) {
         chosenVideo = v;
         break;
@@ -1134,12 +1167,15 @@ async function getPexelsPhoto(
     }
 
     const data = await res.json();
-    if (!data.photos || !Array.isArray(data.photos) || data.photos.length === 0) {
+    const safePhotos: PexelsPhotoItem[] = Array.isArray(data.photos)
+      ? data.photos.filter((p: PexelsPhotoItem) => isContentSafe(p.alt || ""))
+      : [];
+    if (safePhotos.length === 0) {
       return null;
     }
 
     const chosenPhoto = pickBestScored<PexelsPhotoItem>(
-      data.photos,
+      safePhotos,
       usedPexelsIds,
       (p) => p.id,
       (p) => p.alt || "",
@@ -1232,12 +1268,17 @@ async function getUnsplashPhoto(
     }
 
     const data = await res.json();
-    if (!data.results || !Array.isArray(data.results) || data.results.length === 0) {
+    const safeResults: UnsplashPhotoItem[] = Array.isArray(data.results)
+      ? data.results.filter((r: UnsplashPhotoItem) =>
+          isContentSafe(`${r.alt_description || ""} ${r.description || ""}`),
+        )
+      : [];
+    if (safeResults.length === 0) {
       return null;
     }
 
     const chosen = pickBestScored<UnsplashPhotoItem>(
-      data.results,
+      safeResults,
       usedUnsplashIds,
       (r) => String(r.id),
       (r) => `${r.alt_description || ""} ${r.description || ""}`,
@@ -1325,11 +1366,13 @@ async function getPixabayVideo(
     // Prioritize video clips matching target aspect ratio, then pick the best
     // tag-relevance match among those (falling back to the full set if none match).
     const isPortrait = targetRatio === "9:16";
-    const orientedHits = data.hits.filter((hit: PixabayVideoHit) => {
+    const safeHits = data.hits.filter((hit: PixabayVideoHit) => isContentSafe(hit.tags || ""));
+    if (safeHits.length === 0) return null;
+    const orientedHits = safeHits.filter((hit: PixabayVideoHit) => {
       const vid = hit.videos?.medium || hit.videos?.large;
       return vid && (isPortrait ? vid.height > vid.width : vid.width > vid.height);
     });
-    const candidatePool = orientedHits.length > 0 ? orientedHits : data.hits;
+    const candidatePool = orientedHits.length > 0 ? orientedHits : safeHits;
 
     const chosen = pickBestScored<PixabayVideoHit>(
       candidatePool,
@@ -1402,8 +1445,11 @@ async function getPixabayPhoto(
       return null;
     }
 
+    const safeHits: PixabayPhotoHit[] = data.hits.filter((h: PixabayPhotoHit) => isContentSafe(h.tags || ""));
+    if (safeHits.length === 0) return null;
+
     const chosen = pickBestScored<PixabayPhotoHit>(
-      data.hits,
+      safeHits,
       usedPixabayPhotoIds,
       (h) => h.id,
       (h) => h.tags || "",

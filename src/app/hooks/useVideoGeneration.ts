@@ -34,7 +34,12 @@ interface StartOptions {
 }
 
 interface Callbacks {
-  onComplete: (result: { videoUrl: string; savedFilename?: string }) => void;
+  onComplete: (result: {
+    videoUrl: string;
+    savedFilename?: string;
+    /** 1-based scene numbers whose missing image was replaced by the server. */
+    substitutedScenes?: number[];
+  }) => void;
   onError: (message: string) => void;
 }
 
@@ -48,6 +53,11 @@ function buildRequestBody(runId: string, o: StartOptions) {
     zoomSpeed: s.zoomSpeed ?? DEFAULT_MEDIA_SETTINGS.zoomSpeed,
     transitionDuration: s.transitionDuration ?? DEFAULT_MEDIA_SETTINGS.transitionDuration,
     optimizedGeneration: s.optimizedGeneration === true,
+    enableCtaOverlays: s.enableCtaOverlays !== false,
+    ctaVariant: s.ctaVariant || "auto",
+    ctaPosition: s.ctaPosition || "bottom",
+    ctaAtEnd: s.ctaAtEnd !== false,
+    ctaOnTriggers: s.ctaOnTriggers !== false,
     textOverlayMode: s.textOverlayMode || (s.enableGraphicMotion ? "graphics" : "captions"),
     captionPosition: s.captionPosition || DEFAULT_MEDIA_SETTINGS.captionPosition,
     captionTheme: s.captionTheme || DEFAULT_MEDIA_SETTINGS.captionTheme,
@@ -164,6 +174,7 @@ export function useVideoGeneration({ onComplete, onError }: Callbacks) {
               callbacksRef.current.onComplete({
                 videoUrl: data.videoPath,
                 savedFilename: data.savedFilename,
+                substitutedScenes: Array.isArray(data.substitutedScenes) ? data.substitutedScenes : undefined,
               });
             } else {
               callbacksRef.current.onError(

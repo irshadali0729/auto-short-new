@@ -22,6 +22,9 @@ import TextTab from "@/app/components/settings/tabs/TextTab";
 import DuaTab from "@/app/components/settings/tabs/DuaTab";
 import HostTab from "@/app/components/settings/tabs/HostTab";
 import HistoryTab from "@/app/components/settings/tabs/HistoryTab";
+import CtaTab from "@/app/components/settings/tabs/CtaTab";
+import { useCtaLibrary } from "@/app/hooks/useCtaLibrary";
+import { CTA_VARIANT_AUTO } from "@/app/utils/cta-shared";
 import type {
   AvatarPickerOption,
   ProviderStatus,
@@ -52,6 +55,7 @@ const TAB_COPY: Record<SettingsTabId, { title: string; description: string }> = 
   text: { title: "Captions", description: "What's drawn over the footage." },
   dua: { title: "Dua card", description: "Prayer card shown when a Dua is spoken." },
   host: { title: "AI avatar", description: "Avatar hook and split-screen scenes." },
+  cta: { title: "Subscribe", description: "Animated subscribe button at the end of the video." },
   history: { title: "History", description: "Log of recently generated videos." },
 };
 
@@ -87,6 +91,7 @@ export default function SettingsModal({
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [avatarOptions, setAvatarOptions] = useState<AvatarPickerOption[]>([]);
   const [avatarOptionsLoading, setAvatarOptionsLoading] = useState(false);
+  const ctaLibrary = useCtaLibrary();
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
@@ -200,6 +205,13 @@ export default function SettingsModal({
 
   const tabProps = { settings: current, update };
   const selectedAvatar = avatarOptions.find((a) => a.id === current.avatarId);
+  // On the Subscribe tab the preview frame shows the chosen animation.
+  const previewCtaPath =
+    activeTab === "cta" && current.enableCtaOverlays
+      ? (current.ctaVariant !== CTA_VARIANT_AUTO &&
+          ctaLibrary.subscribe.find((v) => v.path === current.ctaVariant)?.path) ||
+        ctaLibrary.subscribe[0]?.path
+      : undefined;
 
   return (
     <div
@@ -337,6 +349,7 @@ export default function SettingsModal({
                 avatarOptionsLoading={avatarOptionsLoading}
               />
             )}
+            {activeTab === "cta" && <CtaTab {...tabProps} ctaLibrary={ctaLibrary} />}
             {activeTab === "history" && <HistoryTab {...tabProps} />}
           </div>
 
@@ -345,6 +358,7 @@ export default function SettingsModal({
               settings={current}
               avatar={selectedAvatar}
               showDuaScene={activeTab === "dua"}
+              ctaPath={previewCtaPath}
             />
           </aside>
         </div>
@@ -406,6 +420,7 @@ export default function SettingsModal({
                   settings={current}
                   avatar={selectedAvatar}
                   showDuaScene={activeTab === "dua"}
+                  ctaPath={previewCtaPath}
                 />
               </div>
             </div>

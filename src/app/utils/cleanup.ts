@@ -1,6 +1,19 @@
 import fs from 'fs';
 import path from 'path';
 
+/**
+ * CLEANUP_ASSETS=true forces cleanup on, CLEANUP_ASSETS=false forces it off;
+ * unset, it runs only in production. Previously any production run
+ * (`npm run start`) cleaned up even with CLEANUP_ASSETS=false, deleting every
+ * downloaded stock image the user's storyboard still referenced.
+ */
+export function isCleanupEnabled(): boolean {
+  const flag = process.env.CLEANUP_ASSETS?.trim().toLowerCase();
+  if (flag === "true") return true;
+  if (flag === "false") return false;
+  return process.env.NODE_ENV === "production";
+}
+
 export function cleanupAssets() {
   try {
     const projectRoot = process.cwd();

@@ -655,7 +655,7 @@ export default function Home() {
   };
 
   const generation = useVideoGeneration({
-    onComplete: ({ videoUrl: url, savedFilename }) => {
+    onComplete: ({ videoUrl: url, savedFilename, substitutedScenes }) => {
       setVideoUrl(url);
       setSavedVideoFilename(savedFilename || DEFAULT_VIDEO_FILENAME);
       setPreviewTab('final');
@@ -664,6 +664,13 @@ export default function Home() {
         title: 'Your video is ready',
         action: { label: 'View & export', onClick: showExport },
       });
+      if (substitutedScenes?.length) {
+        notify({
+          kind: 'info',
+          title: `Scene ${substitutedScenes.join(', ')} used a replacement image`,
+          message: 'The original file was no longer in the image library. Use "Find another" on those scenes, then generate again.',
+        });
+      }
       recordGenerationHistory(savedFilename);
     },
     onError: (message) => {

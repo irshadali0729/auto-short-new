@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Play,
   Pause,
@@ -17,6 +17,9 @@ import { getMediaUrl, isVideoAsset } from '@/app/utils/media-url';
 import { generateDuaCardSvg } from '@/app/utils/dua-card-svg';
 import type { DuaCardTheme, DuaCardPosition, DuaCardStyle } from '@/app/types/scene';
 import { CaptionPosition } from '@/app/utils/caption-renderer';
+import CtaAnimation from '@/app/components/CtaAnimation';
+import { useCtaLibrary } from '@/app/hooks/useCtaLibrary';
+import { CTA_VARIANT_AUTO, CTA_Y_FRACTION, ctaMaxBox, planCtaPlacements } from '@/app/utils/cta-shared';
 
 export interface StoryboardScene {
   keyword: string;
@@ -88,6 +91,24 @@ export default function SceneLivePreviewPlayer({
   // Calculate total duration and current scene time offsets
   const totalDuration = scenes.reduce((acc, s) => acc + (s.duration || 5), 0);
   const sceneDuration = activeScene?.duration || 5;
+
+  // Same placement logic as the FFmpeg render, so the preview matches it.
+  const ctaLibrary = useCtaLibrary();
+  const ctaEnabled = mediaSettings.enableCtaOverlays !== false;
+  const ctaVariant = mediaSettings.ctaVariant || CTA_VARIANT_AUTO;
+  const ctaAtEnd = mediaSettings.ctaAtEnd !== false;
+  const ctaOnTriggers = mediaSettings.ctaOnTriggers !== false;
+  const ctaPlan = useMemo(
+    () =>
+      ctaEnabled
+        ? planCtaPlacements(scenes, ctaLibrary, { variant: ctaVariant, atEnd: ctaAtEnd, onTriggers: ctaOnTriggers })
+        : [],
+    [scenes, ctaLibrary, ctaEnabled, ctaVariant, ctaAtEnd, ctaOnTriggers],
+  );
+  const activeCta = ctaPlan[activeSceneIndex] || null;
+  const ctaBox = ctaMaxBox(isLandscape ? '16:9' : '9:16');
+  // While playing it appears at its start time; when paused it stays visible.
+  const showCta = Boolean(activeCta) && (!isPlaying || (sceneProgress / 100) * sceneDuration >= activeCta!.start);
 
   // Handle Play/Pause timer loop
   useEffect(() => {
@@ -580,6 +601,27 @@ export default function SceneLivePreviewPlayer({
             dangerouslySetInnerHTML={{ __html: liveDuaCardSvg }}
           />
         )}
+
+        {/* --- LIVE OVERLAY LAYER 4: SUBSCRIBE / SHARE ANIMATION --- */}
+        {showCta && activeCta && (
+          <div
+            className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center pointer-events-none"
+            style={{
+              top: `${CTA_Y_FRACTION[mediaSettings.ctaPosition || 'bottom'] * 100}%`,
+              width: `${ctaBox.w * 100}%`,
+              height: `${ctaBox.h * 100}%`,
+            }}
+          >
+            {/* Remount on play so it starts from its first frame, like the render. */}
+            <CtaAnimation
+              key={`${activeSceneIndex}-${activeCta.path}-${isPlaying ? 'play' : 'still'}`}
+              path={activeCta.path}
+              loop={!isPlaying}
+              startAt={isPlaying ? activeCta.offset : 0}
+              className="max-w-full max-h-full object-contain"
+            />
+          </div>
+        )}
       </div>
 
       {/* Interactive Storyboard Scrubber & Controls */}
@@ -653,6 +695,7 @@ export default function SceneLivePreviewPlayer({
               Scene {idx + 1}
               {s.duaInfo?.isDua && <span className="ml-1">🤲</span>}
               {s.isSplitScreen && <span className="ml-1">⚡</span>}
+              {ctaPlan[idx] && <span className="ml-1" title="Subscribe animation">🔔</span>}
             </button>
           ))}
         </div>

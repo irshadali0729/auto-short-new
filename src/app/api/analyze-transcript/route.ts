@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Groq } from "groq-sdk";
 import { resolveEmojiForText } from "@/app/utils/emoji-resolver";
 import { rescaleSceneDurations } from "@/app/utils/scene-timing";
-import { withRetry } from "@/app/utils/retry";
+import { groqJsonCompletion } from "@/app/utils/groq-json";
 import type {
   GraphicBeat,
   TranscriptSegment,
@@ -11,11 +11,6 @@ import type {
 } from "@/app/types/scene";
 
 export type { GraphicBeat, TranscriptSegment, CaptionSlice } from "@/app/types/scene";
-
-function getGroqErrorStatus(err: unknown): number | undefined {
-  const asRecord = err as { status?: number; response?: { status?: number } } | null;
-  return asRecord?.status ?? asRecord?.response?.status;
-}
 
 function buildGraphicBeats(
   transcript: string,
@@ -362,6 +357,7 @@ function sanitizeScenes(scenesIn: GroqScene[]): GroqScene[] {
 // (like the ones added for specific misheard Duas) had to be applied twice.
 const DUA_DETECTION_RULE_BLOCK = `* DUA / ZIKR DETECTION & AUTOMATIC CORRECTION RULE (CRITICAL):
   - Speech-to-text transcripts frequently contain imperfect, phonetic, incomplete, or misspelled Hindi/Urdu Duas (e.g. "ला हौला वला कुता", "हसबुन वल वकील", "ला इलाहा इल्ला अता सुभान का", "अस्तगफिरुल्ला", "अल्लाह इन असलका हुब्बक व्हि व अमलदी हुब्बक", etc.).
+  - Short Zikr / Tasbih phrases COUNT as a Dua/Zikr and MUST get "duaInfo" — e.g. SubhanAllahi wa bihamdihi, SubhanAllahil Azeem, Astaghfirullah, La ilaha illallah, Allahu Akbar, Alhamdulillah, La hawla wa la quwwata illa billah, Durood/Salawat. This applies especially when the speaker names it as "यह तस्बीह / वो तस्बीह है / this Zikr is" or gives a count ("100 बार", "33 times"). Example: transcript "सुभान अल्लाह ही वम्द ही" → hindi "सुब्हानल्लाहि व बिहम्दिही", arabic "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ", reference "Sahih Bukhari 6405 / Sahih Muslim 2691".
   - NEVER copy or output the broken/imperfect text from the transcript into "duaInfo"!
   - You MUST identify the intended authentic Dua/Zikr from Islamic tradition and respond with the 100% complete, verified, and grammatically perfect version:
     * "hindi" (string): The complete, 100% correct authentic Hindi (Devanagari) pronunciation (e.g. if transcript says "ला हौला वला कुता", correct it to "ला हौल वला क़ुव्वत इल्ला बिल्लाहिल 'अलिय्यिल 'अज़ीम"; if transcript says "हसबुन वल वकील", correct it to "हसबुनल्लाहु व निअमल वकील"; if transcript says "अल्लाह इन असलका हुब्बक व्हि व अमलदी हुब्बक", correct it to "अल्लाहुम्मा इन्नी अस्अलुका हुब्बक, व हुब्ब मन युहिब्बुक, वल अमलल्लज़ी युबल्लिग़ुनी हुब्बक" — the Tirmidhi Dua for the love of Allah).
@@ -646,60 +642,17 @@ export async function POST(request: Request) {
       ? buildRelatableVisualPrompt(transcript, targetLength, formattedSegmentsText, hasSegments)
       : buildLegacyPrompt(transcript, targetLength, formattedSegmentsText, hasSegments);
 
-    const candidateModels = [
-      "openai/gpt-oss-120b",
-      "openai/gpt-oss-20b",
-      "groq/compound-mini",
-    ];
-
-    let responseContent: string | null = null;
-    let lastError: Error | null = null;
-
-    for (const model of candidateModels) {
-      try {
-        // Groq's own rate-limit (429) deserves a short backoff-and-retry on the
-        // SAME model since it's a transient "slow down", not a real failure.
-        // Any other error (bad request, model down, etc.) falls straight through
-        // to the next candidate model instead of wasting retries on it.
-        const chatCompletion = await withRetry(
-          () =>
-            groq.chat.completions.create({
-              messages: [
-                {
-                  role: "user",
-                  content: prompt,
-                },
-              ],
-              model,
-              response_format: { type: "json_object" },
-              // Low temperature keeps rule-following (e.g. always attaching duaInfo)
-              // consistent across runs instead of varying scene-to-scene by sampling luck.
-              temperature: 0.2,
-              // Raised from 3500: with multiple Duas each needing a full corrected
-              // hindi+arabic duaInfo block, the previous limit could truncate the JSON
-              // mid-scene, silently dropping duaInfo (or whole scenes) near the cutoff.
-              max_tokens: 6500,
-            }),
-          {
-            retries: 2,
-            baseDelayMs: 1000,
-            shouldRetry: (err) => getGroqErrorStatus(err) === 429,
-          },
-        );
-
-        responseContent = chatCompletion.choices[0]?.message?.content || null;
-        if (responseContent) {
-          break;
-        }
-      } catch (err: unknown) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`Model ${model} failed, trying next candidate:`, lastError.message);
-      }
-    }
-
-    if (!responseContent) {
-      throw lastError || new Error("Empty response received from Groq API.");
-    }
+    const responseContent = await groqJsonCompletion(groq, prompt, {
+      // Low temperature keeps rule-following (e.g. always attaching duaInfo)
+      // consistent across runs instead of varying scene-to-scene by sampling luck.
+      temperature: 0.2,
+      // gpt-oss's reasoning tokens count against this budget; 6500 with the
+      // default effort intermittently ran out before the JSON was complete.
+      // Medium effort keeps scene quality; the higher cap leaves room for
+      // several full duaInfo blocks.
+      maxTokens: 12000,
+      reasoningEffort: "medium",
+    });
 
     const rawScenes = extractAndParseScenes(responseContent);
     let finalScenes: GroqScene[] = rawScenes.map((scene, idx) => ({

@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import { cleanupAssets } from '@/app/utils/cleanup';
+import { cleanupAssets, isCleanupEnabled } from '@/app/utils/cleanup';
 import { FFMPEG_PRESET } from '@/app/config/video-config';
 
 // Downscales the 1080p master to 720p on first request (cached until the
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const isDownload = searchParams.get('download') === 'true';
-    const isProduction = process.env.NODE_ENV === 'production' || process.env.CLEANUP_ASSETS === 'true';
+    const isProduction = isCleanupEnabled();
 
     const masterPath = path.join(process.cwd(), 'generated', 'output.mp4');
 

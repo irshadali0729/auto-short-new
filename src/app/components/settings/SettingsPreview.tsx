@@ -6,6 +6,8 @@ import { getMediaUrl } from "@/app/utils/media-url";
 import { DUA_THEME_OPTIONS, EMOJI_STYLE_OPTIONS } from "./settings-options";
 import type { MediaSettings } from "./settings-types";
 import type { AvatarPickerOption } from "./tabs/types";
+import CtaAnimation from "@/app/components/CtaAnimation";
+import { CTA_Y_FRACTION, ctaMaxBox } from "@/app/utils/cta-shared";
 
 const SAMPLE_TEXT = "Allah is with the patient";
 
@@ -134,12 +136,16 @@ export default function SettingsPreview({
   settings,
   avatar,
   showDuaScene = false,
+  ctaPath,
 }: {
   settings: Required<MediaSettings>;
   avatar: AvatarPickerOption | undefined;
   // Render the frame as a Dua scene (card at its position) instead of captions.
   showDuaScene?: boolean;
+  // Subscribe animation to show in the frame (Subscribe tab).
+  ctaPath?: string;
 }) {
+  const ctaBox = ctaMaxBox(settings.aspectRatio);
   const isVertical = settings.aspectRatio === "9:16";
   const dua = DUA_THEME_OPTIONS.find((o) => o.id === settings.duaCardTheme) || DUA_THEME_OPTIONS[0];
   const duaInFrame = showDuaScene && settings.enableDuaOverlay;
@@ -185,6 +191,18 @@ export default function SettingsPreview({
           </>
         ) : (
           <TextOverlay settings={settings} />
+        )}
+        {ctaPath && (
+          <div
+            className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none"
+            style={{
+              top: `${CTA_Y_FRACTION[settings.ctaPosition] * 100}%`,
+              width: `${ctaBox.w * 100}%`,
+              height: `${ctaBox.h * 100}%`,
+            }}
+          >
+            <CtaAnimation path={ctaPath} className="max-w-full max-h-full object-contain" />
+          </div>
         )}
         {(showHost || duaInFrame) && (
           <span className="absolute top-1.5 left-1.5 text-[8px] font-bold uppercase bg-black/60 text-white px-1.5 py-0.5 rounded">

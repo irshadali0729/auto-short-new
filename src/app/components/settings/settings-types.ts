@@ -20,6 +20,7 @@ export type EmojiStyleOption = "fluent" | "apple" | "twitter";
 export type DuaCardThemeOption = DuaCardTheme;
 export type DuaCardPositionOption = DuaCardPosition;
 export type HistoryStorageMode = "server" | "local";
+export type CtaPositionOption = "top" | "middle" | "bottom";
 
 export interface MediaSettings {
   sources: {
@@ -39,6 +40,16 @@ export interface MediaSettings {
   transitionDuration: number;
   // Faster render path (pre-baked stills, low-res blur, cropped overlays).
   optimizedGeneration?: boolean;
+  // Subscribe/share/bell animations (see utils/cta-shared.ts).
+  enableCtaOverlays?: boolean;
+  // "auto" rotates through every subscribe file; otherwise a file path
+  // relative to image-library/ (e.g. "cta/subscribe/subscribe_2.webm").
+  ctaVariant?: string;
+  ctaPosition?: CtaPositionOption;
+  // Subscribe animation at the very end of the video.
+  ctaAtEnd?: boolean;
+  // Also when the speaker says subscribe/share/bell.
+  ctaOnTriggers?: boolean;
   useRelatableVisualSearch?: boolean;
   aspectRatio: VideoAspectRatio;
   enableEmojiCaptions?: boolean;
@@ -71,6 +82,11 @@ export const DEFAULT_MEDIA_SETTINGS: MediaSettings = {
   zoomSpeed: 2,
   transitionDuration: 0.3,
   optimizedGeneration: false,
+  enableCtaOverlays: true,
+  ctaVariant: "auto",
+  ctaPosition: "bottom",
+  ctaAtEnd: true,
+  ctaOnTriggers: true,
   useRelatableVisualSearch: true,
   aspectRatio: "9:16",
   enableEmojiCaptions: false,

@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { spawn, ChildProcess } from "child_process";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
-import { cleanupAssets } from "@/app/utils/cleanup";
+import { cleanupAssets, isCleanupEnabled } from "@/app/utils/cleanup";
 import { renderGraphicOverlayPng } from "@/app/utils/graphics-renderer";
 import {
   CaptionPosition,
@@ -13,6 +13,7 @@ import {
 import { DuaCardTheme, renderDuaOverlayPng } from "@/app/utils/dua-renderer";
 import type { DuaCardPosition } from "@/app/types/scene";
 import { isVideoAsset } from "@/app/utils/media-url";
+import { getCachedLibrary } from "@/app/utils/library-cache";
 import { withRetry } from "@/app/utils/retry";
 import {
   ZOOM_STEP_BASE,
@@ -28,6 +29,15 @@ import {
 } from "@/app/config/video-config";
 import type { Scene, GraphicBeat, GraphicMotionThemeOption } from "@/app/types/scene";
 import { buildSavedVideoFilename } from "@/app/utils/filename";
+import { ctaInputArgs, loadCtaLibrary, resolveCtaFile } from "@/app/utils/cta-library";
+import {
+  CTA_VARIANT_AUTO,
+  CTA_Y_FRACTION,
+  ctaMaxBox,
+  planCtaPlacements,
+  type CtaOptions,
+  type CtaPosition,
+} from "@/app/utils/cta-shared";
 import {
   VIDEO_BG_BOXBLUR,
   blurBackgroundSize,
@@ -52,6 +62,8 @@ interface ProgressData {
   scenesCompleted?: number;
   totalScenes?: number;
   savedFilename?: string;
+  /** 1-based scene numbers whose missing image was replaced. */
+  substitutedScenes?: number[];
 }
 
 export interface JobControl {
@@ -92,7 +104,9 @@ function finishJob(runId: string, data: ProgressData) {
 function sweepStaleTempDirs(generatedDir: string) {
   const activeTempDirs = new Set<string>();
   for (const [id, control] of jobControlMap) {
-    if (control.tempDir && progressMap.get(id)?.complete === false) {
+    // A finished job can still have FFmpeg processes shutting down.
+    const stillRunning = progressMap.get(id)?.complete === false || control.processes.size > 0;
+    if (control.tempDir && stillRunning) {
       activeTempDirs.add(path.resolve(control.tempDir));
     }
   }
@@ -109,8 +123,29 @@ function sweepStaleTempDirs(generatedDir: string) {
     try {
       fs.rmSync(dirPath, { recursive: true, force: true });
     } catch (err) {
-      console.warn(`Failed to delete stale temp folder ${entry.name}:`, err);
+      // Windows keeps a file locked briefly after the process using it exits;
+      // the next generation's sweep will get it, so no need for a stack trace.
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "EBUSY" && code !== "EPERM") {
+        console.warn(`Failed to delete stale temp folder ${entry.name}:`, err);
+      }
     }
+  }
+}
+
+// Stops a failed job's remaining FFmpeg processes (other scenes render
+// concurrently and keep going after one fails) and waits for them to exit,
+// so its temp folder isn't deleted while FFmpeg still has files open.
+async function stopJobProcesses(control: JobControl, timeoutMs = 5000): Promise<void> {
+  control.cancelled = true;
+  for (const proc of control.processes) {
+    try {
+      proc.kill("SIGTERM");
+    } catch {}
+  }
+  const deadline = Date.now() + timeoutMs;
+  while (control.processes.size > 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }
 
@@ -128,6 +163,8 @@ function updateProgress(runId: string, partial: Partial<ProgressData>) {
 }
 
 const CANCELLED_ERROR_MESSAGE = "Video generation cancelled.";
+
+type CtaSettings = CtaOptions & { enabled: boolean; position: CtaPosition };
 
 function escapeFilterText(value: string): string {
   return value
@@ -261,6 +298,11 @@ export async function POST(request: Request) {
       duaCardPosition,
       graphicMotionTheme,
       optimizedGeneration,
+      enableCtaOverlays,
+      ctaVariant,
+      ctaPosition,
+      ctaAtEnd,
+      ctaOnTriggers,
     } = await request.json();
 
     if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
@@ -334,6 +376,13 @@ export async function POST(request: Request) {
       typeof channelName === "string" ? channelName : "",
       duaCardPosition === "top" || duaCardPosition === "bottom" ? duaCardPosition : "center",
       optimizedGeneration === true,
+      {
+        enabled: enableCtaOverlays !== false,
+        variant: typeof ctaVariant === "string" && ctaVariant ? ctaVariant : CTA_VARIANT_AUTO,
+        position: ctaPosition === "top" || ctaPosition === "middle" ? ctaPosition : "bottom",
+        atEnd: ctaAtEnd !== false,
+        onTriggers: ctaOnTriggers !== false,
+      },
     ).catch((err) => {
       console.error("Background compilation crash:", err);
       finishJob(runId, {
@@ -372,6 +421,8 @@ async function compileVideoInBackground(
   // Opt-in fast path (see utils/optimized-render.ts); false keeps the
   // original filter graphs untouched.
   optimized: boolean = false,
+  // Subscribe/share/bell animations (see utils/cta-shared.ts).
+  cta: CtaSettings = { enabled: false, variant: CTA_VARIANT_AUTO, position: "bottom", atEnd: false, onTriggers: false },
 ) {
   let tempDir = "";
   const jobControl: JobControl = jobControlMap.get(runId) || {
@@ -410,6 +461,11 @@ async function compileVideoInBackground(
 
     const clipPaths: string[] = new Array(adjustedScenes.length);
 
+    // Planned up front (scenes render concurrently) so variants rotate in order.
+    const ctaPlan = cta.enabled
+      ? planCtaPlacements(adjustedScenes, await loadCtaLibrary(), cta)
+      : adjustedScenes.map(() => null);
+
 async function resolveSceneAsset(
   assetPathOrUrl: string,
   imageLibraryDir: string,
@@ -439,6 +495,42 @@ async function resolveSceneAsset(
   return localPath;
 }
 
+    // A storyboard can outlive its files (cleanup deletes downloaded stock
+    // media; a draft restored days later points at deleted files). Instead of
+    // failing the whole render, swap a missing scene image for another library
+    // asset of the same kind and report which scenes changed.
+    const substitutedScenes: number[] = [];
+    let libraryPool: string[] | null = null;
+    async function resolveSceneAssetOrSubstitute(sceneIndex: number, asset: string): Promise<string> {
+      const isRemote = /^https?:\/\//i.test(asset);
+      if (!asset || fs.existsSync(path.join(imageLibraryDir, asset))) {
+        return resolveSceneAsset(asset, imageLibraryDir, tempDir, `remote_scene_${sceneIndex}`);
+      }
+      if (isRemote) {
+        // A remote URL (online media not saved to disk) can expire or be unreachable.
+        try {
+          return await resolveSceneAsset(asset, imageLibraryDir, tempDir, `remote_scene_${sceneIndex}`);
+        } catch (err) {
+          console.warn(`[generate-video] Scene ${sceneIndex + 1}: remote asset failed (${err instanceof Error ? err.message : err}).`);
+        }
+      }
+      if (!libraryPool) {
+        libraryPool = (await getCachedLibrary(true))
+          .map((item) => item.relativePath)
+          .filter((p) => !/^(avatars|cta)\//.test(p));
+      }
+      const wantVideo = isVideoAsset(asset);
+      const sameKind = libraryPool.filter((p) => isVideoAsset(p) === wantVideo);
+      const pool = sameKind.length > 0 ? sameKind : libraryPool;
+      if (pool.length === 0) {
+        throw new Error(`Image asset "${asset}" not found and the image library is empty.`);
+      }
+      const replacement = pool[Math.floor(Math.random() * pool.length)];
+      console.warn(`[generate-video] Scene ${sceneIndex + 1}: "${asset}" is missing; using "${replacement}" instead.`);
+      substitutedScenes.push(sceneIndex + 1);
+      return path.join(imageLibraryDir, replacement);
+    }
+
     async function renderSceneClip(i: number): Promise<void> {
       if (jobControl.cancelled) throw new Error(CANCELLED_ERROR_MESSAGE);
 
@@ -446,7 +538,7 @@ async function resolveSceneAsset(
       const imageFilename = scene.image;
       const duration = scene.duration;
 
-      const inputImagePath = await resolveSceneAsset(imageFilename, imageLibraryDir, tempDir, `remote_scene_${i}`);
+      const inputImagePath = await resolveSceneAssetOrSubstitute(i, imageFilename);
 
       const clipOutputPath = path.join(tempDir, `clip_${i}.mp4`);
       clipPaths[i] = clipOutputPath;
@@ -567,8 +659,12 @@ async function resolveSceneAsset(
 
       const isSplitScreenScene = Boolean(scene.isSplitScreen && scene.avatarAsset);
       const avatarFilename = scene.avatarAsset || "";
+      // A missing avatar clip falls back to a normal full-screen scene.
       const inputAvatarPath = isSplitScreenScene
-        ? await resolveSceneAsset(avatarFilename, imageLibraryDir, tempDir, `remote_avatar_${i}`)
+        ? await resolveSceneAsset(avatarFilename, imageLibraryDir, tempDir, `remote_avatar_${i}`).catch((err) => {
+            console.warn(`[generate-video] Scene ${i + 1}: avatar unavailable, rendering full-screen:`, err instanceof Error ? err.message : err);
+            return "";
+          })
         : "";
       const hasValidAvatarFile = isSplitScreenScene && Boolean(inputAvatarPath && fs.existsSync(inputAvatarPath));
 
@@ -699,8 +795,20 @@ async function resolveSceneAsset(
 
       let currentLabel = "grid";
 
+      // A Dua card lives in captionPngList and overrides every text mode —
+      // previously it was only drawn in "captions" mode, so graphics mode fell
+      // through to drawtext (no Devanagari glyphs → boxes) and "none" dropped it.
+      const useCaptionLayer =
+        captionPngList.length > 0 && (textOverlayMode === "captions" || Boolean(isDuaScene));
+      const activePngList = useCaptionLayer
+        ? captionPngList
+        : textOverlayMode === "graphics"
+          ? overlayPngList
+          : [];
+      const activeOverlayCount = activePngList.length;
+
       // Mutually exclusive overlay composition into FFmpeg filter graph
-      if (textOverlayMode === "captions" && captionPngList.length > 0) {
+      if (useCaptionLayer) {
         captionPngList.forEach((ov, idx) => {
           const inputIdx = overlayBaseInputIdx + idx;
           const nextLabel = `v_cap_${idx}`;
@@ -758,10 +866,27 @@ async function resolveSceneAsset(
         }
       }
 
-      if (sceneFade > 0) {
-        filterGraph += `[${currentLabel}]fade=t=in:st=0:d=${sceneFade},fade=t=out:st=${(duration - sceneFade).toFixed(2)}:d=${sceneFade},format=yuv420p[outv]`;
+      const sceneFadeChain =
+        sceneFade > 0
+          ? `fade=t=in:st=0:d=${sceneFade},fade=t=out:st=${(duration - sceneFade).toFixed(2)}:d=${sceneFade},`
+          : "";
+
+      // CTA animation (subscribe/share/bell) goes on AFTER the scene fade, so
+      // one that spans several scenes stays solid across the cuts instead of
+      // dipping to black with the footage. Plays once; eof_action=pass hides it.
+      const ctaPlacement = ctaPlan[i];
+      if (ctaPlacement) {
+        const ctaInputIdx = overlayBaseInputIdx + activeOverlayCount;
+        const ctaStart = ctaPlacement.start.toFixed(2);
+        const box = ctaMaxBox(targetRatio);
+        const maxW = Math.round(targetWidth * box.w);
+        const maxH = Math.round(targetHeight * box.h);
+        const yCenter = CTA_Y_FRACTION[cta.position];
+        filterGraph += `[${currentLabel}]${sceneFadeChain}format=yuv420p[scene_faded];`;
+        filterGraph += `[${ctaInputIdx}:v]format=rgba,scale=w=${maxW}:h=${maxH}:force_original_aspect_ratio=decrease,setpts=PTS-STARTPTS+${ctaStart}/TB[cta_src];`;
+        filterGraph += `[scene_faded][cta_src]overlay=x=(W-w)/2:y=H*${yCenter}-h/2:eof_action=pass:enable='gte(t\\,${ctaStart})',format=yuv420p[outv]`;
       } else {
-        filterGraph += `[${currentLabel}]format=yuv420p[outv]`;
+        filterGraph += `[${currentLabel}]${sceneFadeChain}format=yuv420p[outv]`;
       }
 
       const ffmpegArgs = ["-y"];
@@ -784,13 +909,6 @@ async function resolveSceneAsset(
         ffmpegArgs.push("-loop", "1", "-i", inputImagePath);
       }
 
-      const activePngList =
-        textOverlayMode === "captions"
-          ? captionPngList
-          : textOverlayMode === "graphics"
-            ? overlayPngList
-            : [];
-
       for (const ov of activePngList) {
         if (optimized) {
           // Only produce overlay frames for the overlay's visible window.
@@ -799,6 +917,10 @@ async function resolveSceneAsset(
         } else {
           ffmpegArgs.push("-loop", "1", "-i", ov.path);
         }
+      }
+      // Must stay the last input: the CTA filter indexes it after the overlays.
+      if (ctaPlacement) {
+        ffmpegArgs.push(...ctaInputArgs(resolveCtaFile(ctaPlacement.path), ctaPlacement.offset));
       }
 
       ffmpegArgs.push(
@@ -932,13 +1054,11 @@ async function resolveSceneAsset(
       scenesCompleted: adjustedScenes.length,
       totalScenes: adjustedScenes.length,
       savedFilename,
+      substitutedScenes: substitutedScenes.length ? [...substitutedScenes].sort((a, b) => a - b) : undefined,
     });
     sweepStaleTempDirs(generatedDir);
 
-    const isProduction =
-      process.env.NODE_ENV === "production" ||
-      process.env.CLEANUP_ASSETS === "true";
-    if (isProduction) {
+    if (isCleanupEnabled()) {
       setTimeout(() => {
         cleanupAssets();
       }, CLEANUP_DELAY_MS);
@@ -948,6 +1068,7 @@ async function resolveSceneAsset(
     if (!isCancellation) {
       console.error("Error generating video via FFmpeg in background:", error);
     }
+    await stopJobProcesses(jobControl);
     if (tempDir && fs.existsSync(tempDir)) {
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });

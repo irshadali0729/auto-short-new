@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { Groq } from "groq-sdk";
-import { withRetry } from "@/app/utils/retry";
-
-function getGroqErrorStatus(err: unknown): number | undefined {
-  const asRecord = err as { status?: number; response?: { status?: number } } | null;
-  return asRecord?.status ?? asRecord?.response?.status;
-}
+import { groqJsonCompletion } from "@/app/utils/groq-json";
 
 function buildPrompt(
   transcript: string,
@@ -65,40 +60,13 @@ export async function POST(request: Request) {
       Array.isArray(keywords) ? keywords.map(String) : [],
     );
 
-    const candidateModels = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "groq/compound-mini"];
-
-    let responseContent: string | null = null;
-    let lastError: Error | null = null;
-
-    for (const model of candidateModels) {
-      try {
-        const chatCompletion = await withRetry(
-          () =>
-            groq.chat.completions.create({
-              messages: [{ role: "user", content: prompt }],
-              model,
-              response_format: { type: "json_object" },
-              temperature: 0.4,
-              max_tokens: 1200,
-            }),
-          {
-            retries: 2,
-            baseDelayMs: 1000,
-            shouldRetry: (err) => getGroqErrorStatus(err) === 429,
-          },
-        );
-
-        responseContent = chatCompletion.choices[0]?.message?.content || null;
-        if (responseContent) break;
-      } catch (err: unknown) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`Model ${model} failed, trying next candidate:`, lastError.message);
-      }
-    }
-
-    if (!responseContent) {
-      throw lastError || new Error("Empty response received from Groq API.");
-    }
+    // Room for the description (2-4 paragraphs, often Devanagari, which is
+    // token-heavy) plus gpt-oss's reasoning.
+    const responseContent = await groqJsonCompletion(groq, prompt, {
+      maxTokens: 4000,
+      temperature: 0.4,
+      reasoningEffort: "low",
+    });
 
     const parsed = JSON.parse(responseContent);
     const seo = {

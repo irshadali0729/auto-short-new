@@ -414,8 +414,14 @@ export async function renderGraphicOverlayPng(
   const svgString = generateOverlaySvg(beat);
   const buffer = Buffer.from(svgString, "utf-8");
 
+  // The SVG is always laid out on a 1080x1920 portrait canvas. For 16:9 the
+  // old default fit ("cover") centre-cropped it and cut graphics off at the
+  // top/bottom; "contain" keeps the whole layout, centred with clear sides.
   await sharp(buffer)
-    .resize(targetWidth, targetHeight)
+    .resize(targetWidth, targetHeight, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
     .png({ compressionLevel: 6, adaptiveFiltering: false })
     .toFile(outputPath);
 

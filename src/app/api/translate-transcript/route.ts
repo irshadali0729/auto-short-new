@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { Groq } from "groq-sdk";
-import { withRetry } from "@/app/utils/retry";
+import { groqJsonCompletion, GROQ_JSON_MODELS } from "@/app/utils/groq-json";
 import { isTranslationTarget, type TranslationTarget } from "@/app/utils/transcript-language";
 import type { TranscriptSegment } from "@/app/types/scene";
 
 // Lines per Groq call — small enough that the JSON reply never truncates.
 const BATCH_SIZE = 40;
-const CANDIDATE_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "groq/compound-mini"];
 
 const TARGET_INSTRUCTIONS: Record<TranslationTarget, string> = {
   english:
@@ -17,11 +16,6 @@ const TARGET_INSTRUCTIONS: Record<TranslationTarget, string> = {
     "Urdu written in Urdu (Nastaliq/Perso-Arabic) script (e.g. \"ہمارے پاس وقت نہیں ہے\"). Use everyday spoken Urdu vocabulary. Do NOT use Latin/Roman letters or Devanagari script",
 };
 
-function getGroqErrorStatus(err: unknown): number | undefined {
-  const asRecord = err as { status?: number; response?: { status?: number } } | null;
-  return asRecord?.status ?? asRecord?.response?.status;
-}
-
 function buildPrompt(lines: string[], target: TranslationTarget): string {
   const numbered = lines.map((line, i) => `[${i}] ${line}`).join("\n");
   return `You are translating the spoken transcript of a short Islamic/spiritual video. Each numbered line is one caption segment spoken at a fixed time.
@@ -31,8 +25,9 @@ Translate EVERY line into ${TARGET_INSTRUCTIONS[target]}.
 Rules:
 - Translate each line on its own, keeping its meaning. Do NOT merge, split, reorder, or skip lines — the timing of each line is fixed.
 - Keep it conversational, like a speaker talking to the camera, not a word-for-word literal translation.
-- Leave Arabic Quranic verses / Duas as their commonly used transliteration.
-- If a line is already in the target language, return it unchanged.
+- Write EVERY line fully in the target language and script — including greetings and Islamic phrases (e.g. "Assalamu Alaikum" → "अस्सलामु अलैकुम" in Hindi, "السلام علیکم" in Urdu). Never leave a line in the source script.
+- Arabic Quranic verses / Duas: write their commonly used transliteration in the target script.
+- If a line is already in the target language and script, return it unchanged.
 
 Lines:
 ${numbered}
@@ -45,21 +40,17 @@ async function translateBatch(groq: Groq, lines: string[], target: TranslationTa
   const prompt = buildPrompt(lines, target);
   let lastError: Error | null = null;
 
-  for (const model of CANDIDATE_MODELS) {
+  // One model at a time so a reply that drops too many lines falls through
+  // to the next model.
+  for (const model of GROQ_JSON_MODELS) {
     try {
-      const completion = await withRetry(
-        () =>
-          groq.chat.completions.create({
-            messages: [{ role: "user", content: prompt }],
-            model,
-            response_format: { type: "json_object" },
-            temperature: 0.3,
-            max_tokens: 4000,
-          }),
-        { retries: 2, baseDelayMs: 1000, shouldRetry: (err) => getGroqErrorStatus(err) === 429 },
-      );
-      const content = completion.choices[0]?.message?.content;
-      if (!content) throw new Error("Empty response from Groq.");
+      // 40 Devanagari/Urdu lines are token-heavy; leave room for reasoning too.
+      const content = await groqJsonCompletion(groq, prompt, {
+        maxTokens: 8000,
+        temperature: 0.3,
+        reasoningEffort: "low",
+        models: [model],
+      });
       const parsed = JSON.parse(content);
       const map = (parsed?.lines ?? parsed) as Record<string, unknown>;
       const result = lines.map((_, i) => {

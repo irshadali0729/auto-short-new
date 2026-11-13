@@ -8,6 +8,7 @@ interface ProgressData {
   scenesCompleted?: number;
   totalScenes?: number;
   savedFilename?: string;
+  substitutedScenes?: number[];
 }
 
 interface CustomGlobal {

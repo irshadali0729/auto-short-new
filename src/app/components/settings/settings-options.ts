@@ -16,6 +16,7 @@ import {
   History,
   Flame,
   Mic,
+  BellRing,
 } from "lucide-react";
 import type {
   MediaSettings,
@@ -29,6 +30,7 @@ import type {
   DuaCardThemeOption,
   DuaCardPositionOption,
   GraphicMotionThemeOption,
+  CtaPositionOption,
 } from "./settings-types";
 
 export type SettingsTabId =
@@ -37,6 +39,7 @@ export type SettingsTabId =
   | "text"
   | "dua"
   | "host"
+  | "cta"
   | "history";
 
 // Each tab owns a fixed set of fields — drives "Reset tab" and the
@@ -75,6 +78,12 @@ export const SETTINGS_TABS: {
   },
   { id: "dua", label: "Dua Card", icon: BookOpen, fields: ["enableDuaOverlay", "duaCardTheme", "duaCardPosition"] },
   { id: "host", label: "AI Avatar", icon: UserCheck, fields: ["enableAvatarHost", "avatarCategory", "avatarId"] },
+  {
+    id: "cta",
+    label: "Subscribe",
+    icon: BellRing,
+    fields: ["enableCtaOverlays", "ctaVariant", "ctaPosition", "ctaAtEnd", "ctaOnTriggers"],
+  },
   { id: "history", label: "History", icon: History, fields: ["saveHistoryEnabled", "historyStorageMode"] },
 ];
 
@@ -239,6 +248,12 @@ export const EMOJI_STYLE_OPTIONS: { id: EmojiStyleOption; label: string; preview
 export const DUA_POSITION_OPTIONS: { id: DuaCardPositionOption; label: string; description: string }[] = [
   { id: "top", label: "Top", description: "Upper third" },
   { id: "center", label: "Middle", description: "Center screen" },
+  { id: "bottom", label: "Bottom", description: "Lower third" },
+];
+
+export const CTA_POSITION_OPTIONS: { id: CtaPositionOption; label: string; description: string }[] = [
+  { id: "top", label: "Top", description: "Upper area" },
+  { id: "middle", label: "Middle", description: "Center screen" },
   { id: "bottom", label: "Bottom", description: "Lower third" },
 ];
 
